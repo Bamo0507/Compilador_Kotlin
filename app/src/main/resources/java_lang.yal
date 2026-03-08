@@ -11,7 +11,7 @@ let float_short = '.' digit+
 let float = (float_basic | float_short) exponent? ('f' | 'F' | 'd' | 'D')?
 
 let id = (letter | underscore) alphanumeric*
-let whitespace = (' ' | '\t' | '\n' | '\r' )+
+let whitespace = (' ' | '\t' | '\n' )+
 
 let keyword =
     "abstract" | "assert"   | "boolean" | "break"     | "byte"
