@@ -1,0 +1,47 @@
+let digit = ['0'-'9']
+let letter = ['a'-'z''A'-'Z']
+let underscore = '_'
+
+let alphanumeric = letter | digit | underscore
+let integer = digit+
+
+let exponent = ('e' | 'E') ('+' | '-')? digit+
+let float_basic = digit+ '.' digit*
+let float_short = '.' digit+
+let float = (float_basic | float_short) exponent? ('f' | 'F' | 'd' | 'D')?
+
+let id = (letter | underscore) alphanumeric*
+let whitespace = (' ' | '\t' | '\n' | '\r' )+
+
+let keyword =
+    "abstract" | "assert"   | "boolean" | "break"     | "byte"
+  | "case"     | "catch"    | "char"    | "class"     | "const"
+  | "continue" | "default"  | "do"      | "double"    | "else"
+  | "enum"     | "extends"  | "final"   | "finally"   | "float"
+  | "for"      | "goto"     | "if"      | "implements"| "import"
+  | "instanceof"| "int"     | "interface"| "long"     | "native"
+  | "new"      | "package"  | "private" | "protected" | "public"
+  | "return"   | "short"    | "static"  | "strictfp"  | "super"
+  | "switch"   | "synchronized" | "this" | "throw"   | "throws"
+  | "transient"| "true"     | "false"   | "null"      | "try"
+  | "void"     | "volatile" | "while"
+
+let operator =
+    "==" | "!=" | "<=" | ">=" | "&&" | "||"
+  | "++" | "--" | "+=" | "-=" | "*=" | "/=" | "%=" | "->"
+  | "+"  | "-"  | "*"  | "/"  | "%"  | "="
+  | "<"  | ">"  | "!"  | "&"  | "|"  | "^"  | "~"
+
+let punctuation =
+    "{" | "}" | "(" | ")" | "[" | "]"
+  | ";" | "," | "." | ":" | "@" | "?"
+
+rule tokens =
+  | whitespace { WHITESPACE }
+  | float { FLOAT }
+  | integer { INT }
+  | keyword { KEYWORD }
+  | id { ID }
+  | operator { OPERATOR }
+  | punctuation { PUNCTUATION }
+  | eof { EOF }
