@@ -2,8 +2,8 @@ package org.compiler.lexicalAnalyzer.manageGrammar.utils
 
 const val EPSILON = 'ε'
 
-val ALL_OPERATORS = setOf('|', '.', '?', '*', '+', '^')
-val REGEX_METACHARACTERS = setOf('|', '.', '*', '+', '?', '(', ')', '[', ']')
+val ALL_OPERATORS = setOf('|', '.', '?', '*', '+')
+val REGEX_METACHARACTERS = setOf('|', '.', '*', '+', '?', '(', ')', '[', ']', '^')
 val UNARY_OPERATORS = setOf('*', '+', '?')
 val BINARY_OPERATORS = setOf('|', '.')
 
@@ -179,14 +179,19 @@ fun normalizeCharClasses(pattern: String): String {
     val result = StringBuilder()
     var i = 0
     while (i < pattern.length) {
-        if (pattern[i] == '[') {
-            val end = pattern.indexOf(']', i + 1)
-            val content = pattern.substring(i + 1, end)
-            result.append(expandCharClass(content))
-            i = end + 1
-        } else {
-            result.append(pattern[i])
-            i++
+        when {
+            pattern[i] == '"' -> {
+                result.append(pattern[i]); i++
+                while (i < pattern.length && pattern[i] != '"') { result.append(pattern[i]); i++ }
+                if (i < pattern.length) { result.append(pattern[i]); i++ }
+            }
+            pattern[i] == '[' -> {
+                val end = pattern.indexOf(']', i + 1)
+                val content = pattern.substring(i + 1, end)
+                result.append(expandCharClass(content))
+                i = end + 1
+            }
+            else -> { result.append(pattern[i]); i++ }
         }
     }
     return result.toString()
