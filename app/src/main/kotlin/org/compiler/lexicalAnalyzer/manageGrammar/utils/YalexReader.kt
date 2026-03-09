@@ -84,9 +84,9 @@ object YalexReader {
         return expanded
     }
 
-    // Replaces let-names in a pattern with their expanded values (wrapped in parens)
+    // Replaces let-names in a pattern with their expanded values
     // Sorted by name length descending to avoid partial substitutions
-    // e.g. "float_basic" must be replaced before "float"
+    // "float_basic" must be replaced before "float"
     private fun substituteNames(pattern: String, definitions: Map<String, String>): String {
         var result = pattern
         val sortedByLength = definitions.entries.sortedByDescending { it.key.length }

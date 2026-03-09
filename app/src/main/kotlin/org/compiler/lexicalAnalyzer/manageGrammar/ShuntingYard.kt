@@ -5,8 +5,7 @@ import org.compiler.lexicalAnalyzer.manageGrammar.utils.UNARY_OPERATORS
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.getPrecedence
 
 // Converts a normalized infix regex to postfix using the Shunting-Yard algorithm.
-// Input is expected to already be normalized (char classes expanded, concatenation explicit).
-// 'c' char literals are treated as single atomic operands.
+// Input is expected to already be normalized
 fun infixToPostfix(regex: String): String {
     val postfix = StringBuilder()
     val stack = ArrayDeque<Char>()
@@ -16,7 +15,6 @@ fun infixToPostfix(regex: String): String {
         val current = regex[index]
         when {
             // Single-quoted char literal — atomic operand, goes directly to output
-            // Format: 'c' — read all three chars as one unit
             current == '\'' -> {
                 postfix.append(current); index++ // opening quote
                 while (index < regex.length && regex[index] != '\'') {

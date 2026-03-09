@@ -25,8 +25,6 @@ data class UnaryNode(
     override var isNullable: Boolean = false
 ) : TreeNode()
 
-// symbol: the character this leaf represents. EPSILON for ε leaves.
-// position: nullable — assigned during tree labeling, null until then.
 data class Leaf(
     val symbol: Char,
     var position: Int? = null,

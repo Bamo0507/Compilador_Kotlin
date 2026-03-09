@@ -108,17 +108,13 @@ fun normalizeOperators(pattern: String): String =
     normalizeOptional(normalizePlus(pattern))
 
 // Applies all normalizations to a regex in the correct order
-// eof is a scanner signal, not a regex — returned as-is
+// eof is a scanner signal, not a regex
 fun normalizeRegex(pattern: String): String {
     if (pattern.trim() == "eof") return "eof"
     return addConcatenation(normalizeOperators(normalizeCharClasses(pattern)))
 }
 
-// Makes concatenation explicit by inserting '.' between adjacent tokens.
-// First tokenizes to treat 'c' and "str" as atomic units and skip formatting spaces.
-//   ab       → a.b
-//   a(b|c)   → a.(b|c)
-//   (a|b)* c → (a|b)*.c
+// Makes concatenation explicit by inserting '.' between adjacent tokens
 fun addConcatenation(regex: String): String {
     val tokens = tokenize(regex)
     val sb = StringBuilder()
@@ -132,9 +128,6 @@ fun addConcatenation(regex: String): String {
 }
 
 // Splits the regex into atomic tokens, skipping formatting spaces.
-//   'c'   → one token  (single-quoted char literal)
-//   "str" → one token  (double-quoted string literal)
-//   ε ( | ) * → one token each
 private fun tokenize(regex: String): List<String> {
     val tokens = mutableListOf<String>()
     var i = 0

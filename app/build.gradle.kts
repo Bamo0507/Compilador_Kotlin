@@ -29,6 +29,7 @@ dependencies {
 
     // This dependency is used by the application.
     implementation(libs.guava)
+    implementation("guru.nidi:graphviz-java:0.18.1")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.
