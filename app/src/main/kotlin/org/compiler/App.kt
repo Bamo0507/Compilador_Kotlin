@@ -10,6 +10,7 @@ import org.compiler.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.YalexReader
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.normalizeRegex
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.visualizeTree
+import org.compiler.lexicalAnalyzer.manageGrammar.utils.dfaToYaml
 
 fun main() {
     // .yal consumption for building token patterns and categories to work with
@@ -32,5 +33,11 @@ fun main() {
         val partitions = minimizeDFA()
         val minimizedDFA = buildMinimizedDFA(partitions)
         CategoryAutomataIndex.put(mapping.category, minimizedDFA)
+
+        val dfa = dfaToYaml(CategoryAutomataIndex)
+
+    
+
+        
     }
 }
