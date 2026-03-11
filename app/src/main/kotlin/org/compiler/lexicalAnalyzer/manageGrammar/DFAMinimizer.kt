@@ -4,7 +4,7 @@ import org.compiler.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
 import org.compiler.lexicalAnalyzer.manageGrammar.models.PartitionSet
 import org.compiler.lexicalAnalyzer.manageGrammar.models.TransitionTable
 
-// Minimizes the DFA stored in TransitionTable using partitions
+// Generates the final partition set
 fun minimizeDFA(): Set<PartitionSet> {
     val entries = TransitionTable.getAll()
 

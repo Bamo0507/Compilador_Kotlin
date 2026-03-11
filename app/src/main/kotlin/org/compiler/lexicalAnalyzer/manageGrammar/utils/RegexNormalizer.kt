@@ -116,7 +116,7 @@ fun normalizeRegex(pattern: String): String {
 
 // Makes concatenation explicit by inserting '.' between adjacent tokens
 fun addConcatenation(regex: String): String {
-    val tokens = tokenize(regex)
+    val tokens = splitIntoAtoms(regex)
     val sb = StringBuilder()
     for (i in tokens.indices) {
         sb.append(tokens[i])
@@ -128,7 +128,7 @@ fun addConcatenation(regex: String): String {
 }
 
 // Splits the regex into atomic tokens, skipping formatting spaces.
-private fun tokenize(regex: String): List<String> {
+private fun splitIntoAtoms(regex: String): List<String> {
     val tokens = mutableListOf<String>()
     var i = 0
     while (i < regex.length) {
