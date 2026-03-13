@@ -11,6 +11,9 @@ import org.compiler.lexicalAnalyzer.manageGrammar.utils.YalexReader
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.normalizeRegex
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.visualizeTree
 import org.compiler.lexicalAnalyzer.manageGrammar.utils.dfaToYaml
+//import org.compiler.lexicalAnalyzer.scanner.loadYamlDfas
+//import org.compiler.lexicalAnalyzer.scanner.loadYamlsFromPath
+import org.compiler.lexicalAnalyzer.scanner.YamlLoader
 
 fun main() {
     // .yal consumption for building token patterns and categories to work with
@@ -36,7 +39,38 @@ fun main() {
 
         val dfa = dfaToYaml(CategoryAutomataIndex)
 
-    
+        // val path = "src/main/resources/${mapping.category}.yaml"
+        // val loadedDFA = loadYamlDfas(path)
+        // println("DFA for category '${mapping.category}' has been generated and saved to '$path'")
+
+        // println("DFA for category '${mapping.category}':")
+        // loadedDFA.getAll().forEach { (category, dfa) ->
+        //     println("Category: $category")
+        //     println("Initial State: ${dfa.initialState}")
+        //     println("Accepting States: ${dfa.acceptingStates}")
+        //     println("Transitions:")
+        //     dfa.transitions.forEach { (state, transitions) ->
+        //         transitions.forEach { (input, nextState) ->
+        //             println("  ($state, '$input') -> $nextState")
+        //         }
+        //     }
+        // }
+
+        val read = YamlLoader("src/main/resources/")  // TODO: Handle multiple YAMLs if needed
+        println("DFA loaded from YAML files:")
+        read.getAll().forEach { (category, dfa) ->
+            println("Category: $category")
+            println("Initial State: ${dfa.initialState}")
+            println("Accepting States: ${dfa.acceptingStates}")
+            println("Transitions:")
+            dfa.transitions.forEach { (state, transitions) ->
+                transitions.forEach { (input, nextState) ->
+                    println("  ($state, '$input') -> $nextState")
+                }
+            }
+        }
+        // println("YAML files found in 'src/main/resources/':")
+        // paths.forEach { println(it) }
 
         
     }

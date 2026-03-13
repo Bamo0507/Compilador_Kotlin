@@ -149,7 +149,7 @@ fun dfaToYaml(CategoryAutomataIndex: CategoryAutomataIndex){
             delta = delta
         )
 
-        val outputFile = File(outputDir, "${category}_dfa.yaml")
+        val outputFile = File(outputDir, "${category}.yaml")
         outputFile.writeText(yamlString)
 
         
