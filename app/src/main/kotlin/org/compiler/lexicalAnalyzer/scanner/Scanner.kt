@@ -1,5 +1,10 @@
 package org.compiler.lexicalAnalyzer.scanner
 
+import com.fasterxml.jackson.core.type.TypeReference
+import com.fasterxml.jackson.databind.DeserializationFeature
+import com.fasterxml.jackson.databind.ObjectMapper
+import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
+
 import org.compiler.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
 import org.compiler.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
 import org.compiler.lexicalAnalyzer.lexer.models.SymbolTable
@@ -7,6 +12,9 @@ import org.compiler.lexicalAnalyzer.lexer.models.SymbolTableEntry
 import org.compiler.lexicalAnalyzer.scanner.models.ErrorEntry
 import org.compiler.lexicalAnalyzer.scanner.models.Token
 import org.compiler.lexicalAnalyzer.scanner.models.TokenEntrys
+import java.nio.file.Files
+import java.nio.file.Paths
+
 
 const val BUFFER_SIZE = 10
 const val EOF = '\u0000'
@@ -15,6 +23,89 @@ data class BufferCursor(
     val bufferIndex: Int, 
     val posInsideBuffer: Int
 )
+
+private val mapper = ObjectMapper(YAMLFactory()).apply {
+    findAndRegisterModules()
+    configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
+}
+
+fun YamlLoader(path: String): CategoryAutomataIndex {
+    val paths = loadYamlsFromPath(path)
+    val read = loadYamlDfas(paths.first()) 
+    return read
+}
+
+fun loadYamlsFromPath(path: String): List<String> {
+    val yamlDir = Paths.get(path)
+    require(Files.isDirectory(yamlDir)) { "El path $yamlDir no es un directorio válido" }
+
+    return Files.list(yamlDir)
+        .filter { it.toString().endsWith(".yaml") }
+        .map { it.toString() }
+        .toList()
+}
+
+fun loadYamlDfas(path: String): CategoryAutomataIndex {
+    val yamlPath = Paths.get(path)
+    require(Files.exists(yamlPath)) { "El archivo $yamlPath no existe" }
+
+    val yamlText = Files.readString(yamlPath)
+    val documents = yamlText
+        .split(Regex("(?m)^---\\s*$"))
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+    documents.forEachIndexed { docIndex, docText ->
+        val document: Map<String, Any?> = mapper.readValue(
+            docText,
+            object : TypeReference<Map<String, Any?>>() {}
+        )
+
+        val qStates = document["q_states"] as? Map<*, *>
+            ?: error("El documento YAML #${docIndex + 1} no contiene q_states")
+
+        val initialState = qStates["initial"]?.toString()?.toIntOrNull()
+            ?: error("initial inválido en el documento YAML #${docIndex + 1}")
+
+        val finalRaw = qStates["final"]
+        val acceptingStates = when (finalRaw) {
+            is List<*> -> finalRaw.mapNotNull { it?.toString()?.toIntOrNull() }.toSet()
+            null -> emptySet()
+            else -> setOf(finalRaw.toString().toIntOrNull()
+                ?: error("final inválido en el documento YAML #${docIndex + 1}"))
+        }
+
+        val deltaEntries = document["delta"] as? List<*>
+            ?: error("El documento YAML #${docIndex + 1} no contiene delta")
+
+        val transitions = mutableMapOf<Int, MutableMap<Char, Int>>()
+
+        for (entry in deltaEntries) {
+            val transition = entry as Map<*, *>
+            val params = transition["params"] as Map<*, *>
+            val output = transition["output"] as Map<*, *>
+
+            val fromState = params["initial_state"].toString().toInt()
+            val inputChar = params["input"].toString().single()
+            val toState = output["final_state"].toString().toInt()
+
+            transitions.getOrPut(fromState) { mutableMapOf() }[inputChar] = toState
+        }
+
+        val categoryName = document["name"]?.toString() ?: "CATEGORY_${docIndex + 1}"
+
+        val index = CategoryAutomataIndex.put(
+            categoryName,
+            MinimizedDFA(
+                initialState = initialState,
+                acceptingStates = acceptingStates,
+                transitions = transitions.mapValues { (_, value) -> value.toMap() }
+            )
+        )
+    }
+
+    return CategoryAutomataIndex
+}
 
 // Splits the source string into segments of 10
 // The last segment gets an EOF marker appended to signal
@@ -122,6 +213,7 @@ fun scan(source: String) {
     val automata = CategoryAutomataIndex.getAll()
     var lexembegin = BufferCursor(0, 0)
     var currentLine = 1
+    var currentlyOnError = false
 
     while (true) {
         val (currentChar, _) = readChar(segments, lexembegin) ?: break
@@ -139,12 +231,35 @@ fun scan(source: String) {
         val best = results.maxByOrNull { it.second }
 
         when {
-            best == null || best.second == 0 -> {
+            best == null || best.second == 0 || currentlyOnError -> {
                 // error no DFA matched anything — consume the bad character and record it
+                when {
+                    currentlyOnError -> {
+                        // If we're already in an error, just keep consuming characters until we the end of something
+                        // AKA: Panic Mode 
+                        val lexeme = extractLexeme(segments, lexembegin, 1)
+                        currentLine += lexeme.count { it == '\n' }
+                        lexembegin = advanceCursor(segments, lexembegin, 1)
+
+                        if (best != null && best.second > 0) {
+                            val lexeme = extractLexeme(segments, lexembegin, best.second)
+                            // End error mode if next token is whitespace, newline, or one of ; , ) } ]
+                            if (
+                                best.first == "WHITESPACE" ||
+                                lexeme == "\n" ||
+                                lexeme in listOf(";", ",", ")", "}", "]")
+                            ) {
+                                currentlyOnError = false  // next iteration will process the match
+                            }
+                        }
+                    }
+                }
                 // TODO: Add error handling
                 val badChar = extractLexeme(segments, lexembegin, 1)
                 TokenEntrys.addError(ErrorEntry(consumed = badChar, line = currentLine, index = 0))
                 lexembegin = advanceCursor(segments, lexembegin, 1)
+                currentlyOnError = true
+
             }
             best.first == "WHITESPACE" -> {
                 // skip whitespace, track newlines for line counting (ERRORS)

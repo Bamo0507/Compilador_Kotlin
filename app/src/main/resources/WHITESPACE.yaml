@@ -1,0 +1,30 @@
+---
+
+q_states:
+  q_list:
+    - '0'
+    - '1'
+  initial: '1'
+  final: '0'
+
+alphabet:
+  - ' '
+  - '	'
+  - '
+'
+
+delta:
+  - params: { initial_state: '0', input: ' ' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '	' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '
+' }
+    output: { final_state: '0' }
+  - params: { initial_state: '1', input: ' ' }
+    output: { final_state: '0' }
+  - params: { initial_state: '1', input: '	' }
+    output: { final_state: '0' }
+  - params: { initial_state: '1', input: '
+' }
+    output: { final_state: '0' }

@@ -1,0 +1,596 @@
+---
+
+q_states:
+  q_list:
+    - '1'
+    - '125'
+    - '2'
+    - '131'
+    - '3'
+    - '0'
+    - '4'
+    - '152'
+    - '5'
+    - '6'
+    - '7'
+    - '8'
+    - '9'
+    - '10'
+    - '22'
+    - '23'
+    - '24'
+    - '33'
+    - '34'
+    - '35'
+    - '36'
+    - '26'
+    - '37'
+    - '27'
+    - '38'
+    - '40'
+    - '41'
+    - '11'
+    - '28'
+    - '45'
+    - '59'
+    - '73'
+    - '60'
+    - '29'
+    - '71'
+    - '81'
+    - '82'
+    - '46'
+    - '87'
+    - '12'
+    - '97'
+    - '13'
+    - '128'
+    - '14'
+    - '114'
+    - '15'
+    - '66'
+    - '16'
+    - '69'
+    - '17'
+    - '70'
+    - '18'
+    - '150'
+    - '19'
+    - '119'
+    - '20'
+    - '32'
+    - '21'
+    - '143'
+    - '83'
+    - '85'
+    - '62'
+    - '86'
+    - '42'
+    - '98'
+    - '47'
+    - '63'
+    - '25'
+    - '68'
+    - '53'
+    - '126'
+    - '106'
+    - '30'
+    - '89'
+    - '31'
+    - '103'
+    - '155'
+    - '50'
+    - '102'
+    - '104'
+    - '110'
+    - '72'
+    - '111'
+    - '105'
+    - '64'
+    - '115'
+    - '123'
+    - '124'
+    - '74'
+    - '39'
+    - '132'
+    - '54'
+    - '127'
+    - '43'
+    - '133'
+    - '44'
+    - '79'
+    - '99'
+    - '48'
+    - '49'
+    - '76'
+    - '51'
+    - '77'
+    - '52'
+    - '139'
+    - '129'
+    - '55'
+    - '117'
+    - '56'
+    - '93'
+    - '57'
+    - '113'
+    - '58'
+    - '75'
+    - '116'
+    - '61'
+    - '121'
+    - '84'
+    - '135'
+    - '90'
+    - '65'
+    - '149'
+    - '67'
+    - '101'
+    - '80'
+    - '145'
+    - '138'
+    - '108'
+    - '118'
+    - '142'
+    - '147'
+    - '78'
+    - '154'
+    - '144'
+    - '88'
+    - '100'
+    - '137'
+    - '91'
+    - '92'
+    - '94'
+    - '151'
+    - '95'
+    - '120'
+    - '96'
+    - '122'
+    - '148'
+    - '134'
+    - '130'
+    - '109'
+    - '136'
+    - '107'
+    - '112'
+    - '153'
+    - '140'
+    - '146'
+    - '141'
+  initial: '5'
+  final: '0'
+
+alphabet:
+  - 'u'
+  - 'e'
+  - 's'
+  - 'l'
+  - 'a'
+  - 'b'
+  - 't'
+  - 'r'
+  - 'c'
+  - 'n'
+  - 'i'
+  - 'd'
+  - 'f'
+  - 'g'
+  - 'p'
+  - 'v'
+  - 'w'
+  - 'o'
+  - 'y'
+  - 'h'
+  - 'x'
+  - 'm'
+  - 'k'
+  - 'z'
+
+delta:
+  - params: { initial_state: '1', input: 'u' }
+    output: { final_state: '125' }
+  - params: { initial_state: '2', input: 'e' }
+    output: { final_state: '131' }
+  - params: { initial_state: '3', input: 's' }
+    output: { final_state: '0' }
+  - params: { initial_state: '4', input: 'l' }
+    output: { final_state: '152' }
+  - params: { initial_state: '5', input: 'a' }
+    output: { final_state: '6' }
+  - params: { initial_state: '5', input: 'b' }
+    output: { final_state: '7' }
+  - params: { initial_state: '5', input: 's' }
+    output: { final_state: '8' }
+  - params: { initial_state: '5', input: 't' }
+    output: { final_state: '9' }
+  - params: { initial_state: '5', input: 'r' }
+    output: { final_state: '10' }
+  - params: { initial_state: '5', input: 'c' }
+    output: { final_state: '22' }
+  - params: { initial_state: '5', input: 'e' }
+    output: { final_state: '23' }
+  - params: { initial_state: '5', input: 'l' }
+    output: { final_state: '24' }
+  - params: { initial_state: '5', input: 'n' }
+    output: { final_state: '33' }
+  - params: { initial_state: '5', input: 'i' }
+    output: { final_state: '34' }
+  - params: { initial_state: '5', input: 'd' }
+    output: { final_state: '35' }
+  - params: { initial_state: '5', input: 'f' }
+    output: { final_state: '36' }
+  - params: { initial_state: '5', input: 'g' }
+    output: { final_state: '26' }
+  - params: { initial_state: '5', input: 'p' }
+    output: { final_state: '37' }
+  - params: { initial_state: '5', input: 'v' }
+    output: { final_state: '27' }
+  - params: { initial_state: '5', input: 'w' }
+    output: { final_state: '38' }
+  - params: { initial_state: '6', input: 'b' }
+    output: { final_state: '40' }
+  - params: { initial_state: '6', input: 's' }
+    output: { final_state: '41' }
+  - params: { initial_state: '7', input: 'r' }
+    output: { final_state: '11' }
+  - params: { initial_state: '7', input: 'o' }
+    output: { final_state: '28' }
+  - params: { initial_state: '7', input: 'y' }
+    output: { final_state: '45' }
+  - params: { initial_state: '8', input: 't' }
+    output: { final_state: '59' }
+  - params: { initial_state: '8', input: 'w' }
+    output: { final_state: '73' }
+  - params: { initial_state: '8', input: 'y' }
+    output: { final_state: '60' }
+  - params: { initial_state: '8', input: 'h' }
+    output: { final_state: '29' }
+  - params: { initial_state: '8', input: 'u' }
+    output: { final_state: '71' }
+  - params: { initial_state: '9', input: 'r' }
+    output: { final_state: '81' }
+  - params: { initial_state: '9', input: 'h' }
+    output: { final_state: '82' }
+  - params: { initial_state: '10', input: 'e' }
+    output: { final_state: '46' }
+  - params: { initial_state: '11', input: 'e' }
+    output: { final_state: '87' }
+  - params: { initial_state: '12', input: 'e' }
+    output: { final_state: '97' }
+  - params: { initial_state: '13', input: 'e' }
+    output: { final_state: '128' }
+  - params: { initial_state: '14', input: 'e' }
+    output: { final_state: '114' }
+  - params: { initial_state: '15', input: 'e' }
+    output: { final_state: '66' }
+  - params: { initial_state: '16', input: 'e' }
+    output: { final_state: '69' }
+  - params: { initial_state: '17', input: 'e' }
+    output: { final_state: '70' }
+  - params: { initial_state: '18', input: 'e' }
+    output: { final_state: '150' }
+  - params: { initial_state: '19', input: 'e' }
+    output: { final_state: '119' }
+  - params: { initial_state: '20', input: 'e' }
+    output: { final_state: '32' }
+  - params: { initial_state: '21', input: 'e' }
+    output: { final_state: '143' }
+  - params: { initial_state: '22', input: 'a' }
+    output: { final_state: '83' }
+  - params: { initial_state: '22', input: 'l' }
+    output: { final_state: '85' }
+  - params: { initial_state: '22', input: 'o' }
+    output: { final_state: '62' }
+  - params: { initial_state: '22', input: 'h' }
+    output: { final_state: '86' }
+  - params: { initial_state: '23', input: 'l' }
+    output: { final_state: '42' }
+  - params: { initial_state: '23', input: 'n' }
+    output: { final_state: '98' }
+  - params: { initial_state: '23', input: 'x' }
+    output: { final_state: '47' }
+  - params: { initial_state: '24', input: 'o' }
+    output: { final_state: '63' }
+  - params: { initial_state: '25', input: 'o' }
+    output: { final_state: '68' }
+  - params: { initial_state: '26', input: 'o' }
+    output: { final_state: '53' }
+  - params: { initial_state: '27', input: 'o' }
+    output: { final_state: '126' }
+  - params: { initial_state: '28', input: 'o' }
+    output: { final_state: '106' }
+  - params: { initial_state: '29', input: 'o' }
+    output: { final_state: '128' }
+  - params: { initial_state: '30', input: 'o' }
+    output: { final_state: '89' }
+  - params: { initial_state: '31', input: 'o' }
+    output: { final_state: '103' }
+  - params: { initial_state: '32', input: 'o' }
+    output: { final_state: '155' }
+  - params: { initial_state: '33', input: 'a' }
+    output: { final_state: '50' }
+  - params: { initial_state: '33', input: 'e' }
+    output: { final_state: '102' }
+  - params: { initial_state: '33', input: 'u' }
+    output: { final_state: '104' }
+  - params: { initial_state: '34', input: 'n' }
+    output: { final_state: '110' }
+  - params: { initial_state: '34', input: 'f' }
+    output: { final_state: '0' }
+  - params: { initial_state: '34', input: 'm' }
+    output: { final_state: '72' }
+  - params: { initial_state: '35', input: 'e' }
+    output: { final_state: '111' }
+  - params: { initial_state: '35', input: 'o' }
+    output: { final_state: '1' }
+  - params: { initial_state: '36', input: 'a' }
+    output: { final_state: '105' }
+  - params: { initial_state: '36', input: 'l' }
+    output: { final_state: '30' }
+  - params: { initial_state: '36', input: 'i' }
+    output: { final_state: '64' }
+  - params: { initial_state: '36', input: 'o' }
+    output: { final_state: '114' }
+  - params: { initial_state: '37', input: 'a' }
+    output: { final_state: '115' }
+  - params: { initial_state: '37', input: 'r' }
+    output: { final_state: '123' }
+  - params: { initial_state: '37', input: 'u' }
+    output: { final_state: '124' }
+  - params: { initial_state: '38', input: 'h' }
+    output: { final_state: '74' }
+  - params: { initial_state: '39', input: 'h' }
+    output: { final_state: '132' }
+  - params: { initial_state: '40', input: 's' }
+    output: { final_state: '54' }
+  - params: { initial_state: '41', input: 's' }
+    output: { final_state: '13' }
+  - params: { initial_state: '42', input: 's' }
+    output: { final_state: '127' }
+  - params: { initial_state: '43', input: 's' }
+    output: { final_state: '133' }
+  - params: { initial_state: '44', input: 's' }
+    output: { final_state: '79' }
+  - params: { initial_state: '45', input: 't' }
+    output: { final_state: '127' }
+  - params: { initial_state: '46', input: 't' }
+    output: { final_state: '99' }
+  - params: { initial_state: '47', input: 't' }
+    output: { final_state: '15' }
+  - params: { initial_state: '48', input: 't' }
+    output: { final_state: '19' }
+  - params: { initial_state: '49', input: 't' }
+    output: { final_state: '21' }
+  - params: { initial_state: '50', input: 't' }
+    output: { final_state: '76' }
+  - params: { initial_state: '51', input: 't' }
+    output: { final_state: '77' }
+  - params: { initial_state: '52', input: 't' }
+    output: { final_state: '74' }
+  - params: { initial_state: '53', input: 't' }
+    output: { final_state: '139' }
+  - params: { initial_state: '54', input: 't' }
+    output: { final_state: '129' }
+  - params: { initial_state: '55', input: 't' }
+    output: { final_state: '117' }
+  - params: { initial_state: '56', input: 't' }
+    output: { final_state: '93' }
+  - params: { initial_state: '57', input: 't' }
+    output: { final_state: '113' }
+  - params: { initial_state: '58', input: 't' }
+    output: { final_state: '133' }
+  - params: { initial_state: '59', input: 'a' }
+    output: { final_state: '51' }
+  - params: { initial_state: '59', input: 'r' }
+    output: { final_state: '75' }
+  - params: { initial_state: '60', input: 'n' }
+    output: { final_state: '116' }
+  - params: { initial_state: '61', input: 'n' }
+    output: { final_state: '121' }
+  - params: { initial_state: '62', input: 'n' }
+    output: { final_state: '84' }
+  - params: { initial_state: '63', input: 'n' }
+    output: { final_state: '135' }
+  - params: { initial_state: '64', input: 'n' }
+    output: { final_state: '90' }
+  - params: { initial_state: '65', input: 'n' }
+    output: { final_state: '44' }
+  - params: { initial_state: '66', input: 'n' }
+    output: { final_state: '149' }
+  - params: { initial_state: '67', input: 'n' }
+    output: { final_state: '101' }
+  - params: { initial_state: '68', input: 'n' }
+    output: { final_state: '80' }
+  - params: { initial_state: '69', input: 'n' }
+    output: { final_state: '145' }
+  - params: { initial_state: '70', input: 'n' }
+    output: { final_state: '58' }
+  - params: { initial_state: '71', input: 'p' }
+    output: { final_state: '14' }
+  - params: { initial_state: '72', input: 'p' }
+    output: { final_state: '138' }
+  - params: { initial_state: '73', input: 'i' }
+    output: { final_state: '55' }
+  - params: { initial_state: '74', input: 'i' }
+    output: { final_state: '108' }
+  - params: { initial_state: '75', input: 'i' }
+    output: { final_state: '118' }
+  - params: { initial_state: '76', input: 'i' }
+    output: { final_state: '142' }
+  - params: { initial_state: '77', input: 'i' }
+    output: { final_state: '147' }
+  - params: { initial_state: '78', input: 'i' }
+    output: { final_state: '67' }
+  - params: { initial_state: '79', input: 'i' }
+    output: { final_state: '16' }
+  - params: { initial_state: '80', input: 'i' }
+    output: { final_state: '154' }
+  - params: { initial_state: '81', input: 'a' }
+    output: { final_state: '65' }
+  - params: { initial_state: '81', input: 'y' }
+    output: { final_state: '0' }
+  - params: { initial_state: '81', input: 'u' }
+    output: { final_state: '127' }
+  - params: { initial_state: '82', input: 'r' }
+    output: { final_state: '31' }
+  - params: { initial_state: '82', input: 'i' }
+    output: { final_state: '133' }
+  - params: { initial_state: '83', input: 's' }
+    output: { final_state: '127' }
+  - params: { initial_state: '83', input: 't' }
+    output: { final_state: '117' }
+  - params: { initial_state: '84', input: 's' }
+    output: { final_state: '145' }
+  - params: { initial_state: '84', input: 't' }
+    output: { final_state: '78' }
+  - params: { initial_state: '85', input: 'a' }
+    output: { final_state: '43' }
+  - params: { initial_state: '86', input: 'a' }
+    output: { final_state: '114' }
+  - params: { initial_state: '87', input: 'a' }
+    output: { final_state: '144' }
+  - params: { initial_state: '88', input: 'a' }
+    output: { final_state: '100' }
+  - params: { initial_state: '89', input: 'a' }
+    output: { final_state: '145' }
+  - params: { initial_state: '90', input: 'a' }
+    output: { final_state: '137' }
+  - params: { initial_state: '91', input: 'a' }
+    output: { final_state: '52' }
+  - params: { initial_state: '92', input: 'a' }
+    output: { final_state: '45' }
+  - params: { initial_state: '93', input: 'a' }
+    output: { final_state: '61' }
+  - params: { initial_state: '94', input: 'a' }
+    output: { final_state: '151' }
+  - params: { initial_state: '95', input: 'a' }
+    output: { final_state: '120' }
+  - params: { initial_state: '96', input: 'a' }
+    output: { final_state: '122' }
+  - params: { initial_state: '97', input: 'a' }
+    output: { final_state: '148' }
+  - params: { initial_state: '98', input: 'u' }
+    output: { final_state: '134' }
+  - params: { initial_state: '99', input: 'u' }
+    output: { final_state: '130' }
+  - params: { initial_state: '100', input: 'u' }
+    output: { final_state: '109' }
+  - params: { initial_state: '101', input: 'u' }
+    output: { final_state: '127' }
+  - params: { initial_state: '102', input: 'w' }
+    output: { final_state: '0' }
+  - params: { initial_state: '103', input: 'w' }
+    output: { final_state: '3' }
+  - params: { initial_state: '104', input: 'l' }
+    output: { final_state: '136' }
+  - params: { initial_state: '105', input: 'l' }
+    output: { final_state: '42' }
+  - params: { initial_state: '106', input: 'l' }
+    output: { final_state: '12' }
+  - params: { initial_state: '107', input: 'l' }
+    output: { final_state: '77' }
+  - params: { initial_state: '108', input: 'l' }
+    output: { final_state: '127' }
+  - params: { initial_state: '109', input: 'l' }
+    output: { final_state: '145' }
+  - params: { initial_state: '110', input: 's' }
+    output: { final_state: '56' }
+  - params: { initial_state: '110', input: 't' }
+    output: { final_state: '2' }
+  - params: { initial_state: '111', input: 'f' }
+    output: { final_state: '88' }
+  - params: { initial_state: '112', input: 'f' }
+    output: { final_state: '96' }
+  - params: { initial_state: '113', input: 'f' }
+    output: { final_state: '153' }
+  - params: { initial_state: '114', input: 'r' }
+    output: { final_state: '0' }
+  - params: { initial_state: '115', input: 'c' }
+    output: { final_state: '140' }
+  - params: { initial_state: '116', input: 'c' }
+    output: { final_state: '39' }
+  - params: { initial_state: '117', input: 'c' }
+    output: { final_state: '146' }
+  - params: { initial_state: '118', input: 'c' }
+    output: { final_state: '57' }
+  - params: { initial_state: '119', input: 'c' }
+    output: { final_state: '49' }
+  - params: { initial_state: '120', input: 'c' }
+    output: { final_state: '145' }
+  - params: { initial_state: '121', input: 'c' }
+    output: { final_state: '20' }
+  - params: { initial_state: '122', input: 'c' }
+    output: { final_state: '127' }
+  - params: { initial_state: '123', input: 'i' }
+    output: { final_state: '141' }
+  - params: { initial_state: '123', input: 'o' }
+    output: { final_state: '48' }
+  - params: { initial_state: '124', input: 'b' }
+    output: { final_state: '107' }
+  - params: { initial_state: '125', input: 'b' }
+    output: { final_state: '108' }
+  - params: { initial_state: '126', input: 'l' }
+    output: { final_state: '91' }
+  - params: { initial_state: '126', input: 'i' }
+    output: { final_state: '143' }
+  - params: { initial_state: '127', input: 'e' }
+    output: { final_state: '0' }
+  - params: { initial_state: '128', input: 'r' }
+    output: { final_state: '145' }
+  - params: { initial_state: '129', input: 'r' }
+    output: { final_state: '95' }
+  - params: { initial_state: '130', input: 'r' }
+    output: { final_state: '148' }
+  - params: { initial_state: '131', input: 'r' }
+    output: { final_state: '112' }
+  - params: { initial_state: '132', input: 'r' }
+    output: { final_state: '25' }
+  - params: { initial_state: '133', input: 's' }
+    output: { final_state: '0' }
+  - params: { initial_state: '134', input: 'm' }
+    output: { final_state: '0' }
+  - params: { initial_state: '135', input: 'g' }
+    output: { final_state: '0' }
+  - params: { initial_state: '136', input: 'l' }
+    output: { final_state: '0' }
+  - params: { initial_state: '137', input: 'l' }
+    output: { final_state: '4' }
+  - params: { initial_state: '138', input: 'l' }
+    output: { final_state: '18' }
+  - params: { initial_state: '138', input: 'o' }
+    output: { final_state: '128' }
+  - params: { initial_state: '139', input: 'o' }
+    output: { final_state: '0' }
+  - params: { initial_state: '140', input: 'k' }
+    output: { final_state: '94' }
+  - params: { initial_state: '141', input: 'v' }
+    output: { final_state: '92' }
+  - params: { initial_state: '142', input: 'v' }
+    output: { final_state: '127' }
+  - params: { initial_state: '143', input: 'd' }
+    output: { final_state: '0' }
+  - params: { initial_state: '144', input: 'k' }
+    output: { final_state: '0' }
+  - params: { initial_state: '145', input: 't' }
+    output: { final_state: '0' }
+  - params: { initial_state: '146', input: 'h' }
+    output: { final_state: '0' }
+  - params: { initial_state: '147', input: 'c' }
+    output: { final_state: '0' }
+  - params: { initial_state: '148', input: 'n' }
+    output: { final_state: '0' }
+  - params: { initial_state: '149', input: 'd' }
+    output: { final_state: '133' }
+  - params: { initial_state: '150', input: 'm' }
+    output: { final_state: '17' }
+  - params: { initial_state: '151', input: 'g' }
+    output: { final_state: '127' }
+  - params: { initial_state: '152', input: 'y' }
+    output: { final_state: '0' }
+  - params: { initial_state: '153', input: 'p' }
+    output: { final_state: '0' }
+  - params: { initial_state: '154', input: 'z' }
+    output: { final_state: '21' }
+  - params: { initial_state: '155', input: 'f' }
+    output: { final_state: '0' }

@@ -1,0 +1,205 @@
+---
+
+q_states:
+  q_list:
+    - '0'
+    - '7'
+    - '1'
+    - '2'
+    - '3'
+    - '4'
+    - '5'
+    - '6'
+  initial: '3'
+  final: '0'
+
+alphabet:
+  - '0'
+  - '1'
+  - '2'
+  - '3'
+  - '4'
+  - '5'
+  - '6'
+  - '7'
+  - '8'
+  - '9'
+  - 'e'
+  - 'E'
+  - 'f'
+  - 'F'
+  - 'd'
+  - 'D'
+  - '.'
+  - '+'
+  - '-'
+
+delta:
+  - params: { initial_state: '0', input: '0' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '1' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '2' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '3' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '4' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '5' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '6' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '7' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '8' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: '9' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: 'e' }
+    output: { final_state: '7' }
+  - params: { initial_state: '0', input: 'E' }
+    output: { final_state: '7' }
+  - params: { initial_state: '0', input: 'f' }
+    output: { final_state: '1' }
+  - params: { initial_state: '0', input: 'F' }
+    output: { final_state: '1' }
+  - params: { initial_state: '0', input: 'd' }
+    output: { final_state: '1' }
+  - params: { initial_state: '0', input: 'D' }
+    output: { final_state: '1' }
+  - params: { initial_state: '2', input: '0' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '1' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '2' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '3' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '4' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '5' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '6' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '7' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '8' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: '9' }
+    output: { final_state: '2' }
+  - params: { initial_state: '2', input: 'f' }
+    output: { final_state: '1' }
+  - params: { initial_state: '2', input: 'F' }
+    output: { final_state: '1' }
+  - params: { initial_state: '2', input: 'd' }
+    output: { final_state: '1' }
+  - params: { initial_state: '2', input: 'D' }
+    output: { final_state: '1' }
+  - params: { initial_state: '3', input: '0' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '1' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '2' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '3' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '4' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '5' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '6' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '7' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '8' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '9' }
+    output: { final_state: '4' }
+  - params: { initial_state: '3', input: '.' }
+    output: { final_state: '5' }
+  - params: { initial_state: '4', input: '0' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '1' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '2' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '3' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '4' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '5' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '6' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '7' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '8' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '9' }
+    output: { final_state: '4' }
+  - params: { initial_state: '4', input: '.' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '0' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '1' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '2' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '3' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '4' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '5' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '6' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '7' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '8' }
+    output: { final_state: '0' }
+  - params: { initial_state: '5', input: '9' }
+    output: { final_state: '0' }
+  - params: { initial_state: '6', input: '0' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '1' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '2' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '3' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '4' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '5' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '6' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '7' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '8' }
+    output: { final_state: '2' }
+  - params: { initial_state: '6', input: '9' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '0' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '1' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '2' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '3' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '4' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '5' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '6' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '7' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '8' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '9' }
+    output: { final_state: '2' }
+  - params: { initial_state: '7', input: '+' }
+    output: { final_state: '6' }
+  - params: { initial_state: '7', input: '-' }
+    output: { final_state: '6' }

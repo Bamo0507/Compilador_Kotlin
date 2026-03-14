@@ -30,6 +30,11 @@ dependencies {
     // This dependency is used by the application.
     implementation(libs.guava)
     implementation("guru.nidi:graphviz-java:0.18.1")
+
+    // YAML dependencies
+    implementation("com.fasterxml.jackson.core:jackson-databind:2.17.2")
+    implementation("com.fasterxml.jackson.dataformat:jackson-dataformat-yaml:2.17.2")
+    implementation("com.fasterxml.jackson.module:jackson-module-kotlin:2.17.2")
 }
 
 // Apply a specific Java toolchain to ease working on different environments.

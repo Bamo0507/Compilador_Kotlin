@@ -1,0 +1,34 @@
+---
+
+
+q_states:
+  q_list:
+    - '0' 
+    - '1' 
+    - '2'
+    - '3'
+  initial: '0'
+  final: '3'
+
+alphabet:
+  - 'a'
+  - 'b'
+  - 'c'
+
+delta:
+  # Estado '0' (scan → nex state)
+  - params: { initial_state: '0', input: 'a' }
+    output: { final_state: '0'}
+  - params: { initial_state: '0', input: 'b' }
+    output: { final_state: '0' }
+  - params: { initial_state: '0', input: 'c' }
+    output: { final_state: '0' }
+
+  # Estado '1' (scan → nex state)
+  - params: { initial_state: '1', input: 'a' }
+    output: { final_state: '1' }
+  - params: { initial_state: '1', input: 'b' }
+    output: { final_state: '1' }
+  - params: { initial_state: '1', input: 'c' }
+    output: { final_state: '1' }
+
