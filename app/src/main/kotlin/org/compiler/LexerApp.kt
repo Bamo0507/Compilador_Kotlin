@@ -12,7 +12,7 @@ import java.io.File
 fun main() {
     YamlLoader("src/main/resources/")
 
-    val sourceFile = File("src/main/resources/input.txt")
+    val sourceFile = File("src/main/resources/input.java")
     val sourceCode = if (sourceFile.exists()) sourceFile.readText() else "int x = 10;"
     scan(sourceCode)
 
