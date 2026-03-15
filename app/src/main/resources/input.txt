@@ -20,7 +20,7 @@ boolean flag = true;
 String name = null;
 
 // Error recovery: $ and ` are not valid tokens - scanner should report them
-int z = x $ y;
+int z = x $$$$ y;
 int w = x ` 5;
 
 // Operators and punctuation mix

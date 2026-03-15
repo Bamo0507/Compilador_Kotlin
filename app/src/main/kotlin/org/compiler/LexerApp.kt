@@ -8,7 +8,7 @@ import java.io.File
 
 // Program 2 — Scanner
 // Loads the minimized DFAs from the YAML files produced by Program 1 (PreprocessorApp),
-// runs the scanner on a source file, and prints tokens, errors, and symbol table.
+// runs the scanner on a source file, and writes tokens, errors, and symbol table to output files.
 fun main() {
     YamlLoader("src/main/resources/")
 
@@ -16,26 +16,39 @@ fun main() {
     val sourceCode = if (sourceFile.exists()) sourceFile.readText() else "int x = 10;"
     scan(sourceCode)
 
-    println("Tokens")
-    TokenEntrys.tokens.forEach { token ->
-        println("<${token.attribute}, ${token.value}>")
-    }
+    val outputDir = File("src/main/resources/output")
+    outputDir.mkdirs()
 
-    println("\nErrors")
-    if (TokenEntrys.errors.isEmpty()) {
-        println("No errors.")
-    } else {
-        TokenEntrys.errors.forEach { error ->
-            println("Line ${error.line}: \"${error.consumed}\"")
+    File(outputDir, "tokens.txt").bufferedWriter().use { writer ->
+        TokenEntrys.tokens.forEach { token ->
+            writer.write("<${token.attribute}, ${token.value}>")
+            writer.newLine()
         }
     }
 
-    println("\nSymbol Table")
-    if (SymbolTable.getAll().isEmpty()) {
-        println("Empty.")
-    } else {
-        SymbolTable.getAll().forEach { entry ->
-            println("${entry.index}|${entry.value}")
+    File(outputDir, "errors.txt").bufferedWriter().use { writer ->
+        if (TokenEntrys.errors.isEmpty()) {
+            writer.write("No errors.")
+            writer.newLine()
+        } else {
+            TokenEntrys.errors.forEach { error ->
+                writer.write("Line ${error.line}: \"${error.consumed}\"")
+                writer.newLine()
+            }
         }
     }
+
+    File(outputDir, "symbolTable.txt").bufferedWriter().use { writer ->
+        if (SymbolTable.getAll().isEmpty()) {
+            writer.write("Empty.")
+            writer.newLine()
+        } else {
+            SymbolTable.getAll().forEach { entry ->
+                writer.write("${entry.index}|${entry.value}")
+                writer.newLine()
+            }
+        }
+    }
+
+    println("Output written to ${outputDir.path}/")
 }
