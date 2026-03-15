@@ -15,7 +15,6 @@ import org.compiler.lexicalAnalyzer.scanner.models.TokenEntrys
 import java.nio.file.Files
 import java.nio.file.Paths
 
-
 const val BUFFER_SIZE = 10
 const val EOF = '\u0000'
 
@@ -29,10 +28,22 @@ private val mapper = ObjectMapper(YAMLFactory()).apply {
     configure(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES, false)
 }
 
+// Resolves the string value of a YAML input field to a single Char.
+// Handles the escape notations written by charToYamlInput: \t, \n.
+// For plain single-char strings, returns that char directly.
+private fun resolveInputChar(value: String): Char = when (value) {
+    "\\t" -> '\t'
+    "\\n" -> '\n'
+    "\\q" -> '\''
+    else  -> value.single()
+}
+
 fun YamlLoader(path: String): CategoryAutomataIndex {
     val paths = loadYamlsFromPath(path)
-    val read = loadYamlDfas(paths.first()) 
-    return read
+    for (yamlPath in paths) {
+        loadYamlDfas(yamlPath)
+    }
+    return CategoryAutomataIndex
 }
 
 fun loadYamlsFromPath(path: String): List<String> {
@@ -86,13 +97,14 @@ fun loadYamlDfas(path: String): CategoryAutomataIndex {
             val output = transition["output"] as Map<*, *>
 
             val fromState = params["initial_state"].toString().toInt()
-            val inputChar = params["input"].toString().single()
+            val inputChar = resolveInputChar(params["input"].toString())
             val toState = output["final_state"].toString().toInt()
 
             transitions.getOrPut(fromState) { mutableMapOf() }[inputChar] = toState
         }
 
-        val categoryName = document["name"]?.toString() ?: "CATEGORY_${docIndex + 1}"
+        val categoryName = document["name"]?.toString()
+            ?: yamlPath.fileName.toString().removeSuffix(".yaml")
 
         val index = CategoryAutomataIndex.put(
             categoryName,
@@ -188,6 +200,29 @@ fun advanceCursor(segments: List<CharArray>, cursor: BufferCursor, forwardSteps:
     return current
 }
 
+// Panic mode: consumes characters from cursor until the next position where any DFA matches.
+// Returns the entire bad sequence as a single string and the new cursor position.
+// This avoids flooding the error list when multiple consecutive chars are unrecognized.
+fun panicMode(
+    segments: List<CharArray>,
+    cursor: BufferCursor,
+    automata: Map<String, MinimizedDFA>
+): Pair<String, BufferCursor> {
+    val bad = StringBuilder()
+    var current = cursor
+
+    while (true) {
+        val (char, _) = readChar(segments, current) ?: break
+        if (char == EOF) break
+        val anyMatch = automata.values.any { dfa -> simulateDFA(dfa, segments, current) > 0 }
+        if (anyMatch) break
+        bad.append(char)
+        current = advanceCursor(segments, current, 1)
+    }
+
+    return bad.toString() to current
+}
+
 // Extracts the lexeme string by reading forwardSteps characters from lexembegin.
 // Handles buffer boundaries transparently — the result is always a flat String.
 fun extractLexeme(segments: List<CharArray>, lexembegin: BufferCursor, forwardSteps: Int): String {
@@ -213,7 +248,6 @@ fun scan(source: String) {
     val automata = CategoryAutomataIndex.getAll()
     var lexembegin = BufferCursor(0, 0)
     var currentLine = 1
-    var currentlyOnError = false
 
     while (true) {
         val (currentChar, _) = readChar(segments, lexembegin) ?: break
@@ -227,52 +261,30 @@ fun scan(source: String) {
         }
 
         // Pick the category that consumed the most characters (longest match)
-        // On tie, first entry wins — category order in .yal = priority
         val best = results.maxByOrNull { it.second }
 
         when {
-            best == null || best.second == 0 || currentlyOnError -> {
-                // error no DFA matched anything — consume the bad character and record it
-                when {
-                    currentlyOnError -> {
-                        // If we're already in an error, just keep consuming characters until we the end of something
-                        // AKA: Panic Mode 
-                        val lexeme = extractLexeme(segments, lexembegin, 1)
-                        currentLine += lexeme.count { it == '\n' }
-                        lexembegin = advanceCursor(segments, lexembegin, 1)
-
-                        if (best != null && best.second > 0) {
-                            val lexeme = extractLexeme(segments, lexembegin, best.second)
-                            // End error mode if next token is whitespace, newline, or one of ; , ) } ]
-                            if (
-                                best.first == "WHITESPACE" ||
-                                lexeme == "\n" ||
-                                lexeme in listOf(";", ",", ")", "}", "]")
-                            ) {
-                                currentlyOnError = false  // next iteration will process the match
-                            }
-                        }
-                    }
-                }
-                // TODO: Add error handling
-                val badChar = extractLexeme(segments, lexembegin, 1)
-                TokenEntrys.addError(ErrorEntry(consumed = badChar, line = currentLine, index = 0))
-                lexembegin = advanceCursor(segments, lexembegin, 1)
-                currentlyOnError = true
-
+            best == null || best.second == 0 -> {
+                // Panic mode: consume all consecutive unrecognized chars as one error
+                val (badSeq, newCursor) = panicMode(segments, lexembegin, automata)
+                TokenEntrys.addError(ErrorEntry(consumed = badSeq, line = currentLine))
+                currentLine += badSeq.count { it == '\n' }
+                lexembegin = newCursor
             }
-            best.first == "WHITESPACE" -> {
-                // skip whitespace, track newlines for line counting (ERRORS)
+            best.first == "WHITESPACE" || best.first == "COMMENT" -> {
+                // skip whitespace and comments — neither produces a token
                 val lexeme = extractLexeme(segments, lexembegin, best.second)
                 currentLine += lexeme.count { it == '\n' }
                 lexembegin = advanceCursor(segments, lexembegin, best.second)
             }
             else -> {
                 val lexeme = extractLexeme(segments, lexembegin, best.second)
-                TokenEntrys.addToken(Token(attribute = best.first, value = lexeme))
-                if (best.first == "ID") {
-                    SymbolTable.add(SymbolTableEntry(id = lexeme, value = lexeme))
+                val tokenValue = if (best.first != "KEYWORD") {
+                    SymbolTable.addOrGet(lexeme).toString()
+                } else {
+                    lexeme
                 }
+                TokenEntrys.addToken(Token(attribute = best.first, value = tokenValue))
                 lexembegin = advanceCursor(segments, lexembegin, best.second)
             }
         }

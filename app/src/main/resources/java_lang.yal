@@ -36,8 +36,13 @@ let punctuation =
     "{" | "}" | "(" | ")" | "[" | "]"
   | ";" | "," | "." | ":" | "@" | "?"
 
+let line_comment  = "//" [^'\n']*
+let block_comment = "/*" ([^'*'] | ('*')+ [^'*' '/'])* ('*')+ "/"
+let comment = line_comment | block_comment
+
 rule tokens =
   | whitespace { WHITESPACE }
+  | comment { COMMENT }
   | float { FLOAT }
   | integer { INT }
   | keyword { KEYWORD }

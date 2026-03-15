@@ -74,9 +74,8 @@ fun buildSyntaxTree(augmentedPostfix: String): TreeNode {
 private fun resolveSymbol(content: String): Char = when (content) {
     "\\t" -> '\t'
     "\\n" -> '\n'
-    "\\r" -> '\r'
-    "\\\\" -> '\\'
-    else -> content[0]
+    "\\q" -> '\''
+    else  -> content[0]
 }
 
 // Builds the followPos table from an already-constructed syntax tree

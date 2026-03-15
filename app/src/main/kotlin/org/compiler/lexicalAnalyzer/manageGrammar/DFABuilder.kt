@@ -19,18 +19,24 @@ fun buildTransitionTable(
         posToFollowPos[position] = followEntry.transitions
     }
 
-    var endMarkerPos = -1
-    val alphabet = mutableSetOf<Char>()
+    // The augmented regex always appends "#." at the end, so the '#' with the
+    // highest position is always the end marker. Any '#' at a lower position
+    // came from a user pattern (like inside a comment) and is a regular char.
+    val endMarkerPos = posToSymbol.entries
+        .filter { it.value == '#' }
+        .maxOfOrNull { it.key } ?: -1
 
+    val alphabet = mutableSetOf<Char>()
     for ((position, symbol) in posToSymbol) {
-        if (symbol == '#') endMarkerPos = position
-        else alphabet.add(symbol)
+        if (position == endMarkerPos) continue
+        alphabet.add(symbol)
     }
 
     // Map each unique position set to a state number
     val stateMap = mutableMapOf<Set<Int>, Int>()
     var stateCounter = 0
 
+    // The initial state is the one that contains all the first positions
     val initialState = root.firstPos.toSet()
     stateMap[initialState] = stateCounter++
 

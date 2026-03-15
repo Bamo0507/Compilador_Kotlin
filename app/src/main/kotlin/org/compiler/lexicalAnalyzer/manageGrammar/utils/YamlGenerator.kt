@@ -47,10 +47,21 @@ fun singleDfaReader(categoryAutomata: Map.Entry<String, MinimizedDFA>): List<Tri
 
 private fun yamlQuoted(value: String): String = "'${value.replace("'", "''")}'"
 
+// Converts a char to its YAML-safe text representation (without outer quotes).
+// Uses the same escape notation that resolveInputChar reads back: \t, \n.
+// This is needed because YAML single-quoted scalars cannot carry raw control characters
+// (SnakeYAML normalizes embedded newlines to spaces).
+private fun charToYamlInput(c: Char): String = when (c) {
+    '\t' -> "\\t"
+    '\n' -> "\\n"
+    '\'' -> "\\q"
+    else -> c.toString()
+}
+
 private fun buildDfaYaml(
     qList: List<String>,
     initialState: String,
-    finalState: String,
+    finalStates: List<String>,
     alphabet: List<Char>,
     delta: List<Map<String, Any>>
 ): String {
@@ -64,12 +75,19 @@ private fun buildDfaYaml(
         builder.appendLine("    - ${yamlQuoted(state)}")
     }
     builder.appendLine("  initial: ${yamlQuoted(initialState)}")
-    builder.appendLine("  final: ${yamlQuoted(finalState)}")
+    if (finalStates.size == 1) {
+        builder.appendLine("  final: ${yamlQuoted(finalStates[0])}")
+    } else {
+        builder.appendLine("  final:")
+        for (state in finalStates) {
+            builder.appendLine("    - ${yamlQuoted(state)}")
+        }
+    }
     builder.appendLine()
 
     builder.appendLine("alphabet:")
     for (char in alphabet) {
-        builder.appendLine("  - ${yamlQuoted(char.toString())}")
+        builder.appendLine("  - ${yamlQuoted(charToYamlInput(char))}")
     }
     builder.appendLine()
 
@@ -132,7 +150,7 @@ fun dfaToYaml(CategoryAutomataIndex: CategoryAutomataIndex){
         val delta = mutableListOf<Map<String, Any>>()
 
         for (transition in transitions) {
-            val params = mapOf("initial_state" to transition.first.toString(), "input" to transition.second.toString())
+            val params = mapOf("initial_state" to transition.first.toString(), "input" to charToYamlInput(transition.second))
             val output = mapOf("final_state" to transition.third.toString())
             val (estadoOrigen, caracterEntrada, estadoDestino) = transition
             alphabet.add(caracterEntrada)
@@ -144,7 +162,7 @@ fun dfaToYaml(CategoryAutomataIndex: CategoryAutomataIndex){
         val yamlString = buildDfaYaml(
             qList = q_list,
             initialState = initialState.toString(),
-            finalState = acceptingStates.first().toString(),
+            finalStates = acceptingStates.map { it.toString() },
             alphabet = alphabet.toList(),
             delta = delta
         )

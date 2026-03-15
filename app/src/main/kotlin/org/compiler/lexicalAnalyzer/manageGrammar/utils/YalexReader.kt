@@ -11,7 +11,10 @@ object YalexReader {
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
+        // nombre del patron, con lo que representa en el .yal
         val rawDefinitions = linkedMapOf<String, String>()
+
+        // patron to categoria
         val rawRules = mutableListOf<Pair<String, String>>()
 
         var i = 0

@@ -9,22 +9,19 @@ q_states:
 
 alphabet:
   - ' '
-  - '	'
-  - '
-'
+  - '\t'
+  - '\n'
 
 delta:
   - params: { initial_state: '0', input: ' ' }
     output: { final_state: '0' }
-  - params: { initial_state: '0', input: '	' }
+  - params: { initial_state: '0', input: '\t' }
     output: { final_state: '0' }
-  - params: { initial_state: '0', input: '
-' }
+  - params: { initial_state: '0', input: '\n' }
     output: { final_state: '0' }
   - params: { initial_state: '1', input: ' ' }
     output: { final_state: '0' }
-  - params: { initial_state: '1', input: '	' }
+  - params: { initial_state: '1', input: '\t' }
     output: { final_state: '0' }
-  - params: { initial_state: '1', input: '
-' }
+  - params: { initial_state: '1', input: '\n' }
     output: { final_state: '0' }

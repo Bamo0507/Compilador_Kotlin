@@ -10,7 +10,13 @@ q_states:
     - '4'
     - '6'
   initial: '6'
-  final: '0'
+  final:
+    - '0'
+    - '1'
+    - '2'
+    - '3'
+    - '4'
+    - '5'
 
 alphabet:
   - '='

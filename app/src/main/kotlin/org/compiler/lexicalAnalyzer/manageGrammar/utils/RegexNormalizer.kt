@@ -7,6 +7,33 @@ val REGEX_METACHARACTERS = setOf('|', '.', '*', '+', '?', '(', ')', '[', ']', '^
 val UNARY_OPERATORS = setOf('*', '+', '?')
 val BINARY_OPERATORS = setOf('|', '.')
 
+// 32..126 covers all printable ASCII chars
+val ALPHABET: Set<Char> = buildSet {
+    for (code in 32..126) add(code.toChar())
+    add('\t')
+    add('\n')
+}
+
+// Resolves the raw content between single quotes to the actual character.
+private fun resolveCharLiteral(content: String): Char = when (content) {
+    "\\t"  -> '\t'
+    "\\n" -> '\n'
+    "\\q" -> '\''
+    else  -> content[0]
+}
+
+// Converts a single character to its atom representation in the normalized regex.
+// Characters that would be misinterpreted by splitIntoAtoms must be quoted.
+private fun charToAtom(c: Char): String = when {
+    c == '\t' -> "'\\t'"
+    c == '\n' -> "'\\n'"
+    c == '\'' -> "'\\q'"  // single-quote must be quoted — splitIntoAtoms uses ' as atom delimiter
+    c == '"'  -> "'\"'"  // double-quote must be quoted — splitIntoAtoms treats raw " as string delimiter
+    c == ' '  -> "' '"   // space must be quoted — splitIntoAtoms skips raw spaces
+    c in REGEX_METACHARACTERS -> "'$c'"
+    else -> c.toString()
+}
+
 // Precedencia de operadores
 fun getPrecedence(operatorChar: Char): Int {
     return when (operatorChar) {
@@ -128,12 +155,18 @@ fun addConcatenation(regex: String): String {
 }
 
 // Splits the regex into atomic tokens, skipping formatting spaces.
+// Each atom is the minimum unit that ShuntingYard can process.
 private fun splitIntoAtoms(regex: String): List<String> {
     val tokens = mutableListOf<String>()
     var i = 0
     while (i < regex.length) {
         when {
+            // Space is formatting only — skip it
+            // "a | b"  →  ["a", "|", "b"]
             regex[i] == ' ' -> i++
+
+            // Single-quoted literal — kept whole as one atom
+            // '\n'  →  ["'\n'"]
             regex[i] == '\'' -> {
                 val sb = StringBuilder()
                 sb.append('\''); i++
@@ -141,6 +174,11 @@ private fun splitIntoAtoms(regex: String): List<String> {
                 if (i < regex.length) { sb.append('\''); i++ }
                 tokens.add(sb.toString())
             }
+
+            // Double-quoted string — exploded into individual char atoms
+            // metacharacters inside get single-quoted so they aren't misread as operators
+            // "int"  →  ["i", "n", "t"]
+            // "a.b"  →  ["a", "'.'", "b"]
             regex[i] == '"' -> {
                 i++ // skip opening quote
                 while (i < regex.length && regex[i] != '"') {
@@ -150,6 +188,9 @@ private fun splitIntoAtoms(regex: String): List<String> {
                 }
                 if (i < regex.length) i++ // skip closing quote
             }
+
+            // Any other character — becomes its own atom (operators, letters, digits, parens)
+            // a|b*  →  ["a", "|", "b", "*"]
             else -> { tokens.add(regex[i].toString()); i++ }
         }
     }
@@ -157,8 +198,8 @@ private fun splitIntoAtoms(regex: String): List<String> {
 }
 
 // Insert '.' between left and right when:
-//   left  closes a term: anything except  (  |  .
-//   right opens  a term: anything except  )  |  .  *
+// left  closes a term: anything except  (  |  .
+// right opens  a term: anything except  )  |  .  *
 private fun needsConcatenation(left: Char, right: Char): Boolean {
     val leftClosesTerm = left  !in setOf('(', '|', '.')
     val rightOpensTerm = right !in setOf(')', '|', '.', '*')
@@ -190,20 +231,33 @@ fun normalizeCharClasses(pattern: String): String {
     return result.toString()
 }
 
-// Parses the content inside [...] and returns the alternation
-// Each char is always written as 'c' (3 source chars: quote, char, quote)
+// Parses the content inside [...] and returns an alternation of the matched characters.
+// Supports ranges like 'a'-'z', individual chars like '\n', and negation with ^ prefix.
+// [^'*'] expands to every ALPHABET character except '*'.
 private fun expandCharClass(content: String): String {
+    val negate = content.startsWith("^")
+    val parseFrom = if (negate) content.substring(1) else content
+
     val chars = mutableListOf<Char>()
     var i = 0
-    while (i < content.length) {
-        if (content[i] == '\'') {
-            val c = content[i + 1]
-            i += 3 // skip 'c'
-            if (i < content.length && content[i] == '-') {
+    while (i < parseFrom.length) {
+        if (parseFrom[i] == '\'') {
+            // Read everything between quotes to support multi-char escapes like '\n', '\q'
+            val start = i + 1
+            val end = parseFrom.indexOf('\'', start)
+            if (end == -1) { i++; continue }
+            val c = resolveCharLiteral(parseFrom.substring(start, end))
+            i = end + 1
+
+            if (i < parseFrom.length && parseFrom[i] == '-') {
                 i++ // skip '-'
-                val end = content[i + 1]
-                i += 3 // skip 'c'
-                for (ch in c..end) chars.add(ch)
+                val rStart = i + 1
+                val rEnd = parseFrom.indexOf('\'', rStart)
+                if (i < parseFrom.length && parseFrom[i] == '\'' && rEnd != -1) {
+                    val endChar = resolveCharLiteral(parseFrom.substring(rStart, rEnd))
+                    i = rEnd + 1
+                    for (ch in c..endChar) chars.add(ch)
+                }
             } else {
                 chars.add(c)
             }
@@ -211,7 +265,16 @@ private fun expandCharClass(content: String): String {
             i++
         }
     }
-    return if (chars.size == 1) chars[0].toString()
-    else "(${chars.joinToString("|")})"
-}
 
+    val finalChars = if (negate) {
+        (ALPHABET - chars.toSet()).sortedBy { it.code }
+    } else {
+        chars
+    }
+
+    return when {
+        finalChars.isEmpty() -> ""
+        finalChars.size == 1 -> charToAtom(finalChars[0])
+        else -> "(${finalChars.joinToString("|") { charToAtom(it) }})"
+    }
+}

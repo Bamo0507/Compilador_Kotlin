@@ -6,6 +6,15 @@ import guru.nidi.graphviz.parse.Parser
 import org.compiler.lexicalAnalyzer.manageGrammar.models.*
 import java.io.File
 
+// Escapes a char so it is safe to embed inside a DOT label string.
+private fun dotEscape(c: Char): String = when (c) {
+    '\\' -> "\\\\"
+    '"'  -> "\\\""
+    '\t' -> "\\\\t"
+    '\n' -> "\\\\n"
+    else -> c.toString()
+}
+
 fun visualizeTree(root: TreeNode, category: String) {
     val dot = buildDotString(root, category)
     val outputDir = File("generatedTrees")
@@ -24,7 +33,7 @@ private fun buildDotString(root: TreeNode, graphName: String): String {
     fun visit(node: TreeNode): Int {
         val id = counter++
         val label = when (node) {
-            is Leaf -> if (node.symbol == EPSILON) "ε" else "${node.symbol}\\n(${node.position})"
+            is Leaf -> if (node.symbol == EPSILON) "ε" else "${dotEscape(node.symbol)}\\n(${node.position})"
             is UnaryNode -> "${node.operator}"
             is BinaryNode -> "${node.operator}"
         }

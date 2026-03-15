@@ -159,7 +159,12 @@ q_states:
     - '146'
     - '141'
   initial: '5'
-  final: '0'
+  final:
+    - '0'
+    - '1'
+    - '2'
+    - '3'
+    - '4'
 
 alphabet:
   - 'u'

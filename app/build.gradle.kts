@@ -44,9 +44,24 @@ java {
     }
 }
 
+tasks.register<JavaExec>("runPreprocessor") {
+    group = "application"
+    description = "Program 1 — Preprocessor: reads .yal, builds DFAs, writes YAMLs"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("org.compiler.PreprocessorAppKt")
+    workingDir = file(".")
+}
+
+tasks.register<JavaExec>("runLexer") {
+    group = "application"
+    description = "Program 2 — Scanner: loads YAMLs, runs scanner, prints tokens"
+    classpath = sourceSets["main"].runtimeClasspath
+    mainClass.set("org.compiler.LexerAppKt")
+    workingDir = file(".")
+}
+
 application {
-    // Define the main class for the application.
-    mainClass = "org.compiler.AppKt"
+    mainClass = "org.compiler.PreprocessorAppKt"
 }
 
 tasks.named<Test>("test") {
