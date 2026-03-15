@@ -8,7 +8,6 @@ import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 import org.compiler.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
 import org.compiler.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
 import org.compiler.lexicalAnalyzer.lexer.models.SymbolTable
-import org.compiler.lexicalAnalyzer.lexer.models.SymbolTableEntry
 import org.compiler.lexicalAnalyzer.scanner.models.ErrorEntry
 import org.compiler.lexicalAnalyzer.scanner.models.Token
 import org.compiler.lexicalAnalyzer.scanner.models.TokenEntrys

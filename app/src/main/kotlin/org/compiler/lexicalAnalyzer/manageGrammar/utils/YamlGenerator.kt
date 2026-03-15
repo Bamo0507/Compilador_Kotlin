@@ -4,31 +4,8 @@ import org.compiler.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
 import org.compiler.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
 import java.io.File
 
-fun dfaReader(CategoryAutomataIndex: CategoryAutomataIndex) {
-    for(categoryAutomata in CategoryAutomataIndex.getAll()) {
-        val categoy = categoryAutomata.key // KEYBWORD, INT, etc etc etc
-        val acceptingStates = categoryAutomata.value.acceptingStates
-        val initialState = categoryAutomata.value.initialState
-
-        val transitions = categoryAutomata.value.transitions
-        for(transition in transitions){
-            val estadoOrigen = transition.key
-            val transicionesDesdEstado = transition.value  // Map<Char, Int>
-
-            for (entry in transicionesDesdEstado) {
-                val caracterEntrada = entry.key
-                val estadoDestino   = entry.value
-                println("($estadoOrigen, ${caracterEntrada}) -> $estadoDestino")
-            }
-        }
-    }
-}
-
 fun singleDfaReader(categoryAutomata: Map.Entry<String, MinimizedDFA>): List<Triple<Int, Char, Int>> {
     val transitions_list = mutableListOf<Triple<Int, Char, Int>>()
-    val categoy = categoryAutomata.key // KEYBWORD, INT, etc etc etc
-    val acceptingStates = categoryAutomata.value.acceptingStates
-    val initialState = categoryAutomata.value.initialState
 
     val transitions = categoryAutomata.value.transitions
     for(transition in transitions){
@@ -110,31 +87,6 @@ private fun buildDfaYaml(
     return builder.toString()
 }
 
-
-
-// q_states:
-//   q_list:
-//     - '0' 
-//     - '1' 
-//     - '2'
-//     - '3'
-//   initial: '0'
-//   final: '3'
-
-// alphabet:
-//   - 'a'
-//   - 'b'
-//   - 'c'
-
-// delta:
-//   - params: { initial_state: '0', input: 'a' }
-//     output: { final_state: '0'}
-//   - params: { initial_state: '0', input: 'b' }
-//     output: { final_state: '0' }
-//   - params: { initial_state: '0', input: 'c' }
-//     output: { final_state: '0' }
-
-
 fun dfaToYaml(CategoryAutomataIndex: CategoryAutomataIndex){
     val outputDir = File("src/main/resources")
     outputDir.mkdirs()
@@ -169,26 +121,5 @@ fun dfaToYaml(CategoryAutomataIndex: CategoryAutomataIndex){
 
         val outputFile = File(outputDir, "${category}.yaml")
         outputFile.writeText(yamlString)
-
-        
-        // println("---")
-        // println("q_states:")
-        // println("  q_list:")
-        // for (state in q_list) {
-        //     println("    - '$state'")
-        // }
-        // println("  initial: '$initialState'")
-        // println("  final: '${acceptingStates.first()}'")
-        // println("alphabet:")
-        // for (char in alphabet) {
-        //     println("  - '$char'")
-        // }
-        // println("delta:")
-        // for (transition in delta) {
-        //     println("  - params: ${transition["params"]}")
-        //     println("    output: ${transition["output"]}")
-        // }
-
     }
-
 }
