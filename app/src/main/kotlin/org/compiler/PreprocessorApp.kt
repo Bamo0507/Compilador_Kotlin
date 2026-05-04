@@ -1,16 +1,16 @@
 package org.compiler
 
-import org.compiler.lexicalAnalyzer.manageGrammar.buildMinimizedDFA
-import org.compiler.lexicalAnalyzer.manageGrammar.buildSyntaxTree
-import org.compiler.lexicalAnalyzer.manageGrammar.buildTransitionTable
-import org.compiler.lexicalAnalyzer.manageGrammar.computeFollowPos
-import org.compiler.lexicalAnalyzer.manageGrammar.infixToPostfix
-import org.compiler.lexicalAnalyzer.manageGrammar.minimizeDFA
-import org.compiler.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
-import org.compiler.lexicalAnalyzer.manageGrammar.utils.YalexReader
-import org.compiler.lexicalAnalyzer.manageGrammar.utils.normalizeRegex
-import org.compiler.lexicalAnalyzer.manageGrammar.utils.visualizeTree
-import org.compiler.lexicalAnalyzer.manageGrammar.utils.dfaToYaml
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.buildMinimizedDFA
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.buildSyntaxTree
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.buildTransitionTable
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.computeFollowPos
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.infixToPostfix
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.minimizeDFA
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.YalexReader
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.normalizeRegex
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.visualizeTree
+import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.dfaToYaml
 
 // Program 1 — Preprocessor
 // Reads the .yal spec, builds one minimized DFA per category, and writes each to a YAML file.

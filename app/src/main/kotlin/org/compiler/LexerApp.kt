@@ -1,9 +1,9 @@
 package org.compiler
 
-import org.compiler.lexicalAnalyzer.scanner.YamlLoader
-import org.compiler.lexicalAnalyzer.scanner.scan
-import org.compiler.lexicalAnalyzer.scanner.models.TokenEntrys
-import org.compiler.lexicalAnalyzer.lexer.models.SymbolTable
+import org.compiler.frontend.lexicalAnalyzer.scanner.YamlLoader
+import org.compiler.frontend.lexicalAnalyzer.scanner.scan
+import org.compiler.frontend.lexicalAnalyzer.scanner.models.TokenEntrys
+import org.compiler.frontend.lexicalAnalyzer.lexer.models.SymbolTable
 import java.io.File
 
 // Program 2 — Scanner
@@ -14,6 +14,7 @@ fun main() {
 
     val sourceFile = File("src/main/resources/input.java")
     val sourceCode = if (sourceFile.exists()) sourceFile.readText() else "int x = 10;"
+    SymbolTable.clear()
     scan(sourceCode)
 
     val outputDir = File("src/main/resources/output")
@@ -21,7 +22,12 @@ fun main() {
 
     File(outputDir, "tokens.txt").bufferedWriter().use { writer ->
         TokenEntrys.tokens.forEach { token ->
-            writer.write("<${token.attribute}, ${token.value}>")
+            val printedValue = if (token.category == "KEYWORD") {
+                token.lexeme
+            } else {
+                SymbolTable.addOrGet(token.lexeme).toString()
+            }
+            writer.write("<${token.category}, $printedValue>")
             writer.newLine()
         }
     }
