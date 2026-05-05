@@ -85,7 +85,7 @@ Modelos de la gramática y lectura del archivo `.yalp`. Se puede arrancar en cua
 
 ### Ticket 6 — Modelos del módulo Grammar
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno (puede arrancar en paralelo con Fase 1)
 - **Archivos**:
   - `frontend/syntaxAnalyzer/grammar/models/Symbol.kt`
