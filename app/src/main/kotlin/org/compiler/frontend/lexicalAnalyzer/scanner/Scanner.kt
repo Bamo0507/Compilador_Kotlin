@@ -5,12 +5,14 @@ import com.fasterxml.jackson.databind.DeserializationFeature
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.dataformat.yaml.YAMLFactory
 
+import org.compiler.diagnostics.CompilerError
+import org.compiler.diagnostics.DiagnosticsTable
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.CategoryAutomataIndex
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
-import org.compiler.frontend.lexicalAnalyzer.scanner.models.ErrorEntry
 import org.compiler.frontend.lexicalAnalyzer.scanner.models.TokenEntrys
-import org.compiler.frontend.models.LexemeLocation
 import org.compiler.frontend.models.Token
+import org.compiler.models.LexemeLocation
+import org.compiler.symbolTable.SymbolTable
 import java.nio.file.Files
 import java.nio.file.Paths
 import kotlin.collections.get
@@ -259,6 +261,7 @@ fun extractLexeme(segments: List<CharArray>, lexembegin: BufferCursor, forwardSt
 // applies longest match, and fills TokenEntrys with tokens and errors.
 fun scan(source: String) {
     TokenEntrys.clear()
+    DiagnosticsTable.clear()
 
     val segments = segmentInput(source)
     val automata = CategoryAutomataIndex.getAll()
@@ -284,7 +287,13 @@ fun scan(source: String) {
             best == null || best.second == 0 -> {
                 // Panic mode: consume all consecutive unrecognized chars as one error
                 val (badSeq, newCursor) = panicMode(segments, lexembegin, automata)
-                TokenEntrys.addError(ErrorEntry(consumed = badSeq, line = currentLine))
+                DiagnosticsTable.report(
+                    CompilerError.LexerError(
+                        location = LexemeLocation(line = currentLine, position = currentPosition),
+                        message = "Unrecognized sequence: \"$badSeq\"",
+                        invalidLexeme = badSeq
+                    )
+                )
                 val (newLine, newPosition) = advanceLineAndPosition(currentLine, currentPosition, badSeq)
                 currentLine = newLine
                 currentPosition = newPosition
@@ -300,14 +309,10 @@ fun scan(source: String) {
             }
             else -> {
                 val lexeme = extractLexeme(segments, lexembegin, best.second)
-                val tokenLocation = LexemeLocation(line = currentLine, position = currentPosition)
-                TokenEntrys.addToken(
-                    Token(
-                        category = best.first,
-                        lexeme = lexeme,
-                        location = tokenLocation
-                    )
-                )
+                val location = LexemeLocation(line = currentLine, position = currentPosition)
+                val symbolIndex = if (best.first == "KEYWORD") null
+                                  else SymbolTable.addOrGet(lexeme, location)
+                TokenEntrys.addToken(Token(category = best.first, lexeme = lexeme, symbolIndex = symbolIndex))
                 val (newLine, newPosition) = advanceLineAndPosition(currentLine, currentPosition, lexeme)
                 currentLine = newLine
                 currentPosition = newPosition

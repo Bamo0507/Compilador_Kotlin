@@ -26,25 +26,33 @@ Este documento detalla los elementos de código que se construirán para el Proy
 
 ## 1. Estructura de carpetas y archivos
 
-La estructura del proyecto refleja la separación entre análisis léxico y análisis sintáctico. Ambas fases viven bajo una carpeta común `frontend/` (terminología clásica de compiladores: el front-end agrupa lexer, parser y análisis semántico). Lo construido en el Proyecto 1 se conserva intacto, solo cambió de ubicación al moverse dentro de `frontend/`. Todo lo nuevo del Proyecto 2 entra como un módulo paralelo al lexer dentro del mismo `frontend/`. Esto deja claro al leer el árbol qué es parte del compilador y qué no, y permite que cualquier integrante encuentre rápido el archivo que necesita.
+La estructura del proyecto refleja la separación entre análisis léxico y análisis sintáctico. Ambas fases viven bajo una carpeta común `frontend/`. Por encima de `frontend/` viven tres paquetes globales que todas las fases del compilador comparten: `models/` (tipos de valor básicos), `symbolTable/` (tabla de símbolos con atributos) y `diagnostics/` (colector de errores léxicos y sintácticos). Esta separación evita que el parser importe desde el lexer y sigue la teoría del Dragon Book donde la tabla de símbolos y el reporte de errores son estructuras globales, no pertenecientes a una sola fase.
 
 ### Árbol completo
 
 ```
 app/src/main/kotlin/org/compiler/
 │
+├── models/                                [tipos de valor compartidos por todas las fases]
+│   └── LexemeLocation.kt                 [línea + posición en el fuente]
+│
+├── symbolTable/                           [tabla de símbolos global — Dragon Book §2.7]
+│   ├── SymbolTable.kt                    [singleton; addOrGet(name, location): Int]
+│   └── SymbolTableEntry.kt               [index, name, location]
+│
+├── diagnostics/                           [colector global de errores del compilador]
+│   ├── CompilerError.kt                  [sealed interface: LexerError | ParserError]
+│   └── DiagnosticsTable.kt              [singleton; report(), lexerErrors(), parserErrors()]
+│
 ├── frontend/                              [techo común del compilador]
 │   │
-│   ├── models/                            [NUEVO — modelos compartidos entre fases]
-│   │   ├── LexemeLocation.kt              [nuevo — línea + posición]
-│   │   └── Token.kt                       [movido desde lexicalAnalyzer/]
+│   ├── models/                            [modelos compartidos entre fases del frontend]
+│   │   └── Token.kt                       [category, lexeme, symbolIndex?]
 │   │
 │   ├── lexicalAnalyzer/                   [Proyecto 1, casi sin cambios]
 │   │   ├── manageGrammar/                 [intacto]
-│   │   ├── scanner/                       [imports actualizados a frontend.models.Token]
+│   │   ├── scanner/                       [usa SymbolTable y DiagnosticsTable globales]
 │   │   └── lexer/
-│   │       └── models/
-│   │           └── SymbolTable.kt         [intacto; Token.kt ya no vive aquí]
 │   │
 │   └── syntaxAnalyzer/                    [NUEVO — Proyecto 2]
 │       │
@@ -196,71 +204,54 @@ Imports a actualizar en tres archivos:
 - `frontend/lexicalAnalyzer/scanner/models/TokenEntrys.kt`
 - `LexerApp.kt`
 
-### 2.2 — Rediseñar `Token` para incluir lexema y posición
+### 2.2 — Rediseñar `Token`
 
 **Archivo**: `frontend/models/Token.kt`
 
-Estado actual:
-
 ```kotlin
 data class Token(
-    val attribute: String,
-    val value: String   // a veces lexema (KEYWORD), a veces índice (resto)
+    val category: String,
+    val lexeme: String,
+    val symbolIndex: Int?   // null para KEYWORD; índice en SymbolTable para todo lo demás
 )
 ```
 
-Estado propuesto:
-
-```kotlin
-data class Token(
-    val category: String,       // antes "attribute" — el nombre de la categoría léxica
-    val lexeme: String,         // el texto crudo que matcheó
-    val location: LexemeLocation
-)
-```
-
-El renombre `attribute → category` deja claro que el campo guarda la categoría léxica (KEYWORD, INT, ID), no un atributo semántico.
-
-Eliminar `value` y agregar `lexeme` resuelve la ambigüedad actual: hoy `value` es a veces el lexema (para KEYWORD) y a veces el índice de la tabla de símbolos como string (para los demás). El parser necesita siempre el lexema. El índice de la tabla de símbolos se calcula al momento de escribir el output, no al momento de scanear.
-
-Agregar `location` permite que el parser reporte errores con línea y posición exactas.
+`Token` es la frontera lexer → parser. Siguiendo el Dragon Book (§2.6), el atributo de un identificador o literal es un puntero a la tabla de símbolos. Para keywords el atributo es el lexema mismo. La ubicación en el fuente no vive en el token — vive en la entrada correspondiente de `SymbolTable` (para símbolos) y en `DiagnosticsTable` cuando hay un error.
 
 ### 2.3 — Crear `LexemeLocation`
 
-**Archivo nuevo**: `frontend/models/LexemeLocation.kt`
+**Archivo**: `org/compiler/models/LexemeLocation.kt`
 
 ```kotlin
-data class LexemeLocation(
-    val line: Int,
-    val position: Int
-)
+data class LexemeLocation(val line: Int, val position: Int)
 ```
 
-Es una data class de un solo uso: agrupar dos enteros con nombre. `line` es la línea (1-based) y `position` es la posición horizontal dentro de esa línea (1-based, equivale a la columna). Se llama `LexemeLocation` porque ubica un lexema dentro del código fuente — todo `Token` carga una, los errores del lexer y del parser la usan, y las hojas del árbol sintáctico la heredan vía el `Token` que las generó. Vive en `frontend/models/` porque las tres fases la consumen.
+`line` y `position` son 1-based. Vive en `org.compiler.models/` (por encima de `frontend/`) porque la consumen `SymbolTableEntry`, `CompilerError`, y eventualmente el árbol sintáctico — tres estructuras que pertenecen a niveles distintos del compilador.
 
-### 2.4 — Modificar `Scanner.kt` para llevar línea y posición
+### 2.4 — Modificar `Scanner.kt`
 
 **Archivo**: `frontend/lexicalAnalyzer/scanner/Scanner.kt`
 
-Hoy el scanner ya lleva un contador de línea (`currentLine`). Hay que agregar también un contador de posición horizontal que se reinicia con cada salto de línea.
+El scanner lleva contadores `currentLine` y `currentPosition`. Al reconocer un token:
+- Si la categoría es `KEYWORD`: crea `Token(category, lexeme, symbolIndex = null)`
+- Para cualquier otra categoría: llama `SymbolTable.addOrGet(lexeme, location)` y guarda el índice en `symbolIndex`
+- En panic mode: reporta `CompilerError.LexerError` a `DiagnosticsTable` con la ubicación y la secuencia inválida
 
-Al construir cada `Token`, pasar `LexemeLocation(currentLine, currentPosition)` correspondiente al **inicio del lexema**, no al final.
+La ubicación se captura al **inicio del lexema** antes de avanzar los contadores.
 
-Quitar la lógica `SymbolTable.addOrGet(lexeme).toString()` del scanner. El scanner emite `Token(category, lexeme, location)` y nada más. La tabla de símbolos se llena en otro punto (ver 2.5).
-
-### 2.5 — Modificar `LexerApp.kt` para hacer el lookup de tabla de símbolos al escribir
+### 2.5 — Modificar `LexerApp.kt`
 
 **Archivo**: `LexerApp.kt`
 
-Hoy el output a `tokens.txt` se escribe con el índice ya resuelto adentro del Token. Después de la refactorización, el output se construye recorriendo los tokens y consultando la tabla de símbolos al momento:
+El output a `tokens.txt` usa `token.symbolIndex` directamente (ya calculado durante el scan):
 
 ```
 Para cada token:
     si la categoría es KEYWORD → escribir <KEYWORD, lexema>
-    si no → resolver índice en SymbolTable y escribir <categoría, índice>
+    si no → escribir <categoría, symbolIndex>
 ```
 
-Esto deja el formato del archivo de salida idéntico al actual, pero la lógica del lookup vive en el output, no entrampada en el scanner.
+`errors.txt` lee de `DiagnosticsTable.lexerErrors()`. `symbolTable.txt` lee de `SymbolTable.getAll()` — cada entrada ahora incluye `name` y `location` (línea:posición de primera aparición).
 
 ### 2.6 — Exponer una API pública del lexer para el parser
 

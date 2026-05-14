@@ -1,5 +1,7 @@
 package org.compiler.frontend.lexicalAnalyzer.lexer
 
+import org.compiler.diagnostics.CompilerError
+import org.compiler.diagnostics.DiagnosticsTable
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.buildMinimizedDFA
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.buildSyntaxTree
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.buildTransitionTable
@@ -10,20 +12,21 @@ import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.CategoryAutoma
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.YalexReader
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.normalizeRegex
-import org.compiler.frontend.lexicalAnalyzer.scanner.models.ErrorEntry
 import org.compiler.frontend.lexicalAnalyzer.scanner.models.TokenEntrys
 import org.compiler.frontend.lexicalAnalyzer.scanner.scan
 import org.compiler.frontend.models.Token
+import org.compiler.symbolTable.SymbolTable
 
 data class LexerResult(
     val tokens: List<Token>,
-    val errors: List<ErrorEntry>,
+    val errors: List<CompilerError.LexerError>,
     val automata: Map<String, MinimizedDFA>
 )
 
 object Lexer {
     fun tokenize(yalexContent: String, source: String): LexerResult {
         CategoryAutomataIndex.clear()
+        SymbolTable.clear()
 
         val mappings = YalexReader.parse(yalexContent)
 
@@ -47,7 +50,7 @@ object Lexer {
 
         return LexerResult(
             tokens = TokenEntrys.tokens.toList(),
-            errors = TokenEntrys.errors.toList(),
+            errors = DiagnosticsTable.lexerErrors(),
             automata = CategoryAutomataIndex.getAll().toMap()
         )
     }

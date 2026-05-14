@@ -1,5 +1,7 @@
 package org.compiler.frontend.syntaxAnalyzer.grammar.models
 
+
+
 data class Grammar(
     val terminals: Set<Symbol.Terminal>,
     val nonTerminals: Set<Symbol.NonTerminal>,

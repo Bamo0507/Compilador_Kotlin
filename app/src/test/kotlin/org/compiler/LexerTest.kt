@@ -1,7 +1,7 @@
 package org.compiler
 
 import org.compiler.frontend.lexicalAnalyzer.lexer.Lexer
-import org.compiler.frontend.lexicalAnalyzer.lexer.models.SymbolTable
+import org.compiler.symbolTable.SymbolTable
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -14,15 +14,11 @@ class LexerTest {
         val yalexContent = File("src/main/resources/java_lang.yal").readText()
         val sourceContent = File("src/main/resources/input.java").readText()
 
-        SymbolTable.clear()
         val result = Lexer.tokenize(yalexContent, sourceContent)
 
         val rebuilt = result.tokens.joinToString("\n") { token ->
-            val printedValue = if (token.category == "KEYWORD") {
-                token.lexeme
-            } else {
-                SymbolTable.addOrGet(token.lexeme).toString()
-            }
+            val printedValue = if (token.category == "KEYWORD") token.lexeme
+                               else token.symbolIndex.toString()
             "<${token.category}, $printedValue>"
         }
 

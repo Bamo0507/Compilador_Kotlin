@@ -25,43 +25,37 @@ Esta fase prepara el código existente del Proyecto 1 para que el parser pueda c
 
 - **Estado**: completado
 - **Depende de**: ninguno
-- **Archivos**: `frontend/models/LexemeLocation.kt` (nuevo)
-- **Descripción**: crear la data class `LexemeLocation(line: Int, position: Int)` en el paquete `org.compiler.frontend.models`. Es el modelo compartido que ubica un lexema dentro del código fuente — lo usan los tokens, los errores del lexer/parser y las hojas del árbol sintáctico. `line` y `position` son ambos 1-based; `position` es la posición horizontal dentro de la línea (equivale a la columna).
-- **Aceptación**: el archivo compila y se puede instanciar.
+- **Archivos**: `org/compiler/models/LexemeLocation.kt`
+- **Descripción**: `LexemeLocation(line: Int, position: Int)` en `org.compiler.models` (por encima de `frontend/`). Vive a ese nivel porque la consumen `SymbolTableEntry`, `CompilerError` y el árbol sintáctico — estructuras de distintas fases. `line` y `position` son 1-based.
 - **Plan**: §2.3
 
-### Ticket 2 — Mover y rediseñar `Token`
+### Ticket 2 — Rediseñar `Token` y establecer paquetes globales
 
 - **Estado**: completado
 - **Depende de**: Ticket 1
 - **Archivos**:
-  - `frontend/models/Token.kt` (nuevo, reemplaza al anterior)
-  - `frontend/lexicalAnalyzer/scanner/Scanner.kt` (actualizar imports y construcción del Token)
-  - `frontend/lexicalAnalyzer/scanner/models/TokenEntrys.kt` (actualizar imports)
-  - `LexerApp.kt` (actualizar referencias a campos del Token)
-  - `frontend/lexicalAnalyzer/scanner/models/Token.kt` (eliminar el archivo viejo)
-- **Descripción**: rediseñar `Token` con campos `category: String`, `lexeme: String`, `location: LexemeLocation`. Quitar los campos viejos `attribute` y `value`. Mover el archivo a `frontend/models/`. La `location` se pasa con un placeholder `LexemeLocation(0, 0)` — el Ticket 3 implementa el tracking real.
-- **Aceptación**: el proyecto compila después del rediseño. Los tres archivos consumidores apuntan al nuevo paquete.
+  - `frontend/models/Token.kt` — `category`, `lexeme`, `symbolIndex: Int?`
+  - `org/compiler/symbolTable/SymbolTable.kt` — sube de `frontend/lexicalAnalyzer/lexer/models/`
+  - `org/compiler/symbolTable/SymbolTableEntry.kt` — `index`, `name`, `location`
+  - `org/compiler/diagnostics/CompilerError.kt` — sealed interface: `LexerError` | `ParserError`
+  - `org/compiler/diagnostics/DiagnosticsTable.kt` — colector global de errores
+- **Descripción**: `Token` sigue el modelo Dragon Book §2.6: `symbolIndex` apunta a la entrada de la tabla de símbolos para cualquier categoría que no sea `KEYWORD`; para keywords el índice es `null` y se usa el lexema. La ubicación en el fuente vive en `SymbolTableEntry`, no en `Token`. Los errores (léxicos y sintácticos) van a `DiagnosticsTable` como `CompilerError`.
 - **Plan**: §2.1, §2.2
 
 ### Ticket 3 — Tracking de posición en `Scanner`
 
 - **Estado**: completado
 - **Depende de**: Ticket 2
-- **Archivos**:
-  - `frontend/lexicalAnalyzer/scanner/Scanner.kt` (helper `advanceLineAndPosition`, contador `currentPosition`, captura de `LexemeLocation` real)
-  - `LexerApp.kt` (mover `SymbolTable.clear()` antes del `scan()`)
-- **Descripción**: agregar contador de posición horizontal que se reinicia con cada salto de línea. Pasar `LexemeLocation(currentLine, currentPosition)` al construir cada `Token`. La posición debe corresponder al inicio del lexema, no al final. Eliminar las llamadas a `SymbolTable.addOrGet` y `SymbolTable.clear` del scanner — el `Token` ahora siempre carga el lexema directo y la responsabilidad sobre la tabla de símbolos sale del scanner. El helper `advanceLineAndPosition(line, position, consumed)` recorre la string consumida actualizando ambos contadores y se usa en las tres ramas (panic mode, whitespace/comment, token normal).
-- **Aceptación**: correr el lexer sobre `input.java` produce tokens con `location` correctamente populada. La tabla de símbolos ya no se toca desde el scanner.
+- **Archivos**: `frontend/lexicalAnalyzer/scanner/Scanner.kt`
+- **Descripción**: el scanner lleva `currentLine` y `currentPosition`. Al reconocer un token que no es KEYWORD, llama `SymbolTable.addOrGet(lexeme, location)` y guarda el índice en `symbolIndex`. En panic mode reporta `CompilerError.LexerError` a `DiagnosticsTable`. El helper `advanceLineAndPosition` actualiza ambos contadores en las tres ramas.
 - **Plan**: §2.4
 
-### Ticket 4 — Lookup de `SymbolTable` al escribir output en `LexerApp`
+### Ticket 4 — Output en `LexerApp`
 
 - **Estado**: completado
 - **Depende de**: Ticket 3
 - **Archivos**: `LexerApp.kt`
-- **Descripción**: mover la lógica de resolución de índice de tabla de símbolos al momento de escribir `tokens.txt`. Para cada token, si la categoría es `KEYWORD`, escribir `<KEYWORD, lexema>`; si no, hacer `SymbolTable.addOrGet(lexeme)` y escribir `<categoría, índice>`. También se revierte el formato temporal con `line:position` que se usó en Ticket 3 para verificación.
-- **Aceptación**: el archivo `tokens.txt` generado por `LexerApp` tiene el mismo formato que antes del refactor.
+- **Descripción**: `tokens.txt` usa `token.symbolIndex` directamente (ya calculado en el scan). `errors.txt` lee de `DiagnosticsTable.lexerErrors()`. `symbolTable.txt` incluye `index|name|line:position` por entrada.
 - **Plan**: §2.5
 
 ### Ticket 5 — API pública del lexer (`Lexer.kt`)
@@ -69,12 +63,11 @@ Esta fase prepara el código existente del Proyecto 1 para que el parser pueda c
 - **Estado**: completado
 - **Depende de**: Tickets 2, 3, 4
 - **Archivos**:
-  - `frontend/lexicalAnalyzer/lexer/Lexer.kt` (nuevo)
-  - `frontend/lexicalAnalyzer/manageGrammar/utils/YalexReader.kt` (refactor mínimo: expone `parse(content)` y `read(filePath)` lo invoca)
-  - `frontend/lexicalAnalyzer/manageGrammar/models/CategoryAutomataIndex.kt` (agregar `clear()`)
-  - `app/src/test/kotlin/org/compiler/LexerTest.kt` (nuevo, valida que `tokenize` produce el mismo output que `LexerApp`)
-- **Descripción**: crear `object Lexer { fun tokenize(yalexContent: String, source: String): LexerResult }` que arme los DFAs en memoria a partir del contenido del `.yalex` (sin pasar por YAMLs) y scanee el `source`. Crear la data class `LexerResult(tokens, errors, automata)`. Internamente reusa `YalexReader.parse`, `normalizeRegex`, `infixToPostfix`, `buildSyntaxTree`, `computeFollowPos`, `buildTransitionTable`, `minimizeDFA`, `buildMinimizedDFA`, y `scan`.
-- **Aceptación**: invocar `Lexer.tokenize(File("java_lang.yal").readText(), File("input.java").readText())` retorna los mismos tokens que `LexerApp` escribe a disco. Verificado por test JUnit que rearma el formato de `tokens.txt` y lo compara byte por byte contra el archivo de referencia.
+  - `frontend/lexicalAnalyzer/lexer/Lexer.kt`
+  - `frontend/lexicalAnalyzer/manageGrammar/utils/YalexReader.kt` (expone `parse(content)`)
+  - `frontend/lexicalAnalyzer/manageGrammar/models/CategoryAutomataIndex.kt` (agrega `clear()`)
+  - `app/src/test/kotlin/org/compiler/LexerTest.kt`
+- **Descripción**: `object Lexer { fun tokenize(yalexContent, source): LexerResult }`. `LexerResult` tiene `tokens`, `errors: List<CompilerError.LexerError>` (de `DiagnosticsTable`), y `automata`. El scanner limpia `SymbolTable` y `DiagnosticsTable` al inicio de cada llamada.
 - **Plan**: §2.6
 
 ---
@@ -97,7 +90,7 @@ Modelos de la gramática y lectura del archivo `.yalp`. Se puede arrancar en cua
 
 ### Ticket 7 — `YalpReader`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**: `frontend/syntaxAnalyzer/grammar/YalpReader.kt`
 - **Descripción**: implementar `object YalpReader { fun read(filePath: String): Grammar }`. Eliminar comentarios `/* */`, separar secciones por `%%`, parsear `%token` y `IGNORE` en la sección de tokens, parsear producciones con sintaxis `nombre: cuerpo1 | cuerpo2 | ... ;`. Convención: minúsculas son no terminales, MAYÚSCULAS son terminales.

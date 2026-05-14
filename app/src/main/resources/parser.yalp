@@ -1,0 +1,108 @@
+%token KEYWORD ID INT FLOAT OPERATOR PUNCTUATION
+IGNORE WHITESPACE COMMENT
+
+%%
+
+program : class_list
+        ;
+
+class_list : class_list class_decl
+           | class_decl
+           ;
+
+class_decl : KEYWORD ID PUNCTUATION member_list PUNCTUATION
+           | KEYWORD KEYWORD ID PUNCTUATION member_list PUNCTUATION
+           ;
+
+member_list : member_list member
+            | member
+            |
+            ;
+
+member : KEYWORD ID PUNCTUATION param_list PUNCTUATION block
+       | KEYWORD KEYWORD ID PUNCTUATION param_list PUNCTUATION block
+       | KEYWORD ID OPERATOR expr PUNCTUATION
+       | KEYWORD ID PUNCTUATION
+       | KEYWORD KEYWORD ID PUNCTUATION
+       ;
+
+param_list : params
+           |
+           ;
+
+params : params PUNCTUATION param
+       | param
+       ;
+
+param : KEYWORD ID
+      ;
+
+block : PUNCTUATION stmt_list PUNCTUATION
+      ;
+
+stmt_list : stmt_list stmt
+          | stmt
+          |
+          ;
+
+stmt : decl_stmt
+     | assign_stmt
+     | if_stmt
+     | while_stmt
+     | return_stmt
+     | expr_stmt
+     | block
+     ;
+
+decl_stmt : KEYWORD ID OPERATOR expr PUNCTUATION
+          | KEYWORD ID PUNCTUATION
+          ;
+
+assign_stmt : ID OPERATOR expr PUNCTUATION
+            ;
+
+if_stmt : KEYWORD PUNCTUATION expr PUNCTUATION block
+        | KEYWORD PUNCTUATION expr PUNCTUATION block KEYWORD block
+        ;
+
+while_stmt : KEYWORD PUNCTUATION expr PUNCTUATION block
+           ;
+
+return_stmt : KEYWORD expr PUNCTUATION
+            | KEYWORD PUNCTUATION
+            ;
+
+expr_stmt : expr PUNCTUATION
+          ;
+
+expr : expr OPERATOR term
+     | term
+     ;
+
+term : term OPERATOR factor
+     | factor
+     ;
+
+factor : PUNCTUATION expr PUNCTUATION
+       | call_expr
+       | new_expr
+       | ID PUNCTUATION ID
+       | ID
+       | INT
+       | FLOAT
+       ;
+
+call_expr : ID PUNCTUATION arg_list PUNCTUATION
+          | ID PUNCTUATION ID PUNCTUATION arg_list PUNCTUATION
+          ;
+
+new_expr : KEYWORD KEYWORD PUNCTUATION arg_list PUNCTUATION
+         ;
+
+arg_list : args
+         |
+         ;
+
+args : args PUNCTUATION expr
+     | expr
+     ;

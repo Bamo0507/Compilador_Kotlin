@@ -1,4 +1,4 @@
-package org.compiler.frontend.models
+package org.compiler.models
 
 data class LexemeLocation(
     val line: Int,
