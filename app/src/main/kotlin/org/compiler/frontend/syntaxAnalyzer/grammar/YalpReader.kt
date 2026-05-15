@@ -1,6 +1,8 @@
 package org.compiler.frontend.syntaxAnalyzer.grammar
 
+import org.compiler.frontend.syntaxAnalyzer.grammar.models.Associativity
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Grammar
+import org.compiler.frontend.syntaxAnalyzer.grammar.models.PrecedenceLevel
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Production
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
 import java.io.File
@@ -13,8 +15,8 @@ object YalpReader {
         val parts = cleaned.split("%%", limit = 2)
         require(parts.size == 2) { "Missing %% separator in .yalp file" }
 
-        val (terminals, ignoredTokens) = parseTokensSection(parts[0].lines())
-        val terminalNames = terminals.map { it.name }.toSet()
+        val header = parseTokensSection(parts[0].lines())
+        val terminalNames = header.terminals.map { it.name }.toSet()
 
         val productions = parseProductionsSection(parts[1], terminalNames)
 
@@ -22,20 +24,28 @@ object YalpReader {
         val startSymbol = productions.first().head
 
         return Grammar(
-            terminals = terminals,
+            terminals = header.terminals,
             nonTerminals = nonTerminals,
             productions = productions,
             startSymbol = startSymbol,
-            ignoredTokens = ignoredTokens
+            ignoredTokens = header.ignoredTokens,
+            precedenceTable = header.precedenceTable
         )
     }
 
     private fun stripComments(content: String): String =
         content.replace(Regex("""/\*.*?\*/""", RegexOption.DOT_MATCHES_ALL), "")
 
-    private fun parseTokensSection(lines: List<String>): Pair<Set<Symbol.Terminal>, Set<Symbol.Terminal>> {
+    private data class HeaderSection(
+        val terminals: Set<Symbol.Terminal>,
+        val ignoredTokens: Set<Symbol.Terminal>,
+        val precedenceTable: List<PrecedenceLevel>
+    )
+
+    private fun parseTokensSection(lines: List<String>): HeaderSection {
         val terminals = mutableSetOf<Symbol.Terminal>()
         val ignored = mutableSetOf<Symbol.Terminal>()
+        val precedenceTable = mutableListOf<PrecedenceLevel>()
 
         for (line in lines) {
             val trimmed = line.trim()
@@ -46,20 +56,54 @@ object YalpReader {
                         .filter { it.isNotEmpty() }
                         .forEach { terminals.add(Symbol.Terminal(it)) }
                 }
+                trimmed.startsWith("%left") -> {
+                    precedenceTable.add(
+                        buildPrecedenceLevel(
+                            text = trimmed.removePrefix("%left"),
+                            associativity = Associativity.LEFT,
+                            level = precedenceTable.size
+                        )
+                    )
+                }
+                trimmed.startsWith("%right") -> {
+                    precedenceTable.add(
+                        buildPrecedenceLevel(
+                            text = trimmed.removePrefix("%right"),
+                            associativity = Associativity.RIGHT,
+                            level = precedenceTable.size
+                        )
+                    )
+                }
                 trimmed.startsWith("IGNORE") -> {
                     trimmed.removePrefix("IGNORE").trim()
                         .split(Regex("\\s+"))
                         .filter { it.isNotEmpty() }
                         .forEach {
-                            val t = Symbol.Terminal(it)
-                            terminals.add(t)
-                            ignored.add(t)
+                            val terminal = Symbol.Terminal(it)
+                            terminals.add(terminal)
+                            ignored.add(terminal)
                         }
                 }
             }
         }
 
-        return terminals to ignored
+        return HeaderSection(terminals, ignored, precedenceTable)
+    }
+
+    private fun buildPrecedenceLevel(
+        text: String,
+        associativity: Associativity,
+        level: Int
+    ): PrecedenceLevel {
+        val operators = text.trim()
+            .split(Regex("\\s+"))
+            .filter { it.isNotEmpty() }
+            .map { Symbol.Terminal(it) }
+            .toSet()
+        require(operators.isNotEmpty()) {
+            "Precedence declaration ${associativity.name.lowercase()} has no operators"
+        }
+        return PrecedenceLevel(level, operators, associativity)
     }
 
     private fun parseProductionsSection(text: String, terminalNames: Set<String>): List<Production> {

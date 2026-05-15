@@ -1,6 +1,6 @@
 package org.compiler
 
-import org.compiler.frontend.syntaxAnalyzer.grammar.GrammarRewriter
+import org.compiler.frontend.syntaxAnalyzer.grammar.LeftRecursionRewriter
 import org.compiler.frontend.syntaxAnalyzer.grammar.YalpReader
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Grammar
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Production
@@ -9,7 +9,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-class GrammarRewriterTest {
+class LeftRecursionRewriterTest {
 
     @Test
     fun `grammar without left recursion is not modified`() {
@@ -20,7 +20,7 @@ class GrammarRewriterTest {
             program : ID PLUS ID ;
         """.trimIndent()
         val grammar = YalpReader.parse(content)
-        val rewritten = GrammarRewriter.eliminateLeftRecursion(grammar)
+        val rewritten = LeftRecursionRewriter.eliminateLeftRecursion(grammar)
 
         assertTrue(rewritten.nonTerminals.none { nonTerminal -> nonTerminal.name.endsWith("_prime") })
         assertEquals(grammar.productions.size, rewritten.productions.size)
@@ -44,7 +44,7 @@ class GrammarRewriterTest {
             ignoredTokens = emptySet()
         )
 
-        val rewritten = GrammarRewriter.eliminateLeftRecursion(grammar)
+        val rewritten = LeftRecursionRewriter.eliminateLeftRecursion(grammar)
 
         assertTrue(rewritten.nonTerminals.any { nonTerminal -> nonTerminal.name == "expr_prime" })
         assertTrue(rewritten.productions.none { production ->
@@ -75,7 +75,7 @@ class GrammarRewriterTest {
             ignoredTokens = emptySet()
         )
 
-        val rewritten = GrammarRewriter.eliminateLeftRecursion(grammar)
+        val rewritten = LeftRecursionRewriter.eliminateLeftRecursion(grammar)
 
         // one base: expr -> term expr_prime
         assertEquals(1, rewritten.productions.count { production -> production.head == expr })
@@ -104,7 +104,7 @@ class GrammarRewriterTest {
             ignoredTokens = emptySet()
         )
 
-        val rewritten = GrammarRewriter.eliminateLeftRecursion(grammar)
+        val rewritten = LeftRecursionRewriter.eliminateLeftRecursion(grammar)
 
         assertTrue(rewritten.nonTerminals.any { nonTerminal -> nonTerminal.name == "B_prime" })
         assertTrue(rewritten.productions.none { production ->
@@ -141,7 +141,7 @@ class GrammarRewriterTest {
             ignoredTokens = emptySet()
         )
 
-        val rewritten = GrammarRewriter.eliminateLeftRecursion(grammar)
+        val rewritten = LeftRecursionRewriter.eliminateLeftRecursion(grammar)
 
         assertTrue(rewritten.nonTerminals.any { nonTerminal -> nonTerminal.name == "C_prime" })
         assertTrue(rewritten.productions.none { production ->

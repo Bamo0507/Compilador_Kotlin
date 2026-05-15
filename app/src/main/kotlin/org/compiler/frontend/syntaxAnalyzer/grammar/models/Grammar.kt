@@ -7,7 +7,8 @@ data class Grammar(
     val nonTerminals: Set<Symbol.NonTerminal>,
     val productions: List<Production>,
     val startSymbol: Symbol.NonTerminal,
-    val ignoredTokens: Set<Symbol.Terminal>
+    val ignoredTokens: Set<Symbol.Terminal>,
+    val precedenceTable: List<PrecedenceLevel> = emptyList()
 )
 
 val Grammar.productionsByHead: Map<Symbol.NonTerminal, List<Production>>

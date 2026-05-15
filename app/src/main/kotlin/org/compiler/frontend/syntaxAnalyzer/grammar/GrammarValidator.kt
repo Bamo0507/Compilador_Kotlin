@@ -16,6 +16,8 @@ object GrammarValidator {
         checkCycles(grammar, errors)
         checkUnreachableNonTerminals(grammar, errors)
         checkDuplicateProductions(grammar, errors)
+        checkPrecedenceOperatorsDeclared(grammar, errors)
+        checkOperatorAppearsInSingleLevel(grammar, errors)
 
         return errors
     }
@@ -133,6 +135,53 @@ object GrammarValidator {
                     "Duplicate production: '${production.head.name} -> $bodyStr'",
                     Severity.WARNING
                 ))
+            }
+        }
+    }
+
+    // Each operator listed in a %left or %right declaration must also appear as a %token.
+    // Otherwise the lexer never produces that category and the precedence is dead weight.
+    private fun checkPrecedenceOperatorsDeclared(
+        grammar: Grammar,
+        errors: MutableList<ValidationError>
+    ) {
+        val declaredTerminals = grammar.terminals
+        val reported = mutableSetOf<Symbol.Terminal>()
+
+        grammar.precedenceTable.forEach { level ->
+            level.operators
+                .filter { operator -> operator !in declaredTerminals && operator !in reported }
+                .forEach { operator ->
+                    errors.add(ValidationError(
+                        "Operator '${operator.name}' in precedence declaration is not declared as a %token"
+                    ))
+                    reported.add(operator)
+                }
+        }
+    }
+
+    // No operator can be assigned two different precedence levels — that would be ambiguous
+    // and the PrecedenceRewriter would not know which cascade to build.
+    private fun checkOperatorAppearsInSingleLevel(
+        grammar: Grammar,
+        errors: MutableList<ValidationError>
+    ) {
+        val firstLevelOf = mutableMapOf<Symbol.Terminal, Int>()
+        val reported = mutableSetOf<Symbol.Terminal>()
+
+        grammar.precedenceTable.forEach { level ->
+            level.operators.forEach { operator ->
+                val firstLevel = firstLevelOf[operator]
+                when {
+                    firstLevel == null -> firstLevelOf[operator] = level.level
+                    operator !in reported -> {
+                        errors.add(ValidationError(
+                            "Operator '${operator.name}' appears in multiple precedence levels " +
+                                "(level $firstLevel and level ${level.level})"
+                        ))
+                        reported.add(operator)
+                    }
+                }
             }
         }
     }

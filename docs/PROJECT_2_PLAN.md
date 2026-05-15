@@ -63,7 +63,7 @@ app/src/main/kotlin/org/compiler/
 │       │   │   └── Grammar.kt             [migrado y ampliado]
 │       │   ├── YalpReader.kt              [nuevo]
 │       │   ├── GrammarValidator.kt        [nuevo]
-│       │   └── GrammarRewriter.kt         [nuevo]
+│       │   └── LeftRecursionRewriter.kt   [nuevo]
 │       │
 │       ├── sets/
 │       │   ├── models/
@@ -407,12 +407,12 @@ Las validaciones que se ejecutan son: cada `%token X` del `.yalp` debe correspon
 
 La función retorna lista en lugar de lanzar excepción porque la GUI quiere mostrar todos los errores juntos al usuario, no fallar al primero. Una lista vacía indica gramática válida.
 
-### 3.4 — `GrammarRewriter.kt`
+### 3.4 — `LeftRecursionRewriter.kt`
 
 Transforma una gramática para que sea apta para LL(1). SLR(1) no requiere reescritura porque maneja recursión por la izquierda nativamente.
 
 ```kotlin
-object GrammarRewriter {
+object LeftRecursionRewriter {
     fun eliminateLeftRecursion(grammar: Grammar): Grammar
 }
 ```
@@ -1387,7 +1387,7 @@ Esta gramática cubre los cuatro patrones requeridos: clases con `classDecl`, fu
 
 ### 12.2 — Compatibilidad con LL(1)
 
-La gramática tal como está NO es LL(1) debido a la recursión por la izquierda en múltiples no terminales. Para probar LL(1), la GUI ofrece aplicar `GrammarRewriter.eliminateLeftRecursion`, que produce versiones con sufijo `_prime`.
+La gramática tal como está NO es LL(1) debido a la recursión por la izquierda en múltiples no terminales. Para probar LL(1), la GUI ofrece aplicar `LeftRecursionRewriter.eliminateLeftRecursion`, que produce versiones con sufijo `_prime`.
 
 Para SLR(1) la gramática se usa tal cual: SLR maneja recursión por la izquierda nativamente y de hecho prefiere esa forma.
 

@@ -5,7 +5,7 @@ import org.compiler.frontend.syntaxAnalyzer.grammar.models.Production
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.productionsByHead
 
-object GrammarRewriter {
+object LeftRecursionRewriter {
 
     fun eliminateLeftRecursion(grammar: Grammar): Grammar {
         val orderedNonTerminals = grammar.nonTerminals.toList()

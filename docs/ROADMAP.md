@@ -1,6 +1,12 @@
-# Roadmap del Proyecto 2 — Tickets de desarrollo
+# Roadmap del Proyecto 2 -- Tickets de desarrollo
 
 Este documento enlista los tickets en orden secuencial para construir el Proyecto 2 sobre el código existente del Proyecto 1. Para el diseño detallado de cada elemento (data classes, sealed interfaces, firmas de funciones, algoritmos) consultar el documento de plan: [PROJECT_2_PLAN.md](./PROJECT_2_PLAN.md).
+
+> **Cambios respecto a la versión inicial (2026-05-14)**:
+> - Se agregó la Fase 3 (soporte para precedencia y `PrecedenceRewriter`) tras revisión con el catedrático.
+> - Se rediseñaron las fases de parseo: se eliminó el módulo LR(0) puro y el módulo LR(1) separado. En este proyecto **SLR(1) = LR(1) canónico (Dragon Book §4.7.2) sin FOLLOW**, y **LALR(1) = SLR(1) + merge de cores (§4.7.4)**. Ver [docs/plans/2026-05-14-slr1-lalr1-terminology.md](./plans/2026-05-14-slr1-lalr1-terminology.md).
+> - Se eliminó la Fase de CLI. La única interfaz al cierre del proyecto es la GUI.
+> - Diseño del `PrecedenceRewriter` en [docs/plans/2026-05-14-precedence-rewriter-design.md](./plans/2026-05-14-precedence-rewriter-design.md).
 
 ## Cómo se usa este documento
 
@@ -17,32 +23,32 @@ El campo **Estado** se actualiza manualmente conforme se avanza: `pendiente`, `e
 
 ---
 
-## Fase 1 — Refactor del proyecto actual
+## Fase 1 -- Refactor del proyecto actual
 
-Esta fase prepara el código existente del Proyecto 1 para que el parser pueda consumirlo limpiamente. Es la base de todo lo demás. Hay que terminarla antes de arrancar Fase 2.
+Esta fase prepara el código existente del Proyecto 1 para que el parser pueda consumirlo limpiamente. Es la base de todo lo demás.
 
-### Ticket 1 — Crear `LexemeLocation`
+### Ticket 1 -- Crear `LexemeLocation`
 
 - **Estado**: completado
 - **Depende de**: ninguno
 - **Archivos**: `org/compiler/models/LexemeLocation.kt`
-- **Descripción**: `LexemeLocation(line: Int, position: Int)` en `org.compiler.models` (por encima de `frontend/`). Vive a ese nivel porque la consumen `SymbolTableEntry`, `CompilerError` y el árbol sintáctico — estructuras de distintas fases. `line` y `position` son 1-based.
+- **Descripción**: `LexemeLocation(line: Int, position: Int)` en `org.compiler.models` (por encima de `frontend/`). Vive a ese nivel porque la consumen `SymbolTableEntry`, `CompilerError` y el árbol sintáctico -- estructuras de distintas fases. `line` y `position` son 1-based.
 - **Plan**: §2.3
 
-### Ticket 2 — Rediseñar `Token` y establecer paquetes globales
+### Ticket 2 -- Rediseñar `Token` y establecer paquetes globales
 
 - **Estado**: completado
 - **Depende de**: Ticket 1
 - **Archivos**:
-  - `frontend/models/Token.kt` — `category`, `lexeme`, `symbolIndex: Int?`
-  - `org/compiler/symbolTable/SymbolTable.kt` — sube de `frontend/lexicalAnalyzer/lexer/models/`
-  - `org/compiler/symbolTable/SymbolTableEntry.kt` — `index`, `name`, `location`
-  - `org/compiler/diagnostics/CompilerError.kt` — sealed interface: `LexerError` | `ParserError`
-  - `org/compiler/diagnostics/DiagnosticsTable.kt` — colector global de errores
+  - `frontend/models/Token.kt` -- `category`, `lexeme`, `symbolIndex: Int?`
+  - `org/compiler/symbolTable/SymbolTable.kt` -- sube de `frontend/lexicalAnalyzer/lexer/models/`
+  - `org/compiler/symbolTable/SymbolTableEntry.kt` -- `index`, `name`, `location`
+  - `org/compiler/diagnostics/CompilerError.kt` -- sealed interface: `LexerError` | `ParserError`
+  - `org/compiler/diagnostics/DiagnosticsTable.kt` -- colector global de errores
 - **Descripción**: `Token` sigue el modelo Dragon Book §2.6: `symbolIndex` apunta a la entrada de la tabla de símbolos para cualquier categoría que no sea `KEYWORD`; para keywords el índice es `null` y se usa el lexema. La ubicación en el fuente vive en `SymbolTableEntry`, no en `Token`. Los errores (léxicos y sintácticos) van a `DiagnosticsTable` como `CompilerError`.
 - **Plan**: §2.1, §2.2
 
-### Ticket 3 — Tracking de posición en `Scanner`
+### Ticket 3 -- Tracking de posición en `Scanner`
 
 - **Estado**: completado
 - **Depende de**: Ticket 2
@@ -50,15 +56,15 @@ Esta fase prepara el código existente del Proyecto 1 para que el parser pueda c
 - **Descripción**: el scanner lleva `currentLine` y `currentPosition`. Al reconocer un token que no es KEYWORD, llama `SymbolTable.addOrGet(lexeme, location)` y guarda el índice en `symbolIndex`. En panic mode reporta `CompilerError.LexerError` a `DiagnosticsTable`. El helper `advanceLineAndPosition` actualiza ambos contadores en las tres ramas.
 - **Plan**: §2.4
 
-### Ticket 4 — Output en `LexerApp`
+### Ticket 4 -- Output en `LexerApp`
 
 - **Estado**: completado
 - **Depende de**: Ticket 3
 - **Archivos**: `LexerApp.kt`
-- **Descripción**: `tokens.txt` usa `token.symbolIndex` directamente (ya calculado en el scan). `errors.txt` lee de `DiagnosticsTable.lexerErrors()`. `symbolTable.txt` incluye `index|name|line:position` por entrada.
+- **Descripción**: `tokens.txt` usa `token.symbolIndex` directamente. `errors.txt` lee de `DiagnosticsTable.lexerErrors()`. `symbolTable.txt` incluye `index|name|line:position` por entrada.
 - **Plan**: §2.5
 
-### Ticket 5 — API pública del lexer (`Lexer.kt`)
+### Ticket 5 -- API pública del lexer (`Lexer.kt`)
 
 - **Estado**: completado
 - **Depende de**: Tickets 2, 3, 4
@@ -72,56 +78,94 @@ Esta fase prepara el código existente del Proyecto 1 para que el parser pueda c
 
 ---
 
-## Fase 2 — Módulo Grammar
+## Fase 2 -- Módulo Grammar (base)
 
-Modelos de la gramática y lectura del archivo `.yalp`. Se puede arrancar en cuanto Fase 1 termine; los tickets 6–8 son independientes entre sí (paralelizables).
+Modelos de la gramática y lectura del archivo `.yalp`. Los tickets 6-9 ya están listos; la Fase 3 los extiende para soportar precedencia.
 
-### Ticket 6 — Modelos del módulo Grammar
+### Ticket 6 -- Modelos del módulo Grammar
 
 - **Estado**: completado
-- **Depende de**: ninguno (puede arrancar en paralelo con Fase 1)
+- **Depende de**: ninguno
 - **Archivos**:
   - `frontend/syntaxAnalyzer/grammar/models/Symbol.kt`
   - `frontend/syntaxAnalyzer/grammar/models/Production.kt`
   - `frontend/syntaxAnalyzer/grammar/models/Grammar.kt`
-- **Descripción**: crear `Symbol` como sealed interface con `Terminal`, `NonTerminal`, `Epsilon` (data object), `EndMarker` (data object). Crear `Production(id, head, body)` y `Grammar(terminals, nonTerminals, productions, productionsByHead, startSymbol, ignoredTokens)`.
-- **Aceptación**: se puede construir manualmente una `Grammar` para `E → E + T | T` y consultarla.
+- **Descripción**: `Symbol` como sealed interface con `Terminal`, `NonTerminal`, `Epsilon`, `EndMarker`. `Production(id, head, body)`. `Grammar(terminals, nonTerminals, productions, productionsByHead, startSymbol, ignoredTokens)`.
 - **Plan**: §3.1
 
-### Ticket 7 — `YalpReader`
+### Ticket 7 -- `YalpReader`
 
 - **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**: `frontend/syntaxAnalyzer/grammar/YalpReader.kt`
-- **Descripción**: implementar `object YalpReader { fun read(filePath: String): Grammar }`. Eliminar comentarios `/* */`, separar secciones por `%%`, parsear `%token` y `IGNORE` en la sección de tokens, parsear producciones con sintaxis `nombre: cuerpo1 | cuerpo2 | ... ;`. Convención: minúsculas son no terminales, MAYÚSCULAS son terminales.
-- **Aceptación**: leer el `parser.yalp` de prueba (Ticket 31) produce una `Grammar` con todos los terminales, no terminales y producciones correctos.
+- **Descripción**: `object YalpReader { fun read(filePath: String): Grammar }`. Elimina comentarios `/* */`, separa secciones por `%%`, parsea `%token` e `IGNORE` en la sección de tokens, parsea producciones con sintaxis `nombre: cuerpo1 | cuerpo2 | ... ;`. Convención: minúsculas son no terminales, MAYÚSCULAS son terminales.
 - **Plan**: §3.2
 
-### Ticket 8 — `GrammarValidator`
+### Ticket 8 -- `GrammarValidator`
 
 - **Estado**: completado
 - **Depende de**: Ticket 7
 - **Archivos**: `frontend/syntaxAnalyzer/grammar/GrammarValidator.kt`
-- **Descripción**: implementar `validate(grammar, lexerCategories): List<ValidationError>`. Validar que cada `%token` exista en las categorías del lexer, que ningún no terminal usado quede sin declarar, y reportar advertencias por no terminales inalcanzables, no usados, o producciones duplicadas.
-- **Aceptación**: validar la `parser.yalp` de prueba retorna lista vacía. Inyectar un token inexistente o una referencia rota produce un error apropiado.
+- **Descripción**: `validate(grammar, lexerCategories): List<ValidationError>`. Valida que cada `%token` exista en las categorías del lexer, que ningún no terminal usado quede sin declarar, y reporta advertencias por no terminales inalcanzables, no usados, o producciones duplicadas.
 - **Plan**: §3.3
 
-### Ticket 9 — `GrammarRewriter` (eliminación de recursión por la izquierda)
+### Ticket 9 -- `GrammarRewriter` (eliminación de recursión por la izquierda)
 
 - **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**: `frontend/syntaxAnalyzer/grammar/GrammarRewriter.kt`
-- **Descripción**: implementar `eliminateLeftRecursion(grammar): Grammar` siguiendo Dragon Book §4.3.3. Generar no terminales auxiliares con sufijo `_prime`.
-- **Aceptación**: aplicar la función a `E → E + T | T; T → T * F | F; F → (E) | id` produce la versión sin recursión por la izquierda equivalente.
+- **Descripción**: `eliminateLeftRecursion(grammar): Grammar` siguiendo Dragon Book §4.3.3. Genera no terminales auxiliares con sufijo `_prime`.
 - **Plan**: §3.4, §15.1
+- **Nota**: en la Fase 3 (Ticket 10) este archivo se **renombra** a `LeftRecursionRewriter.kt`. Su lógica no cambia.
 
 ---
 
-## Fase 3 — Módulo Sets
+## Fase 3 -- Soporte para precedencia de operadores
 
-Migración del trabajo independiente de FIRST/FOLLOW con ajustes para alinearse con el resto del proyecto.
+Tras la revisión con el catedrático se confirmó que la desambiguación de la gramática debe hacerse por **precedencia de operadores** generando nuevas producciones, no solo eliminando recursión por la izquierda. Esta fase extiende el módulo Grammar para declarar precedencia y agrega el módulo que reescribe la gramática.
 
-### Ticket 10 — Migrar módulo Sets
+### Ticket 10 -- Extender módulo Grammar para precedencia
+
+- **Estado**: completado
+- **Depende de**: Tickets 6, 7, 8, 9
+- **Archivos**:
+  - `frontend/syntaxAnalyzer/grammar/models/Associativity.kt` (NUEVO)
+  - `frontend/syntaxAnalyzer/grammar/models/PrecedenceLevel.kt` (NUEVO)
+  - `frontend/syntaxAnalyzer/grammar/models/Grammar.kt` (modificar: agregar `precedenceTable: List<PrecedenceLevel>`)
+  - `frontend/syntaxAnalyzer/grammar/YalpReader.kt` (modificar: parsear `%left`, `%right`)
+  - `frontend/syntaxAnalyzer/grammar/GrammarValidator.kt` (modificar: validar que operadores en precedence table existan como tokens; que ningún operador aparezca en dos niveles)
+  - `frontend/syntaxAnalyzer/grammar/GrammarRewriter.kt` -> renombrar a `LeftRecursionRewriter.kt` (clase y referencias)
+  - `app/src/test/kotlin/org/compiler/YalpReaderTest.kt` (tests del parseo de precedencia)
+- **Descripción**: Crear `enum class Associativity { LEFT, RIGHT }` y `data class PrecedenceLevel(level: Int, operators: Set<Symbol.Terminal>, associativity: Associativity)`. Extender `Grammar` con `precedenceTable`. Extender `YalpReader` para parsear declaraciones `%left X Y`, `%right X` antes de `%%` (el orden de aparición define el nivel: el primer `%left/%right` corresponde a la **menor** precedencia). Extender `GrammarValidator` con las dos validaciones nuevas. Renombrar `GrammarRewriter` a `LeftRecursionRewriter` (file rename + class rename + actualizar imports y tests).
+- **Aceptación**:
+  - Un `.yalp` con `%left OP_PLUS\n%left OP_TIMES` produce un `precedenceTable` con dos niveles, OP_PLUS en nivel 0 y OP_TIMES en nivel 1, ambos LEFT.
+  - Declarar un operador en la precedence table que no está en `%token` produce un error de validación.
+  - `LeftRecursionRewriter` se invoca sin errores donde antes se invocaba `GrammarRewriter`.
+- **Plan**: §3.1, §3.2, §3.3, [plans/2026-05-14-precedence-rewriter-design.md §2](./plans/2026-05-14-precedence-rewriter-design.md)
+
+### Ticket 11 -- `PrecedenceRewriter`
+
+- **Estado**: completado
+- **Depende de**: Ticket 10
+- **Archivos**:
+  - `frontend/syntaxAnalyzer/grammar/PrecedenceRewriter.kt`
+  - `app/src/test/kotlin/org/compiler/PrecedenceRewriterTest.kt`
+- **Descripción**: Implementar `object PrecedenceRewriter { fun rewrite(grammar: Grammar): Grammar }` siguiendo el algoritmo de [plans/2026-05-14-precedence-rewriter-design.md §4](./plans/2026-05-14-precedence-rewriter-design.md). Para cada NT con producciones binarias o unarias sobre operadores con precedencia declarada, generar NTs sintéticos por nivel (`A_lvl0, A_lvl1, ..., A_atom`), emitir las producciones encadenadas según asociatividad, y bajar las producciones no-operador al nivel atómico. NTs sin operadores con precedencia quedan intactos.
+- **Aceptación**:
+  - Gramática `expr -> expr OP_PLUS expr | expr OP_TIMES expr | ID` con `%left OP_PLUS` (nivel 0) y `%left OP_TIMES` (nivel 1) produce la cascada `expr -> expr_lvl0; expr_lvl0 -> expr_lvl0 OP_PLUS expr_lvl1 | expr_lvl1; expr_lvl1 -> expr_lvl1 OP_TIMES expr_atom | expr_atom; expr_atom -> ID`.
+  - NOT unario (`%right OP_NOT`) produce `expr_lvlN -> OP_NOT expr_lvlN | expr_lvl(N+1)`.
+  - ASSIGN derecho (`%right OP_ASSIGN`) produce recursión derecha binaria.
+  - `precedenceTable` vacía retorna la gramática sin tocar.
+  - Paréntesis (`expr -> LPAREN expr RPAREN`) caen al nivel atómico referenciando la cabecera original.
+- **Plan**: [plans/2026-05-14-precedence-rewriter-design.md](./plans/2026-05-14-precedence-rewriter-design.md)
+
+---
+
+## Fase 4 -- Módulo Sets
+
+Cálculo de FIRST y FOLLOW. FOLLOW se mantiene porque LL(1) lo necesita; SLR(1) y LALR(1) **no** lo usan (ver [plans/2026-05-14-slr1-lalr1-terminology.md](./plans/2026-05-14-slr1-lalr1-terminology.md)).
+
+### Ticket 12 -- Módulo Sets
 
 - **Estado**: completado
 - **Depende de**: Ticket 6
@@ -130,190 +174,149 @@ Migración del trabajo independiente de FIRST/FOLLOW con ajustes para alinearse 
   - `frontend/syntaxAnalyzer/sets/models/FollowSets.kt`
   - `frontend/syntaxAnalyzer/sets/FirstSetComputer.kt`
   - `frontend/syntaxAnalyzer/sets/FollowSetComputer.kt`
-- **Descripción**: migrar `FirstResults` → `FirstSets`, `FollowResults` → `FollowSets`, `computeFirst` → `FirstSetComputer.compute`, `computeFollow` → `FollowSetComputer.compute`. Cambiar `Symbol.Terminal("$")` por `Symbol.EndMarker`. Promover `firstOfSequence` a función pública dentro de `FirstSetComputer`.
-- **Aceptación**: los conjuntos FIRST y FOLLOW computados sobre `E → E + T | T; T → T * F | F; F → (E) | id` coinciden con los del Dragon Book.
+- **Descripción**: `FirstSetComputer.compute(grammar)` y `FollowSetComputer.compute(grammar, firstSets)`. `firstOfSequence` es función pública dentro de `FirstSetComputer`.
 - **Plan**: §4.1, §4.2, §4.3, §15.1
 
 ---
 
-## Fase 4 — Módulo LL(1)
+## Fase 5 -- Módulo LL(1)
 
-Construcción de tabla LL(1) y driver predictivo. Migra parte del trabajo independiente.
+Construcción de tabla LL(1) y driver predictivo.
 
-### Ticket 11 — Modelos LL(1)
+### Ticket 13 -- Modelos LL(1)
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 10
+- **Depende de**: Ticket 12
 - **Archivos**:
   - `frontend/syntaxAnalyzer/ll1/models/LL1Cell.kt`
   - `frontend/syntaxAnalyzer/ll1/models/LL1Table.kt`
-- **Descripción**: crear `LL1Conflict(nonTerminal, terminal, productions)` y `LL1Table(cells)` con métodos `isLL1()`, `conflicts()`, `lookup()`.
+- **Descripción**: `LL1Conflict(nonTerminal, terminal, productions)` y `LL1Table(cells)` con métodos `isLL1()`, `conflicts()`, `lookup()`.
 - **Aceptación**: se puede construir manualmente una `LL1Table` y consultar `lookup(A, a)`.
 - **Plan**: §5.1
 
-### Ticket 12 — `LL1TableBuilder`
+### Ticket 14 -- `LL1TableBuilder`
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 11
+- **Depende de**: Tickets 11, 13
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1TableBuilder.kt`
-- **Descripción**: migrar la lógica de `buildSyntaxTable` del trabajo independiente. Implementar Dragon Book §4.4.3 (Algoritmo 4.31).
-- **Aceptación**: la tabla generada para una gramática LL(1) clásica (ej. la de expresiones aritméticas factorizada) coincide con la del libro.
+- **Descripción**: Construir la tabla LL(1) sobre la gramática **ya reescrita por `PrecedenceRewriter` y `LeftRecursionRewriter`**. Implementar Dragon Book §4.4.3 (Algoritmo 4.31).
+- **Aceptación**: la tabla generada para la gramática de expresiones aritméticas factorizada coincide con la del libro.
 - **Plan**: §5.2, §15.8
 
-### Ticket 13 — `LL1Driver`
+### Ticket 15 -- `LL1Driver`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 12, 25, 26
+- **Depende de**: Tickets 14, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1Driver.kt`
-- **Descripción**: implementar `class LL1Driver(grammar, table) { fun parse(tokens): ParseResult }`. Stack inicia con `[EndMarker, startSymbol]`. Aplicar Dragon Book §4.4.4 (Algoritmo 4.34). Construir el `ParseTree` mientras parsea.
+- **Descripción**: `class LL1Driver(grammar, table) { fun parse(tokens): ParseResult }`. Stack inicia con `[EndMarker, startSymbol]`. Aplicar Dragon Book §4.4.4 (Algoritmo 4.34). Construir el `ParseTree` mientras parsea.
 - **Aceptación**: parsear `id + id * id` con la gramática de expresiones LL(1) retorna `Accepted` con el árbol correcto.
 - **Plan**: §5.3, §15.9
 
 ---
 
-## Fase 5 — Módulo LR(0)
+## Fase 6 -- Módulo SLR(1)
 
-Autómata LR(0). Es la base que SLR(1) consume.
+**Nota de terminología**: en este proyecto SLR(1) = LR(1) canónico del Dragon Book §4.7.2, con lookaheads propagados desde el closure vía `FIRST(beta a)`. **No usa FOLLOW**. Ver [plans/2026-05-14-slr1-lalr1-terminology.md](./plans/2026-05-14-slr1-lalr1-terminology.md).
 
-### Ticket 14 — Modelos LR(0)
+### Ticket 16 -- Modelos SLR(1)
 
 - **Estado**: pendiente
 - **Depende de**: Ticket 6
 - **Archivos**:
-  - `frontend/syntaxAnalyzer/lr0/models/LR0Item.kt`
-  - `frontend/syntaxAnalyzer/lr0/models/LR0ItemSet.kt`
-  - `frontend/syntaxAnalyzer/lr0/models/LR0Automaton.kt`
-- **Descripción**: crear `LR0Item(production, dotPosition)` con propiedades `isComplete`, `symbolAfterDot`, `advance()`. Crear `LR0ItemSet(id, items)` y `LR0Automaton(states, transitions, initialState, augmentedGrammar)`.
-- **Aceptación**: se puede construir manualmente un `LR0Item` y avanzar el punto.
-- **Plan**: §6.1
+  - `frontend/syntaxAnalyzer/slr1/models/SLR1Item.kt`
+  - `frontend/syntaxAnalyzer/slr1/models/SLR1ItemSet.kt`
+  - `frontend/syntaxAnalyzer/slr1/models/SLR1Automaton.kt`
+- **Descripción**: `SLR1Item(production, dotPosition, lookahead: Symbol.Terminal | Symbol.EndMarker)` con propiedades `isComplete`, `symbolAfterDot`, `advance()`, `core: Pair<Production, Int>`. `SLR1ItemSet(id, items)` con propiedad `core: Set<Pair<Production, Int>>`. `SLR1Automaton(states, transitions, initialState, augmentedGrammar)`.
+- **Aceptación**: se pueden construir items SLR(1) con distintos lookaheads, comparar sus cores, y avanzar el punto.
+- **Plan**: §8.1 (reutilizado para SLR en este proyecto)
 
-### Ticket 15 — `LR0AutomatonBuilder`
+### Ticket 17 -- `SLR1AutomatonBuilder`
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 14
-- **Archivos**: `frontend/syntaxAnalyzer/lr0/LR0AutomatonBuilder.kt`
-- **Descripción**: implementar `build(grammar)`, `closure(items, grammar)`, `goto(items, symbol, grammar)`. Aumentar la gramática con `S' → S` internamente. Aplicar Dragon Book §4.6.2 (Algoritmo 4.32).
-- **Aceptación**: aplicado a la gramática de expresiones del libro produce los mismos `I0..I11` que aparecen en §4.6.2 figura 4.31.
-- **Plan**: §6.2, §15.2
+- **Depende de**: Tickets 11, 12, 16
+- **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1AutomatonBuilder.kt`
+- **Descripción**: `build(grammar, firstSets)`, `closure(items, grammar, firstSets)`, `goto(items, symbol, grammar, firstSets)`. El closure propaga lookaheads vía `FIRST(beta a)` siguiendo Dragon Book §4.7.2 (Algoritmo 4.53). La gramática se aumenta con `S' -> S` internamente y el item inicial es `[S' -> .S, $]`.
+- **Aceptación**: el autómata generado para la gramática de expresiones del Dragon Book tiene los items con lookaheads correctos según figura 4.41.
+- **Plan**: §8.2, §15.3
 
----
-
-## Fase 6 — Módulo SLR(1)
-
-Tabla SLR(1) y driver shift-reduce. Toma el autómata de Fase 5 más los conjuntos de Fase 3.
-
-### Ticket 16 — `Action` sealed interface
+### Ticket 18 -- `Action` y `SLR1Table`
 
 - **Estado**: pendiente
 - **Depende de**: Ticket 6
-- **Archivos**: `frontend/syntaxAnalyzer/slr1/models/Action.kt`
-- **Descripción**: crear sealed interface con `Shift(nextState)`, `Reduce(production)`, `Accept` (data object). Esta es la representación que comparten SLR y LALR.
-- **Aceptación**: se pueden instanciar las tres variantes y compararlas con `is`.
-- **Plan**: §7.1
-
-### Ticket 17 — Modelos SLR(1)
-
-- **Estado**: pendiente
-- **Depende de**: Ticket 16
-- **Archivos**: `frontend/syntaxAnalyzer/slr1/models/SLR1Table.kt`
-- **Descripción**: crear `SLR1Table(action, goto, numStates)` con métodos `isSLR1()` y `conflicts()`. Crear `SLR1Conflict` y enum `ConflictType { SHIFT_REDUCE, REDUCE_REDUCE }`.
+- **Archivos**:
+  - `frontend/syntaxAnalyzer/slr1/models/Action.kt`
+  - `frontend/syntaxAnalyzer/slr1/models/SLR1Table.kt`
+- **Descripción**: `sealed interface Action` con `Shift(nextState)`, `Reduce(production)`, `Accept` (data object). `SLR1Table(action, goto, numStates)` con métodos `isSLR1()` y `conflicts()`. `SLR1Conflict` y `enum ConflictType { SHIFT_REDUCE, REDUCE_REDUCE }`.
 - **Aceptación**: se puede consultar `action[(0, terminal)]` y obtener una `Action`.
 - **Plan**: §7.1
 
-### Ticket 18 — `SLR1TableBuilder`
+### Ticket 19 -- `SLR1TableBuilder`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 15, 17, 10
+- **Depende de**: Tickets 17, 18
 - **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1TableBuilder.kt`
-- **Descripción**: implementar `build(grammar, automaton, followSets)`. Aplicar Dragon Book §4.6.4 (Algoritmo 4.46). Detectar conflictos shift-reduce y reduce-reduce.
-- **Aceptación**: la tabla generada para la gramática de expresiones del libro coincide con la figura 4.37.
-- **Plan**: §7.2, §15.5
+- **Descripción**: `build(grammar, automaton)`. Recorre estados del autómata; para cada item completo `[A -> alpha., a]` asigna `Reduce(A -> alpha)` en `ACTION[i, a]`. Para cada item con `[A -> alpha.X beta, ...]` y `goto(I_i, X) = I_j`, asigna `Shift(j)` si X es terminal. Detecta conflictos shift-reduce y reduce-reduce. **No usa `FollowSets`** -- los lookaheads vienen del item.
+- **Aceptación**: la tabla generada para la gramática de expresiones canónica del Dragon Book es completa y sin conflictos.
+- **Plan**: §9.3, §15.6 (algoritmo del libro 4.56 aplicado sin merge)
 
-### Ticket 19 — `SLR1Driver`
+### Ticket 20 -- `SLR1Driver`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 18, 25, 26
+- **Depende de**: Tickets 19, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1Driver.kt`
-- **Descripción**: implementar el parser shift-reduce siguiendo Dragon Book §4.5.3 (Algoritmo 4.44). Mantener stack de estados + stack paralelo de subárboles. Construir el `ParseTree` en cada Reduce combinando subárboles popped.
-- **Aceptación**: parsear `id + id * id` con la gramática de expresiones retorna `Accepted` con el árbol correcto. Parsear `id + +` retorna `Rejected` con el error en la posición correcta.
+- **Descripción**: Parser shift-reduce siguiendo Dragon Book §4.5.3 (Algoritmo 4.44). Mantiene stack de estados + stack paralelo de subárboles. Construye el `ParseTree` en cada Reduce combinando subárboles popped.
+- **Aceptación**: parsear `id + id * id` con la gramática de expresiones retorna `Accepted` con el árbol correcto. Parsear `id + +` retorna `Rejected` con error en la posición correcta.
 - **Plan**: §7.3, §15.7
 
 ---
 
-## Fase 7 — Módulo LR(1)
+## Fase 7 -- Módulo LALR(1)
 
-Autómata LR(1) con items con lookahead. Es base para LALR.
+LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** uniendo lookaheads. Comparte casi todo el código de Fase 6.
 
-### Ticket 20 — Modelos LR(1)
-
-- **Estado**: pendiente
-- **Depende de**: Ticket 14
-- **Archivos**:
-  - `frontend/syntaxAnalyzer/lr1/models/LR1Item.kt`
-  - `frontend/syntaxAnalyzer/lr1/models/LR1ItemSet.kt`
-  - `frontend/syntaxAnalyzer/lr1/models/LR1Automaton.kt`
-- **Descripción**: crear `LR1Item(production, dotPosition, lookahead)` con propiedad `core: LR0Item`. Crear `LR1ItemSet(id, items)` con propiedad `core: Set<LR0Item>`. Crear `LR1Automaton(states, transitions, initialState, augmentedGrammar)`.
-- **Aceptación**: se pueden construir items LR(1) con distintos lookaheads y comparar sus cores.
-- **Plan**: §8.1
-
-### Ticket 21 — `LR1AutomatonBuilder`
+### Ticket 21 -- `LALR1AutomatonMerger`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 20, 10
-- **Archivos**: `frontend/syntaxAnalyzer/lr1/LR1AutomatonBuilder.kt`
-- **Descripción**: implementar `build(grammar, firstSets)`, `closure(items, grammar, firstSets)`, `goto(items, symbol, grammar, firstSets)`. La diferencia clave con LR(0) es que `closure` propaga lookaheads usando `FIRST(βa)`. Aplicar Dragon Book §4.7.2 (Algoritmo 4.53).
-- **Aceptación**: el autómata generado para la gramática del libro tiene los items LR(1) esperados con sus lookaheads correctos.
-- **Plan**: §8.2, §15.3
-
----
-
-## Fase 8 — Módulo LALR(1)
-
-Merge de cores del LR(1), tabla y driver.
-
-### Ticket 22 — `LALR1AutomatonBuilder` (merge de cores)
-
-- **Estado**: pendiente
-- **Depende de**: Ticket 21
-- **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1AutomatonBuilder.kt`
-- **Descripción**: implementar `mergeFromLR1(automaton): LR1Automaton`. Identificar todos los pares de estados con el mismo core, fusionarlos uniendo sus lookaheads, y reescribir las transiciones. Aplicar Dragon Book §4.7.4 (Algoritmo 4.59).
-- **Aceptación**: aplicado al autómata LR(1) de la gramática del libro produce un autómata con menos estados (igual cantidad que LR(0)).
+- **Depende de**: Ticket 17
+- **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1AutomatonMerger.kt`
+- **Descripción**: `mergeFromSLR1(automaton: SLR1Automaton): SLR1Automaton`. Identificar todos los pares de estados con el mismo core, fusionarlos uniendo los lookaheads de los items correspondientes, y reescribir las transiciones. Aplicar Dragon Book §4.7.4 (Algoritmo 4.59).
+- **Aceptación**: aplicado al autómata SLR(1) de la gramática del libro produce un autómata con menos estados (mismo número que el autómata LR(0) clásico). Los lookaheads del estado mergeado son la unión de los originales.
 - **Plan**: §9.2, §15.4
 
-### Ticket 23 — Modelo LALR(1)
+### Ticket 22 -- `LALR1Table`
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 16
+- **Depende de**: Ticket 18
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/models/LALR1Table.kt`
-- **Descripción**: crear `LALR1Table(action, goto, numStates)` con métodos `isLALR1()` y `conflicts()`. Crear `LALR1Conflict` (puede reusar `ConflictType` del módulo SLR).
+- **Descripción**: `LALR1Table(action, goto, numStates)` con métodos `isLALR1()` y `conflicts()`. Reusa `Action` y `ConflictType` del módulo SLR(1).
 - **Aceptación**: estructura paralela a `SLR1Table` lista para llenarse.
 - **Plan**: §9.1
 
-### Ticket 24 — `LALR1TableBuilder`
+### Ticket 23 -- `LALR1TableBuilder`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 22, 23
+- **Depende de**: Tickets 21, 22
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1TableBuilder.kt`
-- **Descripción**: implementar `build(grammar, mergedAutomaton)`. Recorrer estados del autómata mergeado: para cada item completo `[A → α•, b]` asignar `Reduce(A → α)` en `ACTION[i, b]`. La diferencia clave con SLR es que los lookaheads vienen del item, no de FOLLOW. Aplicar Dragon Book §4.7.4 (Algoritmo 4.56).
-- **Aceptación**: la tabla generada resuelve conflictos en gramáticas donde SLR fallaría.
+- **Descripción**: `build(grammar, mergedAutomaton)`. Idéntico estructuralmente a `SLR1TableBuilder` pero sobre el autómata mergeado. Los lookaheads de los items mergeados ya contienen la unión, así que el algoritmo es el mismo.
+- **Aceptación**: la tabla generada resuelve conflictos en gramáticas donde SLR fallaría debido a la separación de cores.
 - **Plan**: §9.3, §15.6
 
-### Ticket 25 — `LALR1Driver`
+### Ticket 24 -- `LALR1Driver`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 24, 26, 27
+- **Depende de**: Tickets 23, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1Driver.kt`
-- **Descripción**: implementar el parser shift-reduce, idéntico estructuralmente a `SLR1Driver` pero recibiendo `LALR1Table`. Construir el `ParseTree` igual que en SLR.
+- **Descripción**: Parser shift-reduce idéntico estructuralmente a `SLR1Driver` pero recibe `LALR1Table`. Construye el `ParseTree` igual que en SLR.
 - **Aceptación**: parsear las cadenas de prueba con la tabla LALR retorna los mismos resultados que SLR cuando ambos métodos son aplicables.
 - **Plan**: §9.4, §15.7
 
 ---
 
-## Fase 9 — Módulo Runtime
+## Fase 8 -- Módulo Runtime
 
 Modelos compartidos por los tres drivers. Algunos tickets de esta fase deben terminar antes de los drivers (LL1Driver, SLR1Driver, LALR1Driver).
 
-### Ticket 26 — Modelos del árbol y resultado
+### Ticket 25 -- Modelos del árbol y resultado
 
 - **Estado**: pendiente
 - **Depende de**: Ticket 6
@@ -322,189 +325,168 @@ Modelos compartidos por los tres drivers. Algunos tickets de esta fase deben ter
   - `frontend/syntaxAnalyzer/runtime/models/ParseResult.kt`
   - `frontend/syntaxAnalyzer/runtime/models/ParseStep.kt`
   - `frontend/syntaxAnalyzer/runtime/models/ParseError.kt`
-- **Descripción**: crear `ParseTree` como sealed interface con `Leaf(symbol, token)`, `Internal(symbol, production, children)`, `EpsilonLeaf`. Crear `ParseResult` como sealed interface con `Accepted(trace, parseTree)` y `Rejected(trace, error, partialTree)`. Crear `ParseStep(stack, remainingInput, action)` y `ParseError(message, location, foundToken, expectedTokens)`.
+- **Descripción**: `ParseTree` como sealed interface con `Leaf(symbol, token)`, `Internal(symbol, production, children)`, `EpsilonLeaf`. `ParseResult` como sealed interface con `Accepted(trace, parseTree)` y `Rejected(trace, error, partialTree)`. `ParseStep(stack, remainingInput, action)`. `ParseError(message, location, foundToken, expectedTokens)`.
 - **Aceptación**: se puede construir manualmente un `ParseTree` y serializarlo a string indentado.
 - **Plan**: §10.1
 
-### Ticket 27 — `TokenStream`
+### Ticket 26 -- `TokenStream`
 
 - **Estado**: pendiente
 - **Depende de**: Ticket 2
 - **Archivos**: `frontend/syntaxAnalyzer/runtime/TokenStream.kt`
-- **Descripción**: crear `class TokenStream(tokens, ignored)` con `peek()`, `consume()`, `hasNext()`, `position()`. Filtrar tokens cuya categoría está en `ignored` al hacer peek/consume.
+- **Descripción**: `class TokenStream(tokens, ignored)` con `peek()`, `consume()`, `hasNext()`, `position()`. Filtra tokens cuya categoría está en `ignored` al hacer peek/consume.
 - **Aceptación**: dado `[KEYWORD, WS, ID, WS, OPERATOR]` con `ignored = {WS}`, `peek` y `consume` saltan los whitespace transparentemente.
 - **Plan**: §10.2
 
-### Ticket 28 — `Pipeline` orquestador
+### Ticket 27 -- `Pipeline` orquestador
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 5, 7, 8, 10, 12, 15, 18, 21, 22, 24, 13, 19, 25, 26, 27
+- **Depende de**: Tickets 5, 7, 8, 10, 11, 12, 14, 17, 19, 21, 23, 15, 20, 24, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/runtime/Pipeline.kt`
-- **Descripción**: crear `object Pipeline { fun runFull(yalexContent, yalpContent, inputContent, method): PipelineResult }`. Crear enum `ParserMethod { LL1, SLR1, LALR1 }` y data class `PipelineResult` con todos los artefactos (tokens, grammar, sets, autómatas, tres tablas, parseResult).
-- **Aceptación**: invocar `Pipeline.runFull` con archivos de prueba retorna un `PipelineResult` con todos los campos populados.
-- **Plan**: §10.3
+- **Descripción**: `object Pipeline { fun runFull(yalexContent, yalpContent, inputContent, method): PipelineResult }`. `enum ParserMethod { LL1, SLR1, LALR1 }`. `data class PipelineResult` con todos los artefactos (tokens, grammar original, grammar tras precedence, grammar tras left recursion (solo si LL1), firstSets, followSets, slr1Automaton, lalr1Automaton, ll1Table, slr1Table, lalr1Table, parseResult). Aplica `LeftRecursionRewriter` solo si el método es `LL1`; para SLR/LALR pasa la salida de `PrecedenceRewriter` directamente.
+- **Aceptación**: invocar `Pipeline.runFull` con archivos de prueba retorna un `PipelineResult` con todos los campos poblados.
+- **Plan**: §10.3, [plans/2026-05-14-precedence-rewriter-design.md §10](./plans/2026-05-14-precedence-rewriter-design.md)
 
 ---
 
-## Fase 10 — Módulo Visualization
+## Fase 9 -- Módulo Visualization
 
-Utilidades de presentación. Se pueden hacer en paralelo.
-
-### Ticket 29 — `DotExporter`
+### Ticket 28 -- `DotExporter`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 14, 20
+- **Depende de**: Ticket 16
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/DotExporter.kt`
-- **Descripción**: implementar `lr0ToDot(automaton)`, `lr1ToDot(automaton)`, `renderToImage(dot, outputPath)`. Las funciones de DOT generan texto Graphviz; `renderToImage` invoca el comando `dot` vía `ProcessBuilder` y retorna boolean.
+- **Descripción**: `slr1ToDot(automaton)`, `lalr1ToDot(automaton)`, `renderToImage(dot, outputPath)`. Las funciones de DOT generan texto Graphviz; `renderToImage` invoca el comando `dot` vía `ProcessBuilder` y retorna boolean.
 - **Aceptación**: el archivo PNG generado se abre y muestra el autómata correctamente. Si Graphviz no está instalado, retorna `false` sin lanzar excepción.
 - **Plan**: §11.1
 
-### Ticket 30 — `ParseTreeExporter`
+### Ticket 29 -- `ParseTreeExporter`
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 26
+- **Depende de**: Ticket 25
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/ParseTreeExporter.kt`
-- **Descripción**: implementar `toDot(tree)` y `toIndentedText(tree)`. La versión DOT genera un grafo dirigido con orden de izquierda a derecha. La versión texto usa caracteres de árbol ASCII (`├─`, `└─`).
+- **Descripción**: `toDot(tree)` y `toIndentedText(tree)`. La versión DOT genera un grafo dirigido con orden de izquierda a derecha. La versión texto usa caracteres ASCII de árbol (`+-`, `|-`).
 - **Aceptación**: dado un `ParseTree` para `id + id`, la versión texto se imprime correctamente y la versión DOT se renderiza a PNG.
 - **Plan**: §11.2
 
-### Ticket 31 — `TableFormatter`
+### Ticket 30 -- `TableFormatter`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 11, 17, 23, 10
+- **Depende de**: Tickets 12, 13, 18, 22
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/TableFormatter.kt`
-- **Descripción**: implementar `formatLL1Table`, `formatSLR1Action`, `formatSLR1Goto`, `formatLALR1Action`, `formatLALR1Goto`, `formatFirstSets`, `formatFollowSets`. Cada una retorna string multilinea alineada en columnas. Acciones SLR/LALR se imprimen como `s5`, `r3`, `acc`.
+- **Descripción**: `formatLL1Table`, `formatSLR1Action`, `formatSLR1Goto`, `formatLALR1Action`, `formatLALR1Goto`, `formatFirstSets`, `formatFollowSets`. Cada una retorna string multilinea alineada en columnas. Acciones se imprimen como `s5`, `r3`, `acc`.
 - **Aceptación**: las strings se ven alineadas en un componente monoespaciado.
 - **Plan**: §11.3
 
 ---
 
-## Fase 11 — Recursos de prueba
+## Fase 10 -- Recursos de prueba
 
-### Ticket 32 — Archivos de prueba
+### Ticket 31 -- Archivos de prueba
 
 - **Estado**: pendiente
-- **Depende de**: ninguno (puede arrancar en cualquier momento)
+- **Depende de**: Ticket 10 (necesita la sintaxis `%left`/`%right`/`%nonassoc`)
 - **Archivos**:
-  - `app/src/main/resources/parser_test.yal` (lexer dedicado para los tests del parser)
-  - `app/src/main/resources/parser.yalp` (gramática de prueba)
-  - `app/src/main/resources/cadenas.txt` (cadenas a analizar)
-- **Descripción**: crear los tres archivos según la especificación de la sección 14 del plan. La gramática debe cubrir clases, funciones, recursión y listas. Las cadenas deben incluir casos válidos y al menos uno inválido.
-- **Aceptación**: los tres archivos existen y son leíbles. La gramática parsea con `YalpReader` sin errores.
+  - `app/src/main/resources/parser_test.yal` (lexer dedicado para los tests del parser, categorías por operador: `OP_PLUS`, `OP_MINUS`, `OP_TIMES`, `OP_DIV`, `OP_MOD`, `OP_LT`, `OP_GT`, `OP_LE`, `OP_GE`, `OP_EQ`, `OP_NEQ`, `OP_AND`, `OP_OR`, `OP_NOT`, `OP_ASSIGN`)
+  - `app/src/main/resources/parser.yalp` (gramática de prueba con declaraciones de precedencia)
+  - `app/src/main/resources/cadenas.txt` (cadenas a analizar, casos válidos e inválidos)
+- **Descripción**: Tabla de precedencia confirmada (de menor a mayor):
+  - `%left OP_OR`
+  - `%left OP_AND`
+  - `%left OP_EQ OP_NEQ`
+  - `%left OP_LT OP_GT OP_LE OP_GE`
+  - `%left OP_PLUS OP_MINUS`
+  - `%left OP_TIMES OP_DIV OP_MOD`
+  - `%right OP_NOT` (unario prefijo)
+  - `%right OP_ASSIGN`
+
+  Convención AND/OR: estilo C/Java. `&&` mayor precedencia que `||`. NOT es unario prefijo asociativo a la derecha. ASSIGN asociativo a la derecha. La gramática debe cubrir clases, funciones, recursión y listas además de expresiones.
+- **Aceptación**: los tres archivos existen y son leíbles. La gramática parsea con `YalpReader` sin errores. La tabla de precedencia resultante tiene 8 niveles.
 - **Plan**: §14.1, §14.3, §14.4
 
 ---
 
-## Fase 12 — CLI
+## Fase 11 -- GUI (Compose Desktop)
 
-### Ticket 33 — `YaparApp` punto de entrada CLI
+La GUI es la **única interfaz** al usuario final. No hay CLI.
 
-- **Estado**: pendiente
-- **Depende de**: Ticket 28
-- **Archivos**: `YaparApp.kt`
-- **Descripción**: implementar `fun main(args)` que procese argumentos `parser.yalp -l lexer.yal -i cadenas.txt -o theparser -m <método>`. Invocar `Pipeline.runFull` con los contenidos leídos y reportar resultados a stdout.
-- **Aceptación**: ejecutar el CLI con los archivos de prueba produce el reporte esperado en consola.
-- **Plan**: §13.1
-
-### Ticket 34 — `TheParserExporter`
+### Ticket 32 -- Setup de Compose Desktop
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 31, 33
-- **Archivos**: `frontend/syntaxAnalyzer/visualization/TheParserExporter.kt`
-- **Descripción**: implementar `export(pipelineResult, outputPath)`. Escribir un archivo de texto plano legible con FIRST/FOLLOW, las tres tablas, y los autómatas.
-- **Aceptación**: el archivo generado es legible y contiene toda la información del análisis.
-- **Plan**: §13.2
-
-### Ticket 35 — Tareas de Gradle
-
-- **Estado**: pendiente
-- **Depende de**: Tickets 33, 36 (opcional, ver Fase 13)
+- **Depende de**: ninguno
 - **Archivos**: `app/build.gradle.kts`
-- **Descripción**: registrar tasks `runYapar` y `runGui` con `JavaExec`, apuntando a los `mainClass` correspondientes. Mantener intactas las tasks de `PreprocessorApp` y `LexerApp`.
-- **Aceptación**: `./gradlew runYapar` y `./gradlew runGui` ejecutan correctamente.
-- **Plan**: §13.3
+- **Descripción**: agregar el plugin `org.jetbrains.compose` y declarar `compose.desktop.currentOs`, `compose.material`, `compose.foundation`. Registrar la task `runGui` con `JavaExec`.
+- **Aceptación**: un Hello World mínimo en Compose Desktop compila y `./gradlew runGui` lo ejecuta.
+- **Plan**: §12.1, §13.3
 
----
-
-## Fase 13 — GUI (Compose Desktop)
-
-### Ticket 36 — Setup de Compose Desktop
+### Ticket 33 -- `AppState`
 
 - **Estado**: pendiente
-- **Depende de**: ninguno (puede arrancar en cualquier momento)
-- **Archivos**: `app/build.gradle.kts`
-- **Descripción**: agregar el plugin `org.jetbrains.compose` al `build.gradle.kts` y declarar las dependencias necesarias (`compose.desktop.currentOs`, `compose.material`, `compose.foundation`).
-- **Aceptación**: un Hello World mínimo en Compose Desktop compila y ejecuta.
-- **Plan**: §12.1
-
-### Ticket 37 — `AppState`
-
-- **Estado**: pendiente
-- **Depende de**: Tickets 28, 36
+- **Depende de**: Tickets 27, 32
 - **Archivos**: `gui/state/AppState.kt`
-- **Descripción**: crear `class AppState` con todos los campos `mutableStateOf`. Implementar `onPlay()` que invoca `Pipeline.runFull` y guarda el resultado. Implementar `changeMethod(newMethod)` que solo re-ejecuta el driver del nuevo método sobre los tokens ya construidos.
+- **Descripción**: `class AppState` con todos los campos `mutableStateOf`. `onPlay()` invoca `Pipeline.runFull` y guarda el resultado. `changeMethod(newMethod)` solo re-ejecuta el driver del nuevo método sobre los tokens ya construidos.
 - **Aceptación**: se puede instanciar `AppState`, llamar `onPlay()`, y el campo `pipelineResult` queda populado.
 - **Plan**: §12.2
 
-### Ticket 38 — Componentes básicos de GUI
+### Ticket 34 -- Componentes básicos de GUI
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 36
+- **Depende de**: Ticket 32
 - **Archivos**:
   - `gui/components/CodeEditor.kt`
   - `gui/components/MethodDropdown.kt`
   - `gui/components/PlayButton.kt`
-- **Descripción**: implementar los tres composables. `CodeEditor` envuelve un `BasicTextField` con fuente monoespaciada y números de línea. `MethodDropdown` es un dropdown con las tres opciones de `ParserMethod`. `PlayButton` es un botón con icono que se deshabilita cuando `isRunning`.
+- **Descripción**: `CodeEditor` envuelve `BasicTextField` con fuente monoespaciada y números de línea. `MethodDropdown` muestra las tres opciones de `ParserMethod`. `PlayButton` con icono que se deshabilita cuando `isRunning`.
 - **Aceptación**: cada componente se puede previsualizar de forma aislada y reacciona a interacciones.
 - **Plan**: §12.5
 
-### Ticket 39 — Componentes de resultados
+### Ticket 35 -- Componentes de resultados
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 36, 26, 30
+- **Depende de**: Tickets 25, 29, 32
 - **Archivos**:
   - `gui/components/TokenList.kt`
   - `gui/components/ParseTreeView.kt`
   - `gui/components/ErrorList.kt`
-- **Descripción**: implementar los tres composables. `TokenList` muestra una tabla de tokens con categoría, lexema, posición. `ParseTreeView` muestra la imagen del árbol o el texto indentado. `ErrorList` muestra errores con icono, ubicación, y mensaje.
+- **Descripción**: `TokenList` muestra tabla de tokens con categoría, lexema, posición. `ParseTreeView` muestra la imagen del árbol o el texto indentado. `ErrorList` muestra errores con icono, ubicación y mensaje.
 - **Aceptación**: cada componente renderiza correctamente datos de prueba.
 - **Plan**: §12.5
 
-### Ticket 40 — `WorkspaceScreen`
+### Ticket 36 -- `WorkspaceScreen`
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 37, 38, 39
+- **Depende de**: Tickets 33, 34, 35
 - **Archivos**: `gui/screens/WorkspaceScreen.kt`
 - **Descripción**: layout principal con toolbar superior (dropdown + play), centro con tabs entre los tres editores, y panel derecho con sub-pestañas Tokens / Parse Tree / Errores.
 - **Aceptación**: el usuario puede editar la cadena, escoger método, presionar Play, y ver los tres paneles de resultados poblarse.
 - **Plan**: §12.3
 
-### Ticket 41 — Pantallas secundarias
+### Ticket 37 -- Pantallas secundarias
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 29, 31, 37
+- **Depende de**: Tickets 28, 30, 33
 - **Archivos**:
   - `gui/screens/AutomatonScreen.kt`
   - `gui/screens/TablesScreen.kt`
-- **Descripción**: `AutomatonScreen` muestra la imagen del LR(0) o LR(1) con un toggle entre ambos. `TablesScreen` tiene cuatro sub-pestañas (FIRST/FOLLOW, LL(1), SLR(1), LALR(1)) con el texto formateado por `TableFormatter`.
+- **Descripción**: `AutomatonScreen` muestra el autómata con un toggle "SLR(1) sin merge / LALR(1) con merge". `TablesScreen` tiene cuatro sub-pestañas (FIRST/FOLLOW, LL(1), SLR(1), LALR(1)) con el texto formateado por `TableFormatter`.
 - **Aceptación**: las pantallas se abren desde el menú View y muestran contenido cuando hay un `pipelineResult`.
 - **Plan**: §12.4
 
-### Ticket 42 — Menús File y View
+### Ticket 38 -- Menús File y View
 
 - **Estado**: pendiente
-- **Depende de**: Ticket 37
+- **Depende de**: Ticket 33
 - **Archivos**:
   - `gui/components/FileMenu.kt`
   - `gui/components/ViewMenu.kt`
-- **Descripción**: `FileMenu` con Open .yalex / Open .yalp / Open Input / Save All / Save As. `ViewMenu` con toggles para autómata LR(0), LR(1), tablas, y volver al workspace.
+- **Descripción**: `FileMenu` con Open .yalex / Open .yalp / Open Input / Save All / Save As. `ViewMenu` con toggles para autómata (SLR/LALR), tablas, y volver al workspace.
 - **Aceptación**: los menús abren diálogos de archivo y actualizan el `AppState` correctamente.
 - **Plan**: §12.5
 
-### Ticket 43 — Punto de entrada GUI
+### Ticket 39 -- Punto de entrada GUI
 
 - **Estado**: pendiente
-- **Depende de**: Tickets 40, 41, 42
+- **Depende de**: Tickets 36, 37, 38
 - **Archivos**:
   - `gui/App.kt`
   - `GuiApp.kt`
@@ -514,15 +496,15 @@ Utilidades de presentación. Se pueden hacer en paralelo.
 
 ---
 
-## Fase 14 — Integración y verificación
+## Fase 12 -- Integración y verificación
 
-### Ticket 44 — Verificación end-to-end
+### Ticket 40 -- Verificación end-to-end
 
 - **Estado**: pendiente
 - **Depende de**: todos los anteriores
 - **Archivos**: ninguno (solo verificación manual)
-- **Descripción**: verificar que el flujo completo funcione con los tres métodos sobre las cadenas de prueba. Verificar que: (1) los tokens se identifican correctamente, (2) el árbol sintáctico se genera y visualiza, (3) los errores se reportan con línea y columna, (4) el dropdown permite cambiar de método sin re-correr todo, (5) las pantallas secundarias muestran autómatas y tablas.
-- **Aceptación**: cada uno de los cinco puntos verificable por inspección visual en la GUI.
+- **Descripción**: verificar que el flujo completo funcione con los tres métodos sobre las cadenas de prueba. Verificar que: (1) los tokens se identifican correctamente, (2) la gramática se reescribe por precedencia y se ve sin ambigüedad, (3) el árbol sintáctico se genera y visualiza, (4) los errores se reportan con línea y columna, (5) el dropdown permite cambiar de método sin re-correr todo, (6) las pantallas secundarias muestran autómatas (SLR sin merge / LALR con merge) y tablas.
+- **Aceptación**: cada uno de los seis puntos verificable por inspección visual en la GUI.
 
 ---
 
@@ -530,26 +512,27 @@ Utilidades de presentación. Se pueden hacer en paralelo.
 
 | Fase | Cantidad | Tickets |
 |---|---|---|
-| 1 — Refactor proyecto actual | 5 | 1–5 |
-| 2 — Módulo Grammar | 4 | 6–9 |
-| 3 — Módulo Sets | 1 | 10 |
-| 4 — Módulo LL(1) | 3 | 11–13 |
-| 5 — Módulo LR(0) | 2 | 14–15 |
-| 6 — Módulo SLR(1) | 4 | 16–19 |
-| 7 — Módulo LR(1) | 2 | 20–21 |
-| 8 — Módulo LALR(1) | 4 | 22–25 |
-| 9 — Módulo Runtime | 3 | 26–28 |
-| 10 — Módulo Visualization | 3 | 29–31 |
-| 11 — Recursos de prueba | 1 | 32 |
-| 12 — CLI | 3 | 33–35 |
-| 13 — GUI | 8 | 36–43 |
-| 14 — Integración | 1 | 44 |
-| **Total** | **44** | |
+| 1 -- Refactor proyecto actual | 5 | 1-5 |
+| 2 -- Módulo Grammar (base) | 4 | 6-9 |
+| 3 -- Soporte para precedencia | 2 | 10-11 |
+| 4 -- Módulo Sets | 1 | 12 |
+| 5 -- Módulo LL(1) | 3 | 13-15 |
+| 6 -- Módulo SLR(1) | 5 | 16-20 |
+| 7 -- Módulo LALR(1) | 4 | 21-24 |
+| 8 -- Módulo Runtime | 3 | 25-27 |
+| 9 -- Módulo Visualization | 3 | 28-30 |
+| 10 -- Recursos de prueba | 1 | 31 |
+| 11 -- GUI | 8 | 32-39 |
+| 12 -- Integración | 1 | 40 |
+| **Total** | **40** | |
 
 ## Sugerencia de paralelización inicial
 
-Mientras una persona arranca **Fase 1** (refactor del Token), otra puede arrancar **Fase 2 Tickets 6, 9** (modelos Grammar, GrammarRewriter) y otra **Ticket 32** (recursos de prueba). Eso desbloquea el resto de fases lo más rápido posible.
+Con Fase 1 y Fase 2 ya completas y Ticket 12 (Sets) listo, los próximos frentes paralelos son:
 
-Una vez Fase 1 termina, Fase 4 (LL1) y Fase 5 (LR0) son completamente independientes, así que se pueden asignar a personas distintas. Lo mismo Fase 7 (LR1) puede arrancar en paralelo con Fase 6 (SLR1) en cuanto Fase 5 esté lista.
+- **Ticket 10** (Extender Grammar para precedencia) -- desbloquea las demás fases que dependen de la gramática reescrita.
+- **Ticket 25** (Modelos Runtime) y **Ticket 26** (TokenStream) -- no dependen de la precedencia, se pueden arrancar en paralelo.
+- **Ticket 32** (Setup Compose) y **Ticket 34** (Componentes básicos GUI) -- arrancables en paralelo, no dependen de la precedencia.
+- **Ticket 31** (Recursos de prueba) -- arrancable en cuanto Ticket 10 esté listo (necesita la sintaxis nueva del `.yalp`).
 
-La GUI (Fase 13) puede arrancar tan temprano como Ticket 36 (setup de Compose), y sus componentes (Tickets 38, 39) se pueden trabajar mientras los módulos del parser todavía no están terminados — solo hace falta tener los modelos del Runtime (Ticket 26) para empezar a renderizar resultados de prueba.
+Una vez Ticket 11 (PrecedenceRewriter) cierra, las Fases 5 (LL1), 6 (SLR1), 7 (LALR1) son completamente independientes y paralelizables.
