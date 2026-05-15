@@ -220,13 +220,13 @@ Construcción de tabla LL(1) y driver predictivo.
 
 ### Ticket 16 -- Modelos SLR(1)
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**:
   - `frontend/syntaxAnalyzer/slr1/models/SLR1Item.kt`
-  - `frontend/syntaxAnalyzer/slr1/models/SLR1ItemSet.kt`
-  - `frontend/syntaxAnalyzer/slr1/models/SLR1Automaton.kt`
-- **Descripción**: `SLR1Item(production, dotPosition, lookahead: Symbol.Terminal | Symbol.EndMarker)` con propiedades `isComplete`, `symbolAfterDot`, `advance()`, `core: Pair<Production, Int>`. `SLR1ItemSet(id, items)` con propiedad `core: Set<Pair<Production, Int>>`. `SLR1Automaton(states, transitions, initialState, augmentedGrammar)`.
+  - `frontend/syntaxAnalyzer/slr1/models/SLR1State.kt`
+  - `frontend/syntaxAnalyzer/slr1/models/SLR1Automata.kt`
+- **Descripción**: `SLR1Item(production, dotPosition, lookaheads: Set<Symbol>)` con propiedades `isComplete`, `symbolAfterDot`, `advance()`, `core: Pair<Production, Int>`. Representación compacta: los lookaheads se agrupan por core. `SLR1State(id, items)` con propiedad `core: Set<Pair<Production, Int>>`. `SLR1Automata(states, transitions, initialState, augmentedGrammar)`.
 - **Aceptación**: se pueden construir items SLR(1) con distintos lookaheads, comparar sus cores, y avanzar el punto.
 - **Plan**: §8.1 (reutilizado para SLR en este proyecto)
 
