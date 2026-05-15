@@ -123,7 +123,7 @@ Migración del trabajo independiente de FIRST/FOLLOW con ajustes para alinearse 
 
 ### Ticket 10 — Migrar módulo Sets
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**:
   - `frontend/syntaxAnalyzer/sets/models/FirstSets.kt`
