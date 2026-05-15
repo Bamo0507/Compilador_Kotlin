@@ -99,7 +99,7 @@ Modelos de la gramática y lectura del archivo `.yalp`. Se puede arrancar en cua
 
 ### Ticket 8 — `GrammarValidator`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 7
 - **Archivos**: `frontend/syntaxAnalyzer/grammar/GrammarValidator.kt`
 - **Descripción**: implementar `validate(grammar, lexerCategories): List<ValidationError>`. Validar que cada `%token` exista en las categorías del lexer, que ningún no terminal usado quede sin declarar, y reportar advertencias por no terminales inalcanzables, no usados, o producciones duplicadas.
@@ -108,7 +108,7 @@ Modelos de la gramática y lectura del archivo `.yalp`. Se puede arrancar en cua
 
 ### Ticket 9 — `GrammarRewriter` (eliminación de recursión por la izquierda)
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**: `frontend/syntaxAnalyzer/grammar/GrammarRewriter.kt`
 - **Descripción**: implementar `eliminateLeftRecursion(grammar): Grammar` siguiendo Dragon Book §4.3.3. Generar no terminales auxiliares con sufijo `_prime`.
