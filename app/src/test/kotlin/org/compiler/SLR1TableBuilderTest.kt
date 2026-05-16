@@ -6,7 +6,7 @@ import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
 import org.compiler.frontend.syntaxAnalyzer.sets.FirstSetComputer
 import org.compiler.frontend.syntaxAnalyzer.slr1.SLR1AutomataBuilder
 import org.compiler.frontend.syntaxAnalyzer.slr1.SLR1TableBuilder
-import org.compiler.frontend.syntaxAnalyzer.slr1.models.Action
+import org.compiler.frontend.syntaxAnalyzer.runtime.models.Action
 import org.compiler.frontend.syntaxAnalyzer.slr1.models.ConflictType
 import kotlin.test.Test
 import kotlin.test.assertEquals

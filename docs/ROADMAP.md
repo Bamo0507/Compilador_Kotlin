@@ -209,6 +209,7 @@ Construcción de tabla LL(1) y parser predictivo.
 - **Depende de**: Tickets 14, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1Parser.kt`
 - **Descripción**: `class LL1Parser(grammar, table) { fun parse(tokens): ParseResult }`. Stack inicia con `[EndMarker, startSymbol]`. Aplicar Dragon Book §4.4.4 (Algoritmo 4.34). Construir el `ParseTree` mientras parsea.
+- **Nota para integración con Runtime**: las acciones específicas del parser predictivo (Match, Expand, etc.) deben agregarse como variantes de la sealed interface `Action` en `frontend/syntaxAnalyzer/runtime/models/Action.kt`. Esto permite que `ParseStep.action: Action` siga sirviendo para los tres parsers sin necesidad de tipos paralelos. La sealed interface ya contiene `Shift`, `Reduce` y `Accept` (usados por SLR/LALR); agregar las variantes LL1 al mismo archivo.
 - **Aceptación**: parsear `id + id * id` con la gramática de expresiones LL(1) retorna `Accepted` con el árbol correcto.
 - **Plan**: §5.3, §15.9
 
@@ -244,9 +245,9 @@ Construcción de tabla LL(1) y parser predictivo.
 - **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**:
-  - `frontend/syntaxAnalyzer/slr1/models/Action.kt`
+  - `frontend/syntaxAnalyzer/runtime/models/Action.kt`
   - `frontend/syntaxAnalyzer/slr1/models/SLR1Table.kt`
-- **Descripción**: `sealed interface Action` con `Shift(nextState)`, `Reduce(production)`, `Accept` (data object). `SLR1Table(action, goto, numStates)` con métodos `isSLR1()` y `conflicts()`. `SLR1Conflict` y `enum ConflictType { SHIFT_REDUCE, REDUCE_REDUCE }`.
+- **Descripción**: `sealed interface Action` con `Shift(nextState)`, `Reduce(production)`, `Accept` (data object) vive en `runtime/models/` porque es compartido por SLR(1), LALR(1) y LL(1). `SLR1Table(action, goto, numStates)` con métodos `isSLR1()` y `conflicts()`. `SLR1Conflict` y `enum ConflictType { SHIFT_REDUCE, REDUCE_REDUCE }`.
 - **Aceptación**: se puede consultar `action[(0, terminal)]` y obtener una `Action`.
 - **Plan**: §7.1
 
@@ -261,7 +262,7 @@ Construcción de tabla LL(1) y parser predictivo.
 
 ### Ticket 20 -- `SLR1Parser`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 19, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1Parser.kt`
 - **Descripción**: Parser shift-reduce siguiendo Dragon Book §4.5.3 (Algoritmo 4.44). Mantiene stack de estados + stack paralelo de subárboles. Construye el `ParseTree` en cada Reduce combinando subárboles popped.
@@ -318,20 +319,21 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 
 ### Ticket 25 -- Modelos del árbol y resultado
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**:
+  - `frontend/syntaxAnalyzer/runtime/models/Action.kt` (movido desde `slr1/models/` en este ticket)
   - `frontend/syntaxAnalyzer/runtime/models/ParseTree.kt`
   - `frontend/syntaxAnalyzer/runtime/models/ParseResult.kt`
   - `frontend/syntaxAnalyzer/runtime/models/ParseStep.kt`
   - `frontend/syntaxAnalyzer/runtime/models/ParseError.kt`
-- **Descripción**: `ParseTree` como sealed interface con `Leaf(symbol, token)`, `Internal(symbol, production, children)`, `EpsilonLeaf`. `ParseResult` como sealed interface con `Accepted(trace, parseTree)` y `Rejected(trace, error, partialTree)`. `ParseStep(stack, remainingInput, action)`. `ParseError(message, location, foundToken, expectedTokens)`.
+- **Descripción**: `ParseTree` como sealed interface con `LeafNode(symbol, token)`, `InternalNode(symbol, production, children)`, `EpsilonNode`. `ParseResult` como sealed interface con `Accepted(trace, parseTree)` y `Rejected(trace, error, partialTree)`. `ParseStep(stack, remainingInput, action)`. `ParseError(message, location, foundToken, expectedTokens)`. `Action` se mueve a `runtime/models/` porque es compartida por SLR(1), LALR(1) y LL(1) (ver nota en Ticket 15).
 - **Aceptación**: se puede construir manualmente un `ParseTree` y serializarlo a string indentado.
 - **Plan**: §10.1
 
 ### Ticket 26 -- `TokenStream`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 2
 - **Archivos**: `frontend/syntaxAnalyzer/runtime/TokenStream.kt`
 - **Descripción**: `class TokenStream(tokens, ignored)` con `peek()`, `consume()`, `hasNext()`, `position()`. Filtra tokens cuya categoría está en `ignored` al hacer peek/consume.

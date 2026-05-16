@@ -1,7 +1,7 @@
 package org.compiler.frontend.syntaxAnalyzer.slr1
 
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
-import org.compiler.frontend.syntaxAnalyzer.slr1.models.Action
+import org.compiler.frontend.syntaxAnalyzer.runtime.models.Action
 import org.compiler.frontend.syntaxAnalyzer.slr1.models.ConflictType
 import org.compiler.frontend.syntaxAnalyzer.slr1.models.SLR1Automata
 import org.compiler.frontend.syntaxAnalyzer.slr1.models.SLR1Conflict

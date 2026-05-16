@@ -1,4 +1,4 @@
-package org.compiler.frontend.syntaxAnalyzer.slr1.models
+package org.compiler.frontend.syntaxAnalyzer.runtime.models
 
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Production
 

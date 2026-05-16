@@ -1,6 +1,7 @@
 package org.compiler.frontend.syntaxAnalyzer.slr1.models
 
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
+import org.compiler.frontend.syntaxAnalyzer.runtime.models.Action
 
 data class SLR1Table(
     val action: Map<Pair<Int, Symbol>, Action>,
