@@ -277,7 +277,7 @@ LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** un
 
 ### Ticket 21 -- `LALR1AutomatonMerger`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 17
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1AutomatonMerger.kt`
 - **Descripción**: `mergeFromSLR1(automaton: SLR1Automaton): SLR1Automaton`. Identificar todos los pares de estados con el mismo core, fusionarlos uniendo los lookaheads de los items correspondientes, y reescribir las transiciones. Aplicar Dragon Book §4.7.4 (Algoritmo 4.59).
@@ -286,7 +286,7 @@ LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** un
 
 ### Ticket 22 -- `LALR1Table`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 18
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/models/LALR1Table.kt`
 - **Descripción**: `LALR1Table(action, goto, numStates)` con métodos `isLALR1()` y `conflicts()`. Reusa `Action` y `ConflictType` del módulo SLR(1).
@@ -295,7 +295,7 @@ LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** un
 
 ### Ticket 23 -- `LALR1TableBuilder`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 21, 22
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1TableBuilder.kt`
 - **Descripción**: `build(grammar, mergedAutomaton)`. Idéntico estructuralmente a `SLR1TableBuilder` pero sobre el autómata mergeado. Los lookaheads de los items mergeados ya contienen la unión, así que el algoritmo es el mismo.
@@ -304,7 +304,7 @@ LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** un
 
 ### Ticket 24 -- `LALR1Parser`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 23, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1Parser.kt`
 - **Descripción**: Parser shift-reduce idéntico estructuralmente a `SLR1Parser` pero recibe `LALR1Table`. Construye el `ParseTree` igual que en SLR.
