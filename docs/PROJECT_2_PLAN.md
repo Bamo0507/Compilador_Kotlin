@@ -77,7 +77,7 @@ app/src/main/kotlin/org/compiler/
 │       │   │   ├── LL1Cell.kt             [nuevo]
 │       │   │   └── LL1Table.kt            [migrado, renombrado]
 │       │   ├── LL1TableBuilder.kt         [migrado, renombrado]
-│       │   └── LL1Driver.kt               [nuevo]
+│       │   └── LL1Parser.kt               [nuevo]
 │       │
 │       ├── lr0/
 │       │   ├── models/
@@ -91,7 +91,7 @@ app/src/main/kotlin/org/compiler/
 │       │   │   ├── Action.kt              [nuevo, sealed interface — compartido con LALR]
 │       │   │   └── SLR1Table.kt           [nuevo]
 │       │   ├── SLR1TableBuilder.kt        [nuevo]
-│       │   └── SLR1Driver.kt              [nuevo]
+│       │   └── SLR1Parser.kt              [nuevo]
 │       │
 │       ├── lr1/                           [NUEVO — items con lookahead]
 │       │   ├── models/
@@ -105,7 +105,7 @@ app/src/main/kotlin/org/compiler/
 │       │   │   └── LALR1Table.kt          [nuevo]
 │       │   ├── LALR1AutomatonBuilder.kt   [nuevo — mergea cores del LR(1)]
 │       │   ├── LALR1TableBuilder.kt       [nuevo]
-│       │   └── LALR1Driver.kt             [nuevo]
+│       │   └── LALR1Parser.kt             [nuevo]
 │       │
 │       ├── runtime/
 │       │   ├── models/
@@ -162,12 +162,12 @@ app/src/main/resources/
 
 - **`grammar/`** — todo lo relacionado a la gramática como objeto: leer el `.yalp`, validar que los tokens declarados coincidan con los del lexer, y reescribir cuando se requiera para LL(1).
 - **`sets/`** — cálculo de FIRST y FOLLOW. Es un módulo aislado porque LL(1) y SLR(1) lo consumen (LALR(1) usa lookaheads propios de los items LR(1)).
-- **`ll1/`** — construcción de la tabla LL(1) y el driver predictivo.
+- **`ll1/`** — construcción de la tabla LL(1) y el parser predictivo.
 - **`lr0/`** — el autómata LR(0) (closure, goto, colección canónica). Vive separado de SLR porque el documento del proyecto pide explícitamente "implementar la construcción de un Autómata LR(0) en su totalidad" como objetivo específico, y mantenerlo aparte facilita explicarlo en preguntas teóricas.
-- **`slr1/`** — toma el autómata de `lr0/` y los conjuntos de `sets/` y construye la tabla SLR + el driver shift-reduce.
+- **`slr1/`** — toma el autómata de `lr0/` y los conjuntos de `sets/` y construye la tabla SLR + el parser shift-reduce.
 - **`lr1/`** — items con lookahead (extensión de LR(0) donde cada item carga un terminal de anticipación). Es la base que LALR mergea.
-- **`lalr1/`** — toma el autómata LR(1), mergea estados con el mismo core, y construye la tabla LALR + el driver. Es el método más potente que se implementa.
-- **`runtime/`** — objetos que los tres drivers comparten: el resultado del parsing (incluyendo el árbol sintáctico), la traza paso a paso, la estructura de errores y el adaptador de tokens.
+- **`lalr1/`** — toma el autómata LR(1), mergea estados con el mismo core, y construye la tabla LALR + el parser. Es el método más potente que se implementa.
+- **`runtime/`** — objetos que los tres parsers comparten: el resultado del parsing (incluyendo el árbol sintáctico), la traza paso a paso, la estructura de errores y el adaptador de tokens.
 - **`visualization/`** — utilidades de presentación: exporta autómatas y árboles sintácticos a DOT/Graphviz, y formatea tablas para mostrarse en la GUI.
 
 `models/` dentro de cada módulo sigue la convención que ya existe en `frontend/lexicalAnalyzer/scanner/models/` y `frontend/lexicalAnalyzer/manageGrammar/models/`. Las `data class` y `sealed interface` viven ahí; las funciones y objetos que ejecutan algo viven en la raíz del módulo. Esto hace que al abrir cualquier módulo veas en `models/` qué es lo que se manipula y en la raíz qué se le hace.
@@ -493,7 +493,7 @@ Cambio frente al trabajo independiente: donde antes se usaba `Symbol.Terminal("$
 
 ## 5. Módulo LL(1)
 
-Este módulo construye la tabla LL(1) y ejecuta el parser predictivo no recursivo. La construcción se migra casi tal cual del trabajo independiente; el driver es nuevo.
+Este módulo construye la tabla LL(1) y ejecuta el parser predictivo no recursivo. La construcción se migra casi tal cual del trabajo independiente; el parser es nuevo.
 
 ### 5.1 — Modelos
 
@@ -543,10 +543,10 @@ Si alguna celda termina con más de una producción, hay conflicto y la gramáti
 
 Este código se migra del trabajo independiente con los renombres correspondientes.
 
-### 5.3 — `LL1Driver.kt`
+### 5.3 — `LL1Parser.kt`
 
 ```kotlin
-class LL1Driver(
+class LL1Parser(
     private val grammar: Grammar,
     private val table: LL1Table
 ) {
@@ -704,10 +704,10 @@ Sigue Dragon Book §4.6.4 (Algoritmo 4.46): para cada estado Ii del autómata, r
 
 Cuando dos asignaciones distintas caerían en la misma celda, se registra el conflicto en lugar de sobrescribir. La gramática es SLR(1) si y solo si no hay conflictos.
 
-### 7.3 — `SLR1Driver.kt`
+### 7.3 — `SLR1Parser.kt`
 
 ```kotlin
-class SLR1Driver(
+class SLR1Parser(
     private val grammar: Grammar,
     private val table: SLR1Table
 ) {
@@ -717,7 +717,7 @@ class SLR1Driver(
 
 Implementa el parser shift-reduce del Dragon Book §4.5.3 (Algoritmo 4.44). El stack contiene estados (no símbolos), iniciando con `[0]`. En cada iteración: tomar el estado en la cima, consultar `ACTION[cima, tokenActual]`. Si es `Shift(t)`, empujar t y avanzar al siguiente token. Si es `Reduce(A → α)`, hacer pop de `|α|` estados y luego empujar `GOTO[nuevaCima, A]`. Si es `Accept`, retornar éxito. Si la entrada no existe, retornar error con el token encontrado y los terminales esperados.
 
-Mientras parsea, el driver mantiene un stack paralelo de subárboles. En cada `Shift` empuja una hoja `ParseTree.Leaf` con el token consumido. En cada `Reduce(A → α)` saca `|α|` subárboles, los combina como hijos de un nuevo `ParseTree.Internal(A, producción, hijos)`, y empuja ese nodo. Al aceptar, queda un único subárbol en el stack — ese es el árbol sintáctico que se retorna en `ParseResult.Accepted`.
+Mientras parsea, el parser mantiene un stack paralelo de subárboles. En cada `Shift` empuja una hoja `ParseTree.Leaf` con el token consumido. En cada `Reduce(A → α)` saca `|α|` subárboles, los combina como hijos de un nuevo `ParseTree.Internal(A, producción, hijos)`, y empuja ese nodo. Al aceptar, queda un único subárbol en el stack — ese es el árbol sintáctico que se retorna en `ParseResult.Accepted`.
 
 Igual que en LL(1), cada paso construye un `ParseStep` para la traza.
 
@@ -858,10 +858,10 @@ Llena la tabla recorriendo los estados del autómata mergeado (Dragon Book §4.7
 
 La diferencia clave frente a SLR está en quién decide cuándo reducir: SLR usa `FOLLOW(A)`, LALR usa los lookaheads que vienen propagados en cada item. Por eso LALR es más preciso y resuelve conflictos donde SLR fallaría.
 
-### 9.4 — `LALR1Driver.kt`
+### 9.4 — `LALR1Parser.kt`
 
 ```kotlin
-class LALR1Driver(
+class LALR1Parser(
     private val grammar: Grammar,
     private val table: LALR1Table
 ) {
@@ -869,7 +869,7 @@ class LALR1Driver(
 }
 ```
 
-El algoritmo es **idéntico al de SLR(1)**: un parser shift-reduce manejado por la tabla `ACTION + GOTO`. Lo único que cambia es la tabla que se le pasa. Por la simetría podría reutilizar internamente el código del `SLR1Driver`, pero por legibilidad y para que cada integrante pueda explicar "su" driver de cabo a rabo se mantiene como clase separada con la implementación duplicada (son ~50 líneas, no es costo significativo).
+El algoritmo es **idéntico al de SLR(1)**: un parser shift-reduce manejado por la tabla `ACTION + GOTO`. Lo único que cambia es la tabla que se le pasa. Por la simetría podría reutilizar internamente el código del `SLR1Parser`, pero por legibilidad y para que cada integrante pueda explicar "su" parser de cabo a rabo se mantiene como clase separada con la implementación duplicada (son ~50 líneas, no es costo significativo).
 
 Igual que SLR(1), construye el árbol sintáctico empujando hojas en cada `Shift` y combinando subárboles en cada `Reduce`.
 
@@ -877,7 +877,7 @@ Igual que SLR(1), construye el árbol sintáctico empujando hojas en cada `Shift
 
 ## 10. Módulo Runtime
 
-Este módulo agrupa los objetos compartidos por los tres drivers (LL(1), SLR(1), LALR(1)): el resultado del parsing con su árbol sintáctico, la traza paso a paso, los errores, y el adaptador del stream de tokens.
+Este módulo agrupa los objetos compartidos por los tres parsers (LL(1), SLR(1), LALR(1)): el resultado del parsing con su árbol sintáctico, la traza paso a paso, los errores, y el adaptador del stream de tokens.
 
 ### 10.1 — Modelos
 
@@ -908,7 +908,7 @@ sealed interface ParseTree {
 
 Cada `Leaf` carga el token original (con su lexema y posición), lo que permite a la GUI mostrar el texto exacto en el árbol final. Cada `Internal` carga la producción aplicada para que se pueda imprimir como `expr → expr + term`. `EpsilonLeaf` representa una expansión a vacío en LL(1) (una hoja con símbolo `Epsilon`).
 
-Los tres drivers construyen este árbol de forma distinta pero el resultado tiene la misma estructura. Esto permite que el `ParseTreeExporter` no sepa qué método lo generó.
+Los tres parsers construyen este árbol de forma distinta pero el resultado tiene la misma estructura. Esto permite que el `ParseTreeExporter` no sepa qué método lo generó.
 
 #### `ParseResult.kt`
 
@@ -986,7 +986,7 @@ Adaptador entre la salida del lexer y la entrada del parser. Es una clase (no fu
 
 ### 10.3 — `Pipeline.kt`
 
-Orquestador de alto nivel que el IDE consume con una sola llamada. Encadena lexer → grammar → sets → tablas → driver, manteniendo todo en memoria.
+Orquestador de alto nivel que el IDE consume con una sola llamada. Encadena lexer → grammar → sets → tablas → parser, manteniendo todo en memoria.
 
 ```kotlin
 object Pipeline {
@@ -1017,9 +1017,9 @@ data class PipelineResult(
 )
 ```
 
-`runFull` siempre construye **las tres tablas y los dos autómatas**, no solo el del método activo. Razón: cuando el usuario cambia de método en el dropdown del IDE, no hay que re-correr todo el pipeline — basta con re-ejecutar el driver correspondiente sobre la tabla ya construida. Adicionalmente, las pestañas de visualización (autómata LR(0), tablas LL(1)/SLR(1)/LALR(1)) están siempre disponibles independientemente de qué método se eligió para parsear.
+`runFull` siempre construye **las tres tablas y los dos autómatas**, no solo el del método activo. Razón: cuando el usuario cambia de método en el dropdown del IDE, no hay que re-correr todo el pipeline — basta con re-ejecutar el parser correspondiente sobre la tabla ya construida. Adicionalmente, las pestañas de visualización (autómata LR(0), tablas LL(1)/SLR(1)/LALR(1)) están siempre disponibles independientemente de qué método se eligió para parsear.
 
-El driver que se ejecuta sobre los tokens depende del `method` recibido. Eso queda capturado en `parseResult` y `methodUsed`.
+El parser que se ejecuta sobre los tokens depende del `method` recibido. Eso queda capturado en `parseResult` y `methodUsed`.
 
 Vive en `frontend/syntaxAnalyzer/runtime/` porque coordina todos los módulos pero no aporta lógica nueva — solo los enlaza.
 
@@ -1136,10 +1136,10 @@ class AppState {
 
     fun changeMethod(newMethod: ParserMethod) {
         selectedMethod = newMethod
-        // re-ejecutar solo el driver, no todo el pipeline
+        // re-ejecutar solo el parser, no todo el pipeline
         pipelineResult?.let { current ->
             pipelineResult = current.copy(
-                parseResult = runDriverFor(newMethod, current),
+                parseResult = runParserFor(newMethod, current),
                 methodUsed = newMethod
             )
         }
@@ -1149,7 +1149,7 @@ class AppState {
 
 Todos los campos son `mutableStateOf` para que Compose recomponga automáticamente cuando cambien.
 
-`onPlay` corre el pipeline completo. `changeMethod` permite cambiar de método sin re-correr todo: si las tablas ya están construidas, basta con re-ejecutar el driver del nuevo método sobre los mismos tokens.
+`onPlay` corre el pipeline completo. `changeMethod` permite cambiar de método sin re-correr todo: si las tablas ya están construidas, basta con re-ejecutar el parser del nuevo método sobre los mismos tokens.
 
 ### 12.3 — `WorkspaceScreen` — la pantalla principal
 
@@ -1545,7 +1545,7 @@ Idéntica a SLR pero con dos diferencias clave:
 
 Por usar lookaheads que vienen del propio item (más restrictivos que FOLLOW), LALR resuelve conflictos donde SLR fallaría.
 
-### 15.7 — Algoritmo: Driver shift-reduce (SLR/LALR)
+### 15.7 — Algoritmo: Parser shift-reduce (SLR/LALR)
 
 Referencia: Dragon Book §4.5.3, Algoritmo 4.44.
 
@@ -1584,7 +1584,7 @@ Referencia: Dragon Book §4.4.3, Algoritmo 4.31.
 
 Si alguna celda `M[A, a]` recibe más de una producción, hay conflicto y la gramática no es LL(1).
 
-### 15.9 — Algoritmo: Driver predictivo LL(1)
+### 15.9 — Algoritmo: Parser predictivo LL(1)
 
 Referencia: Dragon Book §4.4.4, Algoritmo 4.34.
 

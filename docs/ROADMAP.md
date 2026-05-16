@@ -181,7 +181,7 @@ Cálculo de FIRST y FOLLOW. FOLLOW se mantiene porque LL(1) lo necesita; SLR(1) 
 
 ## Fase 5 -- Módulo LL(1)
 
-Construcción de tabla LL(1) y driver predictivo.
+Construcción de tabla LL(1) y parser predictivo.
 
 ### Ticket 13 -- Modelos LL(1)
 
@@ -203,12 +203,12 @@ Construcción de tabla LL(1) y driver predictivo.
 - **Aceptación**: la tabla generada para la gramática de expresiones aritméticas factorizada coincide con la del libro.
 - **Plan**: §5.2, §15.8
 
-### Ticket 15 -- `LL1Driver`
+### Ticket 15 -- `LL1Parser`
 
 - **Estado**: pendiente
 - **Depende de**: Tickets 14, 25, 26
-- **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1Driver.kt`
-- **Descripción**: `class LL1Driver(grammar, table) { fun parse(tokens): ParseResult }`. Stack inicia con `[EndMarker, startSymbol]`. Aplicar Dragon Book §4.4.4 (Algoritmo 4.34). Construir el `ParseTree` mientras parsea.
+- **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1Parser.kt`
+- **Descripción**: `class LL1Parser(grammar, table) { fun parse(tokens): ParseResult }`. Stack inicia con `[EndMarker, startSymbol]`. Aplicar Dragon Book §4.4.4 (Algoritmo 4.34). Construir el `ParseTree` mientras parsea.
 - **Aceptación**: parsear `id + id * id` con la gramática de expresiones LL(1) retorna `Accepted` con el árbol correcto.
 - **Plan**: §5.3, §15.9
 
@@ -232,7 +232,7 @@ Construcción de tabla LL(1) y driver predictivo.
 
 ### Ticket 17 -- `SLR1AutomatonBuilder`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 11, 12, 16
 - **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1AutomatonBuilder.kt`
 - **Descripción**: `build(grammar, firstSets)`, `closure(items, grammar, firstSets)`, `goto(items, symbol, grammar, firstSets)`. El closure propaga lookaheads vía `FIRST(beta a)` siguiendo Dragon Book §4.7.2 (Algoritmo 4.53). La gramática se aumenta con `S' -> S` internamente y el item inicial es `[S' -> .S, $]`.
@@ -241,7 +241,7 @@ Construcción de tabla LL(1) y driver predictivo.
 
 ### Ticket 18 -- `Action` y `SLR1Table`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 6
 - **Archivos**:
   - `frontend/syntaxAnalyzer/slr1/models/Action.kt`
@@ -252,18 +252,18 @@ Construcción de tabla LL(1) y driver predictivo.
 
 ### Ticket 19 -- `SLR1TableBuilder`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 17, 18
 - **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1TableBuilder.kt`
 - **Descripción**: `build(grammar, automaton)`. Recorre estados del autómata; para cada item completo `[A -> alpha., a]` asigna `Reduce(A -> alpha)` en `ACTION[i, a]`. Para cada item con `[A -> alpha.X beta, ...]` y `goto(I_i, X) = I_j`, asigna `Shift(j)` si X es terminal. Detecta conflictos shift-reduce y reduce-reduce. **No usa `FollowSets`** -- los lookaheads vienen del item.
 - **Aceptación**: la tabla generada para la gramática de expresiones canónica del Dragon Book es completa y sin conflictos.
 - **Plan**: §9.3, §15.6 (algoritmo del libro 4.56 aplicado sin merge)
 
-### Ticket 20 -- `SLR1Driver`
+### Ticket 20 -- `SLR1Parser`
 
 - **Estado**: pendiente
 - **Depende de**: Tickets 19, 25, 26
-- **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1Driver.kt`
+- **Archivos**: `frontend/syntaxAnalyzer/slr1/SLR1Parser.kt`
 - **Descripción**: Parser shift-reduce siguiendo Dragon Book §4.5.3 (Algoritmo 4.44). Mantiene stack de estados + stack paralelo de subárboles. Construye el `ParseTree` en cada Reduce combinando subárboles popped.
 - **Aceptación**: parsear `id + id * id` con la gramática de expresiones retorna `Accepted` con el árbol correcto. Parsear `id + +` retorna `Rejected` con error en la posición correcta.
 - **Plan**: §7.3, §15.7
@@ -301,12 +301,12 @@ LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** un
 - **Aceptación**: la tabla generada resuelve conflictos en gramáticas donde SLR fallaría debido a la separación de cores.
 - **Plan**: §9.3, §15.6
 
-### Ticket 24 -- `LALR1Driver`
+### Ticket 24 -- `LALR1Parser`
 
 - **Estado**: pendiente
 - **Depende de**: Tickets 23, 25, 26
-- **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1Driver.kt`
-- **Descripción**: Parser shift-reduce idéntico estructuralmente a `SLR1Driver` pero recibe `LALR1Table`. Construye el `ParseTree` igual que en SLR.
+- **Archivos**: `frontend/syntaxAnalyzer/lalr1/LALR1Parser.kt`
+- **Descripción**: Parser shift-reduce idéntico estructuralmente a `SLR1Parser` pero recibe `LALR1Table`. Construye el `ParseTree` igual que en SLR.
 - **Aceptación**: parsear las cadenas de prueba con la tabla LALR retorna los mismos resultados que SLR cuando ambos métodos son aplicables.
 - **Plan**: §9.4, §15.7
 
@@ -314,7 +314,7 @@ LALR(1) en este proyecto = SLR(1) con un paso adicional de **merge por core** un
 
 ## Fase 8 -- Módulo Runtime
 
-Modelos compartidos por los tres drivers. Algunos tickets de esta fase deben terminar antes de los drivers (LL1Driver, SLR1Driver, LALR1Driver).
+Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben terminar antes de los parsers (LL1Parser, SLR1Parser, LALR1Parser).
 
 ### Ticket 25 -- Modelos del árbol y resultado
 
@@ -424,7 +424,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 - **Estado**: pendiente
 - **Depende de**: Tickets 27, 32
 - **Archivos**: `gui/state/AppState.kt`
-- **Descripción**: `class AppState` con todos los campos `mutableStateOf`. `onPlay()` invoca `Pipeline.runFull` y guarda el resultado. `changeMethod(newMethod)` solo re-ejecuta el driver del nuevo método sobre los tokens ya construidos.
+- **Descripción**: `class AppState` con todos los campos `mutableStateOf`. `onPlay()` invoca `Pipeline.runFull` y guarda el resultado. `changeMethod(newMethod)` solo re-ejecuta el parser del nuevo método sobre los tokens ya construidos.
 - **Aceptación**: se puede instanciar `AppState`, llamar `onPlay()`, y el campo `pipelineResult` queda populado.
 - **Plan**: §12.2
 
