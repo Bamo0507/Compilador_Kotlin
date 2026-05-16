@@ -1,11 +1,11 @@
 package org.compiler.frontend.lexicalAnalyzer.scanner.models
 
-import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
 import java.util.LinkedList
 
 object TokenEntrys {
-    val tokens: LinkedList<Token> = LinkedList()
+    val entries: LinkedList<TokenEntry> = LinkedList()
 
-    fun addToken(token: Token) = tokens.add(token)
-    fun clear() = tokens.clear()
+    fun addEntry(entry: TokenEntry) = entries.add(entry)
+    fun clear() = entries.clear()
 }

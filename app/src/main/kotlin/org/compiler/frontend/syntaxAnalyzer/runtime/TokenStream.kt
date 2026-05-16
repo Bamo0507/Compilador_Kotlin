@@ -1,25 +1,25 @@
 package org.compiler.frontend.syntaxAnalyzer.runtime
 
-import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
 
 class TokenStream(
-    allTokens: List<Token>,
+    allEntries: List<TokenEntry>,
     ignored: Set<String>
 ) {
-    private val tokens: List<Token> = allTokens.filterNot { it.category in ignored }
+    private val entries: List<TokenEntry> = allEntries.filterNot { it.token.category in ignored }
     private var index = 0
 
-    fun peek(): Token? = tokens.getOrNull(index)
+    fun peek(): TokenEntry? = entries.getOrNull(index)
 
-    fun consume(): Token? {
-        val current = tokens.getOrNull(index)
+    fun consume(): TokenEntry? {
+        val current = entries.getOrNull(index)
         if (current != null) index++
         return current
     }
 
-    fun hasNext(): Boolean = index < tokens.size
+    fun hasNext(): Boolean = index < entries.size
 
     fun position(): Int = index
 
-    fun remaining(): List<Token> = tokens.subList(index, tokens.size)
+    fun remaining(): List<TokenEntry> = entries.subList(index, entries.size)
 }

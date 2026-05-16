@@ -1,6 +1,6 @@
 package org.compiler.frontend.syntaxAnalyzer.lalr1
 
-import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
 import org.compiler.frontend.syntaxAnalyzer.lalr1.models.LALR1Table
 import org.compiler.frontend.syntaxAnalyzer.runtime.models.ParseResult
 import org.compiler.frontend.syntaxAnalyzer.slr1.SLR1Parser
@@ -12,7 +12,7 @@ object LALR1Parser {
     // table changed (built from a merged automaton). We adapt LALR1Table -> SLR1Table and delegate
     // so there is a single source of truth for the parsing algorithm.
     fun parse(
-        tokens: List<Token>,
+        entries: List<TokenEntry>,
         ignoredCategories: Set<String>,
         table: LALR1Table
     ): ParseResult {
@@ -21,6 +21,6 @@ object LALR1Parser {
             goto = table.goto,
             numStates = table.numStates
         )
-        return SLR1Parser.parse(tokens, ignoredCategories, slr1Table)
+        return SLR1Parser.parse(entries, ignoredCategories, slr1Table)
     }
 }

@@ -11,6 +11,7 @@ import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.CategoryAutoma
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.models.MinimizedDFA
 import org.compiler.frontend.lexicalAnalyzer.scanner.models.TokenEntrys
 import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
 import org.compiler.models.LexemeLocation
 import org.compiler.symbolTable.SymbolTable
 import java.nio.file.Files
@@ -312,7 +313,12 @@ fun scan(source: String) {
                 val location = LexemeLocation(line = currentLine, position = currentPosition)
                 val symbolIndex = if (best.first == "KEYWORD") null
                                   else SymbolTable.addOrGet(lexeme, location)
-                TokenEntrys.addToken(Token(category = best.first, lexeme = lexeme, symbolIndex = symbolIndex))
+                TokenEntrys.addEntry(
+                    TokenEntry(
+                        token = Token(category = best.first, lexeme = lexeme, symbolIndex = symbolIndex),
+                        location = location
+                    )
+                )
                 val (newLine, newPosition) = advanceLineAndPosition(currentLine, currentPosition, lexeme)
                 currentLine = newLine
                 currentPosition = newPosition

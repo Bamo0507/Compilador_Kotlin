@@ -16,7 +16,8 @@ class LexerTest {
 
         val result = Lexer.tokenize(yalexContent, sourceContent)
 
-        val rebuilt = result.tokens.joinToString("\n") { token ->
+        val rebuilt = result.entries.joinToString("\n") { entry ->
+            val token = entry.token
             val printedValue = if (token.category == "KEYWORD") token.lexeme
                                else token.symbolIndex.toString()
             "<${token.category}, $printedValue>"

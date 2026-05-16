@@ -1,13 +1,13 @@
 package org.compiler.frontend.syntaxAnalyzer.runtime.models
 
-import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Production
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
 
 sealed interface ParseTree {
     data class LeafNode(
         val symbol: Symbol.Terminal,
-        val token: Token
+        val entry: TokenEntry
     ) : ParseTree
 
     data class InternalNode(

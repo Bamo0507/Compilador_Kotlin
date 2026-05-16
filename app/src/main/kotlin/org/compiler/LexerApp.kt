@@ -22,7 +22,8 @@ fun main() {
     outputDir.mkdirs()
 
     File(outputDir, "tokens.txt").bufferedWriter().use { writer ->
-        TokenEntrys.tokens.forEach { token ->
+        TokenEntrys.entries.forEach { entry ->
+            val token = entry.token
             val printedValue = if (token.category == "KEYWORD") token.lexeme
                                else token.symbolIndex.toString()
             writer.write("<${token.category}, $printedValue>")

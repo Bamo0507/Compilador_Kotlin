@@ -1,6 +1,8 @@
 package org.compiler
 
 import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
+import org.compiler.models.LexemeLocation
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Grammar
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Production
 import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
@@ -52,14 +54,17 @@ class LALR1ParserTest {
         return LALR1TableBuilder.build(merged)
     }
 
-    private fun token(category: String, lexeme: String): Token =
-        Token(category = category, lexeme = lexeme, symbolIndex = null)
+    private fun entry(category: String, lexeme: String, line: Int = 1, position: Int = 1): TokenEntry =
+        TokenEntry(
+            token = Token(category = category, lexeme = lexeme, symbolIndex = null),
+            location = LexemeLocation(line = line, position = position)
+        )
 
     @Test
     fun `LALR1 parses a single id and accepts`() {
         val table = buildLALR1Table()
-        val tokens = listOf(token("id", "x"))
-        val result = LALR1Parser.parse(tokens, emptySet(), table)
+        val entries = listOf(entry("id", "x"))
+        val result = LALR1Parser.parse(entries, emptySet(), table)
 
         assertTrue(result is ParseResult.Accepted)
         val root = result.parseTree as ParseTree.InternalNode
@@ -69,14 +74,14 @@ class LALR1ParserTest {
     @Test
     fun `LALR1 parses id plus id times id with precedence respected`() {
         val table = buildLALR1Table()
-        val tokens = listOf(
-            token("id", "a"),
-            token("+", "+"),
-            token("id", "b"),
-            token("*", "*"),
-            token("id", "c")
+        val entries = listOf(
+            entry("id", "a"),
+            entry("+", "+"),
+            entry("id", "b"),
+            entry("*", "*"),
+            entry("id", "c")
         )
-        val result = LALR1Parser.parse(tokens, emptySet(), table)
+        val result = LALR1Parser.parse(entries, emptySet(), table)
 
         assertTrue(result is ParseResult.Accepted)
         val root = result.parseTree as ParseTree.InternalNode
@@ -86,16 +91,18 @@ class LALR1ParserTest {
     }
 
     @Test
-    fun `LALR1 rejects id plus plus with error pointing at the second plus`() {
+    fun `LALR1 recovers from id plus plus and ends Accepted with one error`() {
         val table = buildLALR1Table()
-        val tokens = listOf(
-            token("id", "a"),
-            token("+", "+"),
-            token("+", "+")
+        val entries = listOf(
+            entry("id", "a"),
+            entry("+", "+"),
+            entry("+", "+")
         )
-        val result = LALR1Parser.parse(tokens, emptySet(), table)
+        val result = LALR1Parser.parse(entries, emptySet(), table)
 
-        assertTrue(result is ParseResult.Rejected)
-        assertEquals("+", result.error.foundToken?.lexeme)
+        // Same recovery behavior as SLR1Parser (LALR1Parser delegates).
+        assertTrue(result is ParseResult.Accepted)
+        assertEquals(1, result.errors.size)
+        assertEquals("+", result.errors.first().foundToken?.lexeme)
     }
 }

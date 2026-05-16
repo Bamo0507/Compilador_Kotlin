@@ -14,11 +14,11 @@ import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.YalexReader
 import org.compiler.frontend.lexicalAnalyzer.manageGrammar.utils.normalizeRegex
 import org.compiler.frontend.lexicalAnalyzer.scanner.models.TokenEntrys
 import org.compiler.frontend.lexicalAnalyzer.scanner.scan
-import org.compiler.frontend.models.Token
+import org.compiler.frontend.models.TokenEntry
 import org.compiler.symbolTable.SymbolTable
 
 data class LexerResult(
-    val tokens: List<Token>,
+    val entries: List<TokenEntry>,
     val errors: List<CompilerError.LexerError>,
     val automata: Map<String, MinimizedDFA>
 )
@@ -49,7 +49,7 @@ object Lexer {
         scan(source)
 
         return LexerResult(
-            tokens = TokenEntrys.tokens.toList(),
+            entries = TokenEntrys.entries.toList(),
             errors = DiagnosticsTable.lexerErrors(),
             automata = CategoryAutomataIndex.getAll().toMap()
         )

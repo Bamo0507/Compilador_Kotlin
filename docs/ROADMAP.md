@@ -188,10 +188,10 @@ Construcción de tabla LL(1) y parser predictivo.
 - **Estado**: pendiente
 - **Depende de**: Ticket 12
 - **Archivos**:
-  - `frontend/syntaxAnalyzer/ll1/models/LL1Cell.kt`
-  - `frontend/syntaxAnalyzer/ll1/models/LL1Table.kt`
-- **Descripción**: `LL1Conflict(nonTerminal, terminal, productions)` y `LL1Table(cells)` con métodos `isLL1()`, `conflicts()`, `lookup()`.
-- **Aceptación**: se puede construir manualmente una `LL1Table` y consultar `lookup(A, a)`.
+  - `frontend/syntaxAnalyzer/ll1/models/LL1Cell.kt` — define `LL1Conflict(nonTerminal: Symbol.NonTerminal, terminal: Symbol, productions: List<Production>)`. Estructura paralela a `SLR1Conflict` de `slr1/models/SLR1Table.kt`. El nombre del archivo es histórico; agrupa los tipos auxiliares de la tabla LL(1).
+  - `frontend/syntaxAnalyzer/ll1/models/LL1Table.kt` — define la data class `LL1Table(cells: Map<Pair<Symbol.NonTerminal, Symbol>, Production>, conflicts: List<LL1Conflict> = emptyList())`. Propiedad `isLL1: Boolean get() = conflicts.isEmpty()` y método `lookup(nonTerminal: Symbol.NonTerminal, lookahead: Symbol): Production? = cells[nonTerminal to lookahead]`.
+- **Descripción**: estructura paralela a `SLR1Table` pero adaptada al modelo predictivo de LL(1). Ver `slr1/models/SLR1Table.kt` como template: misma idea de "map principal" + lista de conflicts separada, con la propiedad `isLL1`/`isSLR1` derivada. La key del map es `Pair<NonTerminal, Symbol>` porque el lookahead puede ser un Terminal o `Symbol.EndMarker`. El valor es la `Production` a aplicar.
+- **Aceptación**: se puede construir manualmente una `LL1Table` con una celda, llamar `lookup(A, a)` y obtener la `Production` o `null`. `isLL1` retorna `true` cuando `conflicts` está vacío, `false` cuando no.
 - **Plan**: §5.1
 
 ### Ticket 14 -- `LL1TableBuilder`
@@ -199,8 +199,15 @@ Construcción de tabla LL(1) y parser predictivo.
 - **Estado**: pendiente
 - **Depende de**: Tickets 11, 13
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1TableBuilder.kt`
-- **Descripción**: Construir la tabla LL(1) sobre la gramática **ya reescrita por `PrecedenceRewriter` y `LeftRecursionRewriter`**. Implementar Dragon Book §4.4.3 (Algoritmo 4.31).
-- **Aceptación**: la tabla generada para la gramática de expresiones aritméticas factorizada coincide con la del libro.
+- **Descripción**: `object LL1TableBuilder` con `fun build(grammar: Grammar, firstSets: FirstSets, followSets: FollowSets): LL1Table`.
+- **Algoritmo** (Dragon Book §4.4.3, Algoritmo 4.31):
+  - Por cada producción `A -> alpha` en la gramática:
+    - Computar `FIRST(alpha)` usando `FirstSetComputer.firstOfSequence(production.body, firstSets)`. **Importante**: usar `firstOfSequence` y no `firstSets.firstOf(...)` porque `alpha` es una secuencia, no un único símbolo.
+    - Para cada terminal `a` en `FIRST(alpha)` (excluyendo `Epsilon`): asignar `production` a `M[A, a]`.
+    - Si `Epsilon` está en `FIRST(alpha)`: para cada `b` en `FOLLOW(A)` (incluyendo `EndMarker` si está): asignar `production` a `M[A, b]`.
+  - Si una celda `M[A, X]` ya tenía otra producción asignada cuando se intenta escribir una nueva: registrar el conflicto en `LL1Conflict` y aplicar la **política de resolución**: gana la producción con menor `id` (misma convención que `SLR1TableBuilder` para reduce-reduce, ver el comentario explícito en ese archivo).
+- **Entrada esperada**: la gramática que llega a `build` ya viene reescrita por `PrecedenceRewriter` (Ticket 11) y `LeftRecursionRewriter` (Ticket 9). El `Pipeline` (Ticket 27) encadena ambos antes de invocar al builder cuando el método elegido es LL(1).
+- **Aceptación**: la tabla generada para la gramática de expresiones LL(1) clásica del Dragon Book (E -> T E', E' -> + T E' | epsilon, T -> F T', T' -> * F T' | epsilon, F -> (E) | id) coincide con la figura 4.17 del libro.
 - **Plan**: §5.2, §15.8
 
 ### Ticket 15 -- `LL1Parser`
@@ -208,9 +215,48 @@ Construcción de tabla LL(1) y parser predictivo.
 - **Estado**: pendiente
 - **Depende de**: Tickets 14, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1Parser.kt`
-- **Descripción**: `class LL1Parser(grammar, table) { fun parse(tokens): ParseResult }`. Stack inicia con `[EndMarker, startSymbol]`. Aplicar Dragon Book §4.4.4 (Algoritmo 4.34). Construir el `ParseTree` mientras parsea.
-- **Nota para integración con Runtime**: las acciones específicas del parser predictivo (Match, Expand, etc.) deben agregarse como variantes de la sealed interface `Action` en `frontend/syntaxAnalyzer/runtime/models/Action.kt`. Esto permite que `ParseStep.action: Action` siga sirviendo para los tres parsers sin necesidad de tipos paralelos. La sealed interface ya contiene `Shift`, `Reduce` y `Accept` (usados por SLR/LALR); agregar las variantes LL1 al mismo archivo.
-- **Aceptación**: parsear `id + id * id` con la gramática de expresiones LL(1) retorna `Accepted` con el árbol correcto.
+- **Descripción**: `object LL1Parser` (mantener `object` para consistencia con `SLR1Parser` y `LALR1Parser`). Firma: `fun parse(entries: List<TokenEntry>, ignoredCategories: Set<String>, table: LL1Table): ParseResult`.
+- **Nota sobre `TokenEntry`**: el parser recibe `List<TokenEntry>` (no `List<Token>`). `TokenEntry` es el wrapper `(token, location)` definido en `frontend/models/TokenEntry.kt`. Al construir `LeafNode` usar el `TokenEntry` completo; al construir `ParseError` extraer `entry.location` y `entry.token`.
+- **Algoritmo** (Dragon Book §4.4.4, Algoritmo 4.34, extendido con recovery del §4.4.5):
+  - Usar `TokenStream(entries, ignoredCategories)` del módulo runtime para iterar el input (saltea categorías ignoradas como WHITESPACE).
+  - Inicializar `symbolStack: MutableList<Symbol> = mutableListOf(Symbol.EndMarker, grammar.startSymbol)`. EndMarker queda en el fondo (`[0]`), startSymbol arriba (`.last()`).
+  - Mantener `errors: MutableList<ParseError> = mutableListOf()` para acumular errores durante el parseo.
+  - En cada iteración:
+    - `top = symbolStack.last()`
+    - `lookahead = stream.peek()?.let { Symbol.Terminal(it.token.category) } ?: Symbol.EndMarker`
+    - **Caso ACCEPT**: si `top == Symbol.EndMarker` y `lookahead == Symbol.EndMarker`: retornar `ParseResult.Accepted(trace, parseTree, errors)`.
+    - **Caso MATCH exitoso**: si `top is Symbol.Terminal` y `top == lookahead`: pop del symbolStack, `stream.consume()`. Registrar `Action.Match(top)` en la traza. Reemplazar el placeholder correspondiente en el árbol con `LeafNode(top, consumedEntry)`.
+    - **Caso MATCH con error**: si `top is Symbol.Terminal` pero `top != lookahead`: agregar `ParseError` a la lista (formato descrito abajo). **Recuperación**: pop el terminal del stack (se asume que fue una inserción accidental del usuario) y continuar — NO se consume el lookahead. Equivale a "ignorar el terminal esperado y seguir con la siguiente regla". Registrar el paso en la traza con un `Action` descriptivo del descarte.
+    - **Caso EXPAND exitoso**: si `top is Symbol.NonTerminal` y `production = table.lookup(top, lookahead) != null`: pop `top`, push los símbolos de `production.body` en **orden inverso** (para que el primer símbolo quede en el tope). Registrar `Action.Expand(production)` en la traza.
+    - **Caso EXPAND con error**: si `top is Symbol.NonTerminal` pero `table.lookup(top, lookahead) == null`: agregar `ParseError` a la lista. **Recuperación con sync set**: descartar tokens del input hasta que el lookahead esté en `FOLLOW(top)` o sea `EndMarker`. Después, pop `top` del symbolStack (se asume `top -> epsilon` para poder seguir). Si en algún punto del descarte se llega a EOF y nada en el stack acepta `EndMarker`, retornar `ParseResult.Rejected(trace, errors, partialTree)`.
+- **Construcción del ParseTree top-down**:
+  - LL(1) construye el árbol de arriba abajo, distinto a SLR/LALR (bottom-up). Estrategia recomendada:
+    - Mantener un mapa `Map<Symbol-instance, InternalNode-mutable-children>` o usar un treeStack paralelo a symbolStack donde cada slot del symbolStack tiene su "espacio reservado" en el árbol.
+    - Al inicio, crear `rootInternalNode = InternalNode(startSymbol, null, mutableListOf())`. (La production será conocida cuando se expanda.)
+    - Al EXPAND `A -> alpha`: el `InternalNode` correspondiente al `A` arriba del stack gana la producción y sus children: una lista de placeholders por cada símbolo de `alpha` (InternalNode vacío si es NT, "pending leaf" si es Terminal, `EpsilonNode` si es Epsilon).
+    - Al MATCH: el "pending leaf" en el árbol se reemplaza por `LeafNode(symbol, consumedToken)`.
+  - El detalle exacto depende de la implementación; lo importante es que al ACCEPT, el árbol entero esté formado y `result.parseTree` sea el `rootInternalNode`.
+- **Extensión de `Action`** (en `runtime/models/Action.kt`): agregar dos variantes nuevas a la sealed interface existente:
+  - `data class Match(val terminal: Symbol.Terminal) : Action`
+  - `data class Expand(val production: Production) : Action`
+  - `Action.Accept` ya existe (reusar tal cual).
+- **`ParseStep`**: para LL(1), el campo `stack: List<Int>` no aplica (no hay estados numerados). Pasar `emptyList()`. El campo `symbols: List<Symbol>` lleva la pila de símbolos. `remainingInput: List<TokenEntry>` lleva los entries no consumidos. `action` se completa con la variante de `Action` correspondiente.
+- **Recuperación de errores (panic mode, Dragon Book §4.4.5)** — **requisito de rúbrica**:
+  - El parser **NO debe terminar al primer error**. Las dos políticas descritas arriba en "MATCH con error" y "EXPAND con error" implementan el recovery; el parser sigue corriendo hasta agotar el input.
+  - **Sync set = `FOLLOW(top)`** para el caso EXPAND. Sale directo del `FollowSetComputer` (Ticket 12). Ejemplo: si la gramática tiene `S -> A B` y estamos en error con `A` arriba del stack, entonces el sync set es `FOLLOW(A) = FIRST(B) - {epsilon}` (más `FOLLOW(S)` si `B` es nullable).
+  - **Garantía de progreso**: cada recovery debe avanzar (pop al menos un símbolo del stack O consumir al menos un token). Si el algoritmo se queda atascado sin progreso, hay un bug.
+  - **Acumulación**: cada error agregado a `errors` debe traer su `location` (de `entry.location`) y `foundToken` (de `entry.token`).
+  - **Retorno final**: si llegamos al ACCEPT con `errors.isEmpty()`, retornar `Accepted(trace, parseTree)`. Si llegamos al ACCEPT con `errors.isNotEmpty()`, retornar `Accepted(trace, parseTree, errors)`. Si nunca llegamos al ACCEPT (recovery se rindió en EOF), retornar `Rejected(trace, errors, partialTree)`.
+- **Mensajes descriptivos**: cada `ParseError.message` debe seguir el formato `"Syntax error at line L, column C: unexpected 'X'; expected one of: A, B, C"` para consistencia con `SLR1Parser`. La línea y columna salen de `entry.location`. La lista de "expected" sale de las columnas de la fila de la tabla LL(1) que tienen producción (los terminales para los cuales `table.lookup(top, terminal) != null`), más `FOLLOW(top)` si `top` es un no terminal (porque puede derivar epsilon en contexto).
+- **Implementación de referencia**: `SLR1Parser.kt` ya tiene panic mode, acumulación de errores, formato de mensaje y construcción de `ParseError`. **Leerlo antes de empezar** — la lógica de recovery LR y LL es estructuralmente distinta pero el manejo de errores (acumular, no abortar, formatear) es idéntico. Reusar el formato de `buildError(...)` adaptado al contexto LL.
+- **Tests**: ubicar en `app/src/test/kotlin/org/compiler/LL1ParserTest.kt`. Seguir el patrón de `SLR1ParserTest`. Mínimo:
+  - Acepta `id + id * id` con árbol correcto.
+  - Acepta `id` solo.
+  - **Recupera de error**: input con un token sobrante (ej. `id + + id`) debe retornar `Accepted` con `errors.size == 1`.
+  - **Rechaza cuando recovery falla**: input vacío debe retornar `Rejected`.
+- **Aceptación**:
+  - Parsear `id + id * id` con la gramática de expresiones LL(1) del Dragon Book retorna `Accepted` con un `ParseTree` cuya raíz tiene la producción `E -> T E'`.
+  - Parsear una cadena con un error recuperable retorna `Accepted` con la lista de errores poblada (al menos uno) y cada error con `location` no nula apuntando al token ofensor.
 - **Plan**: §5.3, §15.9
 
 ---
