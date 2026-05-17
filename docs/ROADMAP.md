@@ -404,8 +404,52 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 - **Estado**: pendiente
 - **Depende de**: Ticket 16
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/DotExporter.kt`
-- **Descripción**: `slr1ToDot(automaton)`, `lalr1ToDot(automaton)`, `renderToImage(dot, outputPath)`. Las funciones de DOT generan texto Graphviz; `renderToImage` invoca el comando `dot` vía `ProcessBuilder` y retorna boolean.
-- **Aceptación**: el archivo PNG generado se abre y muestra el autómata correctamente. Si Graphviz no está instalado, retorna `false` sin lanzar excepción.
+- **Descripción**: `object DotExporter` con tres funciones públicas. Genera texto Graphviz para los autómatas SLR(1) y LALR(1), y renderiza un PNG vía el comando `dot` del sistema.
+- **Signaturas exactas**:
+  ```kotlin
+  fun slr1ToDot(automaton: SLR1Automata): String
+  fun lalr1ToDot(automaton: SLR1Automata): String   // recibe SLR1Automata porque LALR1AutomatonMerger.mergeFromSLR1 retorna SLR1Automata
+  fun renderToImage(dot: String, outputPath: String): Boolean
+  ```
+- **Tipos a los que se refiere** (ver archivos):
+  - `SLR1Automata` en `slr1/models/SLR1Automata.kt` (campos: `states`, `transitions: Map<Pair<Int, Symbol>, Int>`, `initialState`, `augmentedGrammar`).
+  - `SLR1State` en `slr1/models/SLR1State.kt` (campos: `id: Int`, `items: Set<SLR1Item>`).
+  - `SLR1Item` en `slr1/models/SLR1Item.kt` (campos: `production`, `dotPosition`, `lookaheads`).
+- **Formato del output DOT** -- para una gramática mínima `S' -> S`, `S -> a` con 3 estados:
+  ```
+  digraph SLR1 {
+    rankdir=LR;
+    node [shape=box, style=rounded, fontname="Courier"];
+
+    start [shape=none, label=""];
+    start -> S0;
+
+    S0 [label="State 0\nS' -> . S\nS -> . a"];
+    S1 [label="State 1\nS -> a ."];
+    S2 [label="State 2\nS' -> S .", peripheries=2];
+
+    S0 -> S1 [label="a"];
+    S0 -> S2 [label="S"];
+  }
+  ```
+  Reglas:
+  - Un nodo por estado, con label que incluye `State N` en la primera línea y un ítem `A -> α . β` por línea adicional (el `.` indica `dotPosition`).
+  - Estado inicial: arrow desde un nodo invisible `start`.
+  - Estado aceptador (ítem `S' -> S .` completo del símbolo aumentado): añadir `peripheries=2`.
+  - Una arista por transición, etiquetada con el nombre del símbolo (`Terminal.name` o `NonTerminal.name`).
+  - Para `lalr1ToDot`: mismo formato pero título `digraph LALR1`. La diferencia conceptual está en cómo se construyó el autómata (estados ya mergeados), no en la estructura del DOT.
+- **`renderToImage`**: usa `ProcessBuilder("dot", "-Tpng", "-o", outputPath)`, escribe el DOT al stdin del proceso, espera a que termine y retorna `exitValue == 0`. Si `ProcessBuilder` lanza `IOException` (Graphviz no está en PATH), atrapar y retornar `false`. **No lanza excepción nunca**.
+- **Aceptación**:
+  - Para un `SLR1Automata` con N estados y M transiciones: `slr1ToDot` produce un `String` con N apariciones de `^S\d+ \[label=` (un nodo por estado) y M apariciones de `^S\d+ -> S\d+ \[label=` (una arista por transición).
+  - El estado que contiene el ítem aceptador (símbolo aumentado completo) tiene `peripheries=2` en su línea.
+  - `renderToImage(validDot, "/tmp/out.png")` crea el archivo y retorna `true` cuando `dot` está instalado; retorna `false` cuando no lo está, sin lanzar.
+  - `lalr1ToDot` arranca con `digraph LALR1`; `slr1ToDot` arranca con `digraph SLR1`.
+- **Tests**: en `app/src/test/kotlin/org/compiler/DotExporterTest.kt`. Mínimo:
+  - `slr1ToDot includes one node per state and one edge per transition`
+  - `slr1ToDot marks the accepting state with peripheries=2`
+  - `slr1ToDot labels transitions with the symbol name`
+  - `lalr1ToDot uses LALR1 as the graph title`
+  - `renderToImage returns false when dot binary is not available` (se puede simular pasando un path inválido como dot binary, o testear vía mock; lo importante es que no lance)
 - **Plan**: §11.1
 
 ### Ticket 29 -- `ParseTreeExporter`
@@ -413,8 +457,80 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 - **Estado**: pendiente
 - **Depende de**: Ticket 25
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/ParseTreeExporter.kt`
-- **Descripción**: `toDot(tree)` y `toIndentedText(tree)`. La versión DOT genera un grafo dirigido con orden de izquierda a derecha. La versión texto usa caracteres ASCII de árbol (`+-`, `|-`).
-- **Aceptación**: dado un `ParseTree` para `id + id`, la versión texto se imprime correctamente y la versión DOT se renderiza a PNG.
+- **Descripción**: `object ParseTreeExporter` con dos funciones que convierten un `ParseTree` en string: una versión texto indentado para CLI/consola y una versión DOT para renderizar con Graphviz.
+- **Signaturas exactas**:
+  ```kotlin
+  fun toIndentedText(tree: ParseTree): String
+  fun toDot(tree: ParseTree): String
+  ```
+- **Tipos a los que se refiere**:
+  - `ParseTree` en `runtime/models/ParseTree.kt` -- sealed interface con tres variantes:
+    - `LeafNode(symbol: Symbol.Terminal, entry: TokenEntry)`
+    - `InternalNode(symbol: Symbol.NonTerminal, production: Production, children: List<ParseTree>)`
+    - `EpsilonNode` (data object)
+  - El recorrido debe manejar las tres variantes vía `when`.
+- **Formato del output indentado** -- para `id + id` con la gramática canónica del Dragon Book:
+  ```
+  E [E -> T E']
+  +-- T [T -> F T']
+  |   +-- F [F -> id]
+  |   |   +-- id "a"
+  |   +-- T' [T' -> ε]
+  |       +-- ε
+  +-- E' [E' -> + T E']
+      +-- + "+"
+      +-- T [T -> F T']
+      |   +-- F [F -> id]
+      |   |   +-- id "b"
+      |   +-- T' [T' -> ε]
+      |       +-- ε
+      +-- E' [E' -> ε]
+          +-- ε
+  ```
+  Reglas:
+  - `InternalNode` -> linea con nombre del no-terminal seguido de `[head -> body]` mostrando la producción aplicada.
+  - `LeafNode` -> `category "lexeme"` (siempre comillas alrededor del lexeme, incluso si coincide con category).
+  - `EpsilonNode` -> `ε`.
+  - Conectores: `+-- ` antes del nodo, prefijo `|   ` por cada nivel intermedio cuando hay más hermanos abajo, `    ` cuando es el último hermano. La raíz no lleva conector.
+- **Formato del output DOT** -- para el mismo árbol:
+  ```
+  digraph ParseTree {
+    rankdir=TB;
+    ordering=out;
+
+    n0 [label="E", shape=ellipse];
+    n1 [label="T", shape=ellipse];
+    n2 [label="F", shape=ellipse];
+    n3 [label="id\n\"a\"", shape=box];
+    n4 [label="T'", shape=ellipse];
+    n5 [label="ε", shape=plaintext];
+    n6 [label="E'", shape=ellipse];
+    n7 [label="+\n\"+\"", shape=box];
+    ...
+
+    n0 -> n1;
+    n0 -> n6;
+    n1 -> n2;
+    n1 -> n4;
+    ...
+  }
+  ```
+  Reglas:
+  - `rankdir=TB` (raíz arriba, hojas abajo). `ordering=out` para que los hijos salgan en el orden declarado (izquierda a derecha).
+  - `InternalNode` -> `shape=ellipse`, label es el nombre del no-terminal.
+  - `LeafNode` -> `shape=box`, label es `category\n"lexeme"`.
+  - `EpsilonNode` -> `shape=plaintext`, label es `ε`.
+  - IDs únicos vía contador incremental durante el recorrido pre-orden (n0, n1, n2, ...).
+  - Una arista del padre a cada hijo, sin etiqueta.
+- **Aceptación**:
+  - Para un `ParseTree` de `id` solo (`E -> T E', T -> F T', T' -> ε, E' -> ε, F -> id`), `toIndentedText` produce un string que se imprime con la estructura exacta del ejemplo de arriba (verificable con un snapshot de string).
+  - `toDot` de un árbol con N nodos produce un string con N apariciones de `^n\d+ \[label=` y exactamente N-1 apariciones de `n\d+ -> n\d+;`.
+  - `EpsilonNode` aparece como `ε` (con shape `plaintext` en DOT, sin comillas en texto).
+- **Tests**: en `app/src/test/kotlin/org/compiler/ParseTreeExporterTest.kt`. Mínimo:
+  - `toIndentedText for single id produces expected string` (snapshot exacto).
+  - `toDot for single id has N nodes and N-1 edges`.
+  - `Epsilon nodes render as ε in both formats`.
+  - `Children are listed in declaration order`.
 - **Plan**: §11.2
 
 ### Ticket 30 -- `TableFormatter`
@@ -422,8 +538,84 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 - **Estado**: pendiente
 - **Depende de**: Tickets 12, 13, 18, 22
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/TableFormatter.kt`
-- **Descripción**: `formatLL1Table`, `formatSLR1Action`, `formatSLR1Goto`, `formatLALR1Action`, `formatLALR1Goto`, `formatFirstSets`, `formatFollowSets`. Cada una retorna string multilinea alineada en columnas. Acciones se imprimen como `s5`, `r3`, `acc`.
-- **Aceptación**: las strings se ven alineadas en un componente monoespaciado.
+- **Descripción**: `object TableFormatter` con funciones que formatean las tablas y conjuntos del análisis sintáctico como strings multilinea alineados, listos para mostrar en un componente monoespaciado (terminal, `TextArea` Swing/Compose con fuente Courier, etc.).
+- **Signaturas exactas**:
+  ```kotlin
+  fun formatLL1Table(table: LL1Table): String
+  fun formatSLR1Action(table: SLR1Table): String
+  fun formatSLR1Goto(table: SLR1Table): String
+  fun formatLALR1Action(table: LALR1Table): String
+  fun formatLALR1Goto(table: LALR1Table): String
+  fun formatFirstSets(firstSets: FirstSets): String
+  fun formatFollowSets(followSets: FollowSets): String
+  ```
+- **Tipos a los que se refiere**:
+  - `LL1Table` en `ll1/models/LL1Table.kt` (campos: `startSymbol`, `cells: Map<Pair<Symbol.NonTerminal, Symbol>, Production>`, `conflicts`, `followSets`).
+  - `SLR1Table` en `slr1/models/SLR1Table.kt` (campos: `action: Map<Pair<Int, Symbol>, Action>`, `goto: Map<Pair<Int, Symbol>, Int>`, `numStates`, `conflicts`).
+  - `LALR1Table` en `lalr1/models/LALR1Table.kt` (misma estructura que `SLR1Table`).
+  - `Action` en `runtime/models/Action.kt` -- sealed interface con `Shift(nextState)`, `Reduce(production)`, `Accept`, `Match`, `Expand`.
+  - `FirstSets` / `FollowSets` en `sets/models/` (ambos exponen `results: Map<Symbol.NonTerminal, Set<Symbol>>`).
+- **Formato del output -- LL(1) table** -- para la gramática canónica del Dragon Book:
+  ```
+         | id     | +      | *      | (      | )      | $     
+  -------+--------+--------+--------+--------+--------+-------
+  E      | E->TE' |        |        | E->TE' |        |       
+  E'     |        | +TE'   |        |        | ε      | ε     
+  T      | T->FT' |        |        | T->FT' |        |       
+  T'     |        | ε      | *FT'   |        | ε      | ε     
+  F      | F->id  |        |        | F->(E) |        |       
+  ```
+  Reglas:
+  - Header con `|` como separador de columnas, `+` en las intersecciones del separador horizontal.
+  - Columnas: una por terminal/EndMarker que aparezca en `cells`. `$` representa `Symbol.EndMarker`.
+  - Filas: una por `NonTerminal` que aparezca en `cells`.
+  - Celda con producción: muestra el body, ej. `E->TE'` o `ε` si el body es solo `Epsilon`.
+  - Celda vacía: solo espacios.
+  - Ancho de columna: `max(longest_content_in_column, 6)` para no quedar demasiado angosto.
+- **Formato del output -- SLR1Action / LALR1Action**:
+  ```
+  State | id   | +    | *    | (    | )    | $   
+  ------+------+------+------+------+------+-----
+      0 | s5   |      |      | s4   |      |     
+      1 |      | s6   |      |      |      | acc 
+      2 |      | r2   | s7   |      | r2   | r2  
+  ```
+  Codificación de acciones:
+  - `Action.Shift(N)` -> `sN`
+  - `Action.Reduce(production)` -> `r{production.id}`
+  - `Action.Accept` -> `acc`
+  - Celda vacía -> solo espacios.
+- **Formato del output -- SLR1Goto / LALR1Goto**:
+  ```
+  State | E    | T    | F   
+  ------+------+------+-----
+      0 |    1 |    2 |    3
+      4 |    8 |    2 |    3
+  ```
+  La celda contiene el número del siguiente estado (sin prefijo) o vacía si no hay transición.
+- **Manejo de conflictos**: si una celda de Action tiene más de una acción (mirar `table.conflicts`: cada `Conflict` tiene `state`, `terminal`, `actions: List<Action>`), formatear todas separadas por `/`. Ejemplo: `s5/r3`. Si la `Map<Pair, Action>` sólo guarda la "ganadora" tras resolución, el formatter debe enriquecer con la lista de conflictos para mostrar todas las opciones.
+- **Formato del output -- FIRST/FOLLOW sets** -- para la gramática canónica:
+  ```
+  E      = { (, id }
+  E'     = { +, ε }
+  T      = { (, id }
+  T'     = { *, ε }
+  F      = { (, id }
+  ```
+  Reglas:
+  - Una línea por no-terminal, ordenados por nombre alfabético (output determinista).
+  - Símbolos dentro del set ordenados alfabéticamente. `ε` representa `Symbol.Epsilon`, `$` representa `Symbol.EndMarker`.
+  - Padding: el nombre del no-terminal se justifica a `max(longest_nonterminal_name, 6)` caracteres.
+- **Aceptación**:
+  - `formatLL1Table` aplicado a la tabla canónica del libro produce un string donde todas las líneas tienen exactamente la misma longitud en caracteres (verificable con `lines().map { it.length }.toSet().size == 1`).
+  - `formatSLR1Action` y `formatSLR1Goto` aceptan tablas con conflictos sin lanzar; cada celda en conflicto muestra todas sus acciones separadas por `/`.
+  - `formatFirstSets` y `formatFollowSets` producen output determinista: dos llamadas con el mismo input retornan el mismo string.
+- **Tests**: en `app/src/test/kotlin/org/compiler/TableFormatterTest.kt`. Mínimo:
+  - `formatLL1Table for Dragon Book grammar matches expected snapshot` (multilinea exacto).
+  - `formatSLR1Action renders shift, reduce, and accept correctly`.
+  - `formatSLR1Action renders conflict cells with / separator`.
+  - `formatFirstSets is deterministic across calls`.
+  - `all output lines have equal length` para cada función de tabla.
 - **Plan**: §11.3
 
 ---
