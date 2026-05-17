@@ -98,6 +98,9 @@ object SLR1Parser {
                     // Tree stack holds exactly one tree: the root of the parse tree.
                     return ParseResult.Accepted(trace, treeStack.last(), errors)
                 }
+
+                is Action.Match, is Action.Expand ->
+                    error("Unexpected LL(1)-only action in SLR(1) parser: $action")
             }
         }
     }
