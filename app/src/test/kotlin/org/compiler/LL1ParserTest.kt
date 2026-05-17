@@ -163,4 +163,69 @@ class LL1ParserTest {
         val root = result.parseTree as ParseTree.InternalNode
         assertEquals(E, root.symbol)
     }
+
+    // Exercises F -> ( E ) and the real recursion of the expression grammar.
+    @Test
+    fun `parsing parenthesized expression is accepted and uses F -- ( E )`() {
+        val table = buildTable()
+        val entries = listOf(
+            entry("(",  "("),
+            entry("id", "a"),
+            entry("+",  "+"),
+            entry("id", "b"),
+            entry(")",  ")"),
+            entry("*",  "*"),
+            entry("id", "c")
+        )
+        val result = LL1Parser.parse(entries, emptySet(), table)
+
+        assertTrue(result is ParseResult.Accepted, "Expected Accepted, got $result")
+        // Root: E -> T E' (p1); the leftmost F under T must expand via p7 (F -> ( E )).
+        val root = result.parseTree as ParseTree.InternalNode
+        assertEquals(p1, root.production)
+        val tNode = root.children[0] as ParseTree.InternalNode    // T
+        val fNode = tNode.children[0] as ParseTree.InternalNode   // F
+        assertEquals(p7, fNode.production)
+    }
+
+    // Recovery should report MULTIPLE errors and still terminate. The exact
+    // number is whatever panic-mode produces for this input; we assert "at
+    // least two" so the test surfaces regressions without being brittle.
+    @Test
+    fun `parsing input with multiple consecutive bad plus operators reports several errors`() {
+        val table = buildTable()
+        val entries = listOf(
+            entry("id", "a", line = 1, position = 1),
+            entry("+",  "+", line = 1, position = 3),
+            entry("+",  "+", line = 1, position = 5),
+            entry("+",  "+", line = 1, position = 7),
+            entry("id", "b", line = 1, position = 9)
+        )
+        val result = LL1Parser.parse(entries, emptySet(), table)
+
+        // Parser must report more than one error and not loop forever; either
+        // Accepted-with-errors or Rejected-with-errors is acceptable.
+        val errors = when (result) {
+            is ParseResult.Accepted -> result.errors
+            is ParseResult.Rejected -> result.errors
+        }
+        assertTrue(errors.size >= 2, "Expected at least 2 errors, got ${errors.size}: $errors")
+    }
+
+    // Exercises the branch where the stack is exhausted (top == EndMarker) but
+    // input still has tokens. After matching "id", T' and E' epsilon-out under
+    // a ')' lookahead, leaving only EndMarker on the stack with ')' still in input.
+    @Test
+    fun `parsing id followed by unmatched close paren is rejected with an error`() {
+        val table = buildTable()
+        val entries = listOf(
+            entry("id", "a"),
+            entry(")",  ")")
+        )
+        val result = LL1Parser.parse(entries, emptySet(), table)
+
+        assertTrue(result is ParseResult.Rejected, "Expected Rejected, got $result")
+        assertEquals(1, result.errors.size)
+        assertEquals(")", result.errors.first().foundToken?.category)
+    }
 }

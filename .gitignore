@@ -8,5 +8,8 @@ build
 
 /.idea
 
+# Per-developer Gradle overrides (see gradle.properties.local.template)
+gradle.properties.local
+
 
 

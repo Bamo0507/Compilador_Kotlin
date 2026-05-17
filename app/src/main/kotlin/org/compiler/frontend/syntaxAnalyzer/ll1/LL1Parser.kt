@@ -27,13 +27,13 @@ object LL1Parser {
 
     private fun MutableNode.toParseTree(): ParseTree = when (this) {
         is MutableNode.Internal -> {
-            val prod = production
-            if (prod != null) ParseTree.InternalNode(symbol, prod, children.map { it.toParseTree() })
+            val productionValue = production
+            if (productionValue != null) ParseTree.InternalNode(symbol, productionValue, children.map { it.toParseTree() })
             else ParseTree.EpsilonNode
         }
         is MutableNode.Leaf -> {
-            val e = entry
-            if (e != null) ParseTree.LeafNode(symbol, e) else ParseTree.EpsilonNode
+            val entryValue = entry
+            if (entryValue != null) ParseTree.LeafNode(symbol, entryValue) else ParseTree.EpsilonNode
         }
         MutableNode.Epsilon -> ParseTree.EpsilonNode
     }
@@ -79,12 +79,12 @@ object LL1Parser {
 
                 // MATCH: a terminal on top must equal the lookahead.
                 top is Symbol.Terminal -> {
-                    val slot = nodeStack.last() as? MutableNode.Leaf
+                    val leafSlot = nodeStack.last() as? MutableNode.Leaf
                     if (top == lookahead) {
                         // Record BEFORE consuming, so the trace shows the state that decided.
                         trace.add(ParseStep(emptyList(), symbolStack.toList(), stream.remaining(), Action.Match(top)))
                         val consumed = stream.consume()!!
-                        slot?.entry = consumed
+                        leafSlot?.entry = consumed
                         symbolStack.removeLast()
                         nodeStack.removeLast()
                     } else {
@@ -99,30 +99,30 @@ object LL1Parser {
                 top is Symbol.NonTerminal -> {
                     val production = table.lookup(top, lookahead)
                     if (production != null) {
-                        val slot = nodeStack.last() as? MutableNode.Internal
+                        val internalSlot = nodeStack.last() as? MutableNode.Internal
                         // Record BEFORE expanding.
                         trace.add(ParseStep(emptyList(), symbolStack.toList(), stream.remaining(), Action.Expand(production)))
-                        slot?.production = production
+                        internalSlot?.production = production
                         symbolStack.removeLast()
                         nodeStack.removeLast()
 
                         val isEpsilon = production.body == listOf(Symbol.Epsilon)
                         if (isEpsilon) {
-                            slot?.children?.add(MutableNode.Epsilon)
+                            internalSlot?.children?.add(MutableNode.Epsilon)
                             // Epsilon produces nothing: don't push anything to symbolStack.
                         } else {
-                            val childSlots = production.body.map { sym ->
-                                when (sym) {
-                                    is Symbol.NonTerminal -> MutableNode.Internal(sym)
-                                    is Symbol.Terminal -> MutableNode.Leaf(sym)
+                            val childSlots = production.body.map { bodySymbol ->
+                                when (bodySymbol) {
+                                    is Symbol.NonTerminal -> MutableNode.Internal(bodySymbol)
+                                    is Symbol.Terminal -> MutableNode.Leaf(bodySymbol)
                                     else -> MutableNode.Epsilon
                                 }
                             }
-                            slot?.children?.addAll(childSlots)
+                            internalSlot?.children?.addAll(childSlots)
                             // Push body in reverse so body[0] ends up on top.
-                            for (i in production.body.indices.reversed()) {
-                                symbolStack.add(production.body[i])
-                                nodeStack.add(childSlots[i])
+                            for (bodyIndex in production.body.indices.reversed()) {
+                                symbolStack.add(production.body[bodyIndex])
+                                nodeStack.add(childSlots[bodyIndex])
                             }
                         }
                     } else {
@@ -133,8 +133,8 @@ object LL1Parser {
                         // Discard tokens until a sync token (FOLLOW(top)) or EOF.
                         val syncSet = table.followOf(top)
                         while (stream.peek() != null) {
-                            val curr = Symbol.Terminal(stream.peek()!!.token.category)
-                            if (curr in syncSet) break
+                            val currentSymbol = Symbol.Terminal(stream.peek()!!.token.category)
+                            if (currentSymbol in syncSet) break
                             stream.consume()
                         }
 

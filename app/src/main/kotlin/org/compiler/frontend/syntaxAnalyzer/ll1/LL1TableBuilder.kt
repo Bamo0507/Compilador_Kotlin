@@ -12,7 +12,7 @@ import org.compiler.frontend.syntaxAnalyzer.sets.models.FollowSets
 object LL1TableBuilder {
 
     fun build(grammar: Grammar, firstSets: FirstSets, followSets: FollowSets): LL1Table {
-        // Fase 1 -- recolectar candidatos por celda (Dragon Book §4.4.3, Algoritmo 4.31).
+        // Phase 1 -- collect candidate productions per cell (Dragon Book §4.4.3, Algorithm 4.31).
         val candidates = mutableMapOf<Pair<Symbol.NonTerminal, Symbol>, MutableList<Production>>()
 
         for (production in grammar.productions) {
@@ -26,13 +26,13 @@ object LL1TableBuilder {
             }
 
             if (Symbol.Epsilon in firstOfBody) {
-                for (b in followSets.followOf(head)) {
-                    candidates.getOrPut(head to b) { mutableListOf() }.add(production)
+                for (followTerminal in followSets.followOf(head)) {
+                    candidates.getOrPut(head to followTerminal) { mutableListOf() }.add(production)
                 }
             }
         }
 
-        // Fase 2 -- resolver candidatos en una produccion final por celda.
+        // Phase 2 -- collapse each cell's candidate list to a single production.
         val cells = mutableMapOf<Pair<Symbol.NonTerminal, Symbol>, Production>()
         val conflicts = mutableListOf<LL1Conflict>()
 
@@ -58,9 +58,9 @@ object LL1TableBuilder {
         )
     }
 
-    // Politica de resolucion de conflictos: gana la produccion con menor id.
-    // Misma convencion que SLR1TableBuilder para reduce-reduce: da control al
-    // usuario via el orden de declaracion en la gramatica.
+    // Conflict resolution policy: the production with the lowest id wins.
+    // Same convention as SLR1TableBuilder for reduce-reduce: gives the user
+    // control via the order of declarations in the grammar file.
     private fun resolveConflict(productions: List<Production>): Production =
         productions.minBy { it.id }
 }

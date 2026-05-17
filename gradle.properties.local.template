@@ -1,0 +1,12 @@
+# Template for per-developer Gradle overrides.
+#
+# Copy to gradle.properties.local and edit for your machine. The .local file is
+# gitignored. Gradle does NOT auto-load gradle.properties.local; pick one of:
+#   1) export JAVA_HOME in your shell before running ./gradlew
+#   2) put the line below in ~/.gradle/gradle.properties (user-global)
+#   3) merge the line below into the project's gradle.properties locally and
+#      avoid committing the change
+
+# Examples:
+# org.gradle.java.home=/Library/Java/JavaVirtualMachines/amazon-corretto-21.jdk/Contents/Home
+# org.gradle.java.home=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
