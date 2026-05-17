@@ -1,0 +1,91 @@
+let digit = ['0'-'9']
+let letter = ['a'-'z''A'-'Z']
+let underscore = '_'
+
+let alphanumeric = letter | digit | underscore
+let integer = digit+
+let float_basic = digit+ '.' digit*
+let float_short = '.' digit+
+let float = float_basic | float_short
+
+let id = (letter | underscore) alphanumeric*
+let whitespace = (' ' | '\t' | '\n')+
+
+let kw_class    = "class"
+let kw_function = "function"
+let kw_let      = "let"
+let kw_if       = "if"
+let kw_else     = "else"
+let kw_while    = "while"
+let kw_return   = "return"
+let kw_true     = "true"
+let kw_false    = "false"
+
+let op_or     = "||"
+let op_and    = "&&"
+let op_eq     = "=="
+let op_neq    = "!="
+let op_le     = "<="
+let op_ge     = ">="
+let op_lt     = "<"
+let op_gt     = ">"
+let op_plus   = "+"
+let op_minus  = "-"
+let op_times  = "*"
+let op_div    = "/"
+let op_mod    = "%"
+let op_not    = "!"
+let op_assign = "="
+
+let lparen   = "("
+let rparen   = ")"
+let lbrace   = "{"
+let rbrace   = "}"
+let lbracket = "["
+let rbracket = "]"
+let comma    = ","
+let semi     = ";"
+
+let line_comment  = "//" [^'\n']*
+let block_comment = "/*" ([^'*'] | ('*')+ [^'*' '/'])* ('*')+ "/"
+let comment = line_comment | block_comment
+
+rule tokens =
+  | whitespace  { WHITESPACE }
+  | comment     { COMMENT }
+  | float       { FLOAT }
+  | integer     { INT }
+  | kw_class    { KW_CLASS }
+  | kw_function { KW_FUNCTION }
+  | kw_let      { KW_LET }
+  | kw_if       { KW_IF }
+  | kw_else     { KW_ELSE }
+  | kw_while    { KW_WHILE }
+  | kw_return   { KW_RETURN }
+  | kw_true     { KW_TRUE }
+  | kw_false    { KW_FALSE }
+  | id          { ID }
+  | op_or       { OP_OR }
+  | op_and      { OP_AND }
+  | op_eq       { OP_EQ }
+  | op_neq      { OP_NEQ }
+  | op_le       { OP_LE }
+  | op_ge       { OP_GE }
+  | op_lt       { OP_LT }
+  | op_gt       { OP_GT }
+  | op_plus     { OP_PLUS }
+  | op_minus    { OP_MINUS }
+  | op_times    { OP_TIMES }
+  | op_div      { OP_DIV }
+  | op_mod      { OP_MOD }
+  | op_not      { OP_NOT }
+  | op_assign   { OP_ASSIGN }
+  | lparen      { LPAREN }
+  | rparen      { RPAREN }
+  | lbrace      { LBRACE }
+  | rbrace      { RBRACE }
+  | lbracket    { LBRACKET }
+  | rbracket    { RBRACKET }
+  | comma       { COMMA }
+  | semi        { SEMI }
+  | eof         { EOF }

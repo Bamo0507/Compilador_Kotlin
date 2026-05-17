@@ -1,17 +1,42 @@
-%token KEYWORD ID INT FLOAT OPERATOR PUNCTUATION
+/* Gramatica de prueba para el parser.
+   Cubre: clases, funciones, recursion, listas, expresiones con todos
+   los operadores. Las productions binarias de expr son AMBIGUAS por
+   diseno -- el PrecedenceRewriter las desambigua usando los niveles
+   declarados abajo. */
+
+%token KW_CLASS KW_FUNCTION KW_LET KW_IF KW_ELSE KW_WHILE KW_RETURN
+%token KW_TRUE KW_FALSE
+%token ID INT FLOAT
+%token OP_OR OP_AND OP_EQ OP_NEQ OP_LT OP_GT OP_LE OP_GE
+%token OP_PLUS OP_MINUS OP_TIMES OP_DIV OP_MOD OP_NOT OP_ASSIGN
+%token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET COMMA SEMI
+
 IGNORE WHITESPACE COMMENT
+
+%left  OP_OR
+%left  OP_AND
+%left  OP_EQ OP_NEQ
+%left  OP_LT OP_GT OP_LE OP_GE
+%left  OP_PLUS OP_MINUS
+%left  OP_TIMES OP_DIV OP_MOD
+%right OP_NOT
+%right OP_ASSIGN
 
 %%
 
-program : class_list
+program : top_list
         ;
 
-class_list : class_list class_decl
-           | class_decl
-           ;
+top_list : top_list top
+         | top
+         ;
 
-class_decl : KEYWORD ID PUNCTUATION member_list PUNCTUATION
-           | KEYWORD KEYWORD ID PUNCTUATION member_list PUNCTUATION
+top : class_decl
+    | function_decl
+    | var_decl
+    ;
+
+class_decl : KW_CLASS ID LBRACE member_list RBRACE
            ;
 
 member_list : member_list member
@@ -19,25 +44,25 @@ member_list : member_list member
             |
             ;
 
-member : KEYWORD ID PUNCTUATION param_list PUNCTUATION block
-       | KEYWORD KEYWORD ID PUNCTUATION param_list PUNCTUATION block
-       | KEYWORD ID OPERATOR expr PUNCTUATION
-       | KEYWORD ID PUNCTUATION
-       | KEYWORD KEYWORD ID PUNCTUATION
+member : function_decl
+       | var_decl
        ;
 
-param_list : params
+function_decl : KW_FUNCTION ID LPAREN param_list RPAREN block
+              ;
+
+param_list : id_list
            |
            ;
 
-params : params PUNCTUATION param
-       | param
-       ;
+id_list : id_list COMMA ID
+        | ID
+        ;
 
-param : KEYWORD ID
-      ;
+var_decl : KW_LET ID OP_ASSIGN expr SEMI
+         ;
 
-block : PUNCTUATION stmt_list PUNCTUATION
+block : LBRACE stmt_list RBRACE
       ;
 
 stmt_list : stmt_list stmt
@@ -45,8 +70,7 @@ stmt_list : stmt_list stmt
           |
           ;
 
-stmt : decl_stmt
-     | assign_stmt
+stmt : var_decl
      | if_stmt
      | while_stmt
      | return_stmt
@@ -54,55 +78,56 @@ stmt : decl_stmt
      | block
      ;
 
-decl_stmt : KEYWORD ID OPERATOR expr PUNCTUATION
-          | KEYWORD ID PUNCTUATION
-          ;
-
-assign_stmt : ID OPERATOR expr PUNCTUATION
-            ;
-
-if_stmt : KEYWORD PUNCTUATION expr PUNCTUATION block
-        | KEYWORD PUNCTUATION expr PUNCTUATION block KEYWORD block
+if_stmt : KW_IF LPAREN expr RPAREN block
+        | KW_IF LPAREN expr RPAREN block KW_ELSE block
         ;
 
-while_stmt : KEYWORD PUNCTUATION expr PUNCTUATION block
+while_stmt : KW_WHILE LPAREN expr RPAREN block
            ;
 
-return_stmt : KEYWORD expr PUNCTUATION
-            | KEYWORD PUNCTUATION
+return_stmt : KW_RETURN expr SEMI
+            | KW_RETURN SEMI
             ;
 
-expr_stmt : expr PUNCTUATION
+expr_stmt : expr SEMI
           ;
 
-expr : expr OPERATOR term
-     | term
+expr : expr OP_OR     expr
+     | expr OP_AND    expr
+     | expr OP_EQ     expr
+     | expr OP_NEQ    expr
+     | expr OP_LT     expr
+     | expr OP_GT     expr
+     | expr OP_LE     expr
+     | expr OP_GE     expr
+     | expr OP_PLUS   expr
+     | expr OP_MINUS  expr
+     | expr OP_TIMES  expr
+     | expr OP_DIV    expr
+     | expr OP_MOD    expr
+     | OP_NOT expr
+     | expr OP_ASSIGN expr
+     | LPAREN expr RPAREN
+     | function_call
+     | list_literal
+     | ID
+     | INT
+     | FLOAT
+     | KW_TRUE
+     | KW_FALSE
      ;
 
-term : term OPERATOR factor
-     | factor
-     ;
+function_call : ID LPAREN arg_list RPAREN
+              ;
 
-factor : PUNCTUATION expr PUNCTUATION
-       | call_expr
-       | new_expr
-       | ID PUNCTUATION ID
-       | ID
-       | INT
-       | FLOAT
-       ;
-
-call_expr : ID PUNCTUATION arg_list PUNCTUATION
-          | ID PUNCTUATION ID PUNCTUATION arg_list PUNCTUATION
-          ;
-
-new_expr : KEYWORD KEYWORD PUNCTUATION arg_list PUNCTUATION
-         ;
-
-arg_list : args
+arg_list : expr_list
          |
          ;
 
-args : args PUNCTUATION expr
-     | expr
-     ;
+expr_list : expr_list COMMA expr
+          | expr
+          ;
+
+list_literal : LBRACKET expr_list RBRACKET
+             | LBRACKET RBRACKET
+             ;

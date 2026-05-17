@@ -20,17 +20,34 @@ class YalpReaderTest {
         val grammar = YalpReader.parse(content)
 
         val terminalNames = grammar.terminals.map { it.name }.toSet()
-        assertTrue("KEYWORD" in terminalNames)
+        assertTrue("KW_CLASS" in terminalNames)
+        assertTrue("KW_FUNCTION" in terminalNames)
+        assertTrue("KW_LET" in terminalNames)
         assertTrue("ID" in terminalNames)
         assertTrue("INT" in terminalNames)
         assertTrue("FLOAT" in terminalNames)
-        assertTrue("OPERATOR" in terminalNames)
-        assertTrue("PUNCTUATION" in terminalNames)
+        assertTrue("OP_PLUS" in terminalNames)
+        assertTrue("OP_ASSIGN" in terminalNames)
+        assertTrue("LPAREN" in terminalNames)
+        assertTrue("SEMI" in terminalNames)
         assertTrue("WHITESPACE" in terminalNames)
         assertTrue("COMMENT" in terminalNames)
 
         val ignoredNames = grammar.ignoredTokens.map { it.name }.toSet()
         assertEquals(setOf("WHITESPACE", "COMMENT"), ignoredNames)
+    }
+
+    @Test
+    fun `parser yalp declares 8 precedence levels in the expected order`() {
+        val content = File("src/main/resources/parser.yalp").readText()
+        val grammar = YalpReader.parse(content)
+
+        assertEquals(8, grammar.precedenceTable.size)
+        // First level (lowest precedence) is OP_OR; last level (highest) is OP_ASSIGN.
+        assertEquals(setOf(org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol.Terminal("OP_OR")),
+            grammar.precedenceTable[0].operators)
+        assertEquals(setOf(org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol.Terminal("OP_ASSIGN")),
+            grammar.precedenceTable[7].operators)
     }
 
     @Test

@@ -16,7 +16,13 @@ import kotlin.test.assertTrue
 class GrammarValidatorTest {
 
     private val javaLexerCategories = setOf(
-        "KEYWORD", "ID", "INT", "FLOAT", "OPERATOR", "PUNCTUATION", "WHITESPACE", "COMMENT"
+        "KW_CLASS", "KW_FUNCTION", "KW_LET", "KW_IF", "KW_ELSE", "KW_WHILE", "KW_RETURN",
+        "KW_TRUE", "KW_FALSE",
+        "ID", "INT", "FLOAT",
+        "OP_OR", "OP_AND", "OP_EQ", "OP_NEQ", "OP_LT", "OP_GT", "OP_LE", "OP_GE",
+        "OP_PLUS", "OP_MINUS", "OP_TIMES", "OP_DIV", "OP_MOD", "OP_NOT", "OP_ASSIGN",
+        "LPAREN", "RPAREN", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET", "COMMA", "SEMI",
+        "WHITESPACE", "COMMENT"
     )
 
     @Test

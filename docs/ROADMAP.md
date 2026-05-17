@@ -432,7 +432,7 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 
 ### Ticket 31 -- Archivos de prueba
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 10 (necesita la sintaxis `%left`/`%right`/`%nonassoc`)
 - **Archivos**:
   - `app/src/main/resources/parser_test.yal` (lexer dedicado para los tests del parser, categorías por operador: `OP_PLUS`, `OP_MINUS`, `OP_TIMES`, `OP_DIV`, `OP_MOD`, `OP_LT`, `OP_GT`, `OP_LE`, `OP_GE`, `OP_EQ`, `OP_NEQ`, `OP_AND`, `OP_OR`, `OP_NOT`, `OP_ASSIGN`)

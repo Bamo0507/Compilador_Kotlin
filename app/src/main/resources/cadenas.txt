@@ -1,0 +1,42 @@
+// Programa de prueba para el parser.
+// Ejercita: clases con miembros, funciones recursivas (fib),
+// declaraciones, ciclo while, expresiones con todos los operadores
+// (suma, multiplicacion, comparacion, AND/OR, NOT, asignacion),
+// listas literales, y un error intencional que activa la recuperacion.
+
+class Calculator {
+    let pi = 314;
+
+    function add(a, b) {
+        return a + b;
+    }
+
+    function fib(n) {
+        if (n < 2) {
+            return n;
+        }
+        return fib(n - 1) + fib(n - 2);
+    }
+}
+
+function isPositive(x) {
+    return x > 0 && !false;
+}
+
+let result = 0;
+let nums = [1, 2, 3, 4, 5];
+let i = fib(10);
+let flag = i > 10 && i < 100;
+
+if (flag) {
+    result = 1 + 2 * 3;
+} else {
+    result = 0;
+}
+
+// Error intencional para probar la recuperacion del parser:
+// el segundo '+' es invalido. El parser debe reportar el error
+// con linea y columna, descartarlo, y seguir parseando.
+let bad = 1 + + 2;
+
+let final = result * 2 + bad;
