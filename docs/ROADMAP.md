@@ -185,7 +185,7 @@ Construcción de tabla LL(1) y parser predictivo.
 
 ### Ticket 13 -- Modelos LL(1)
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 12
 - **Archivos**:
   - `frontend/syntaxAnalyzer/ll1/models/LL1Cell.kt` — define `LL1Conflict(nonTerminal: Symbol.NonTerminal, terminal: Symbol, productions: List<Production>)`. Estructura paralela a `SLR1Conflict` de `slr1/models/SLR1Table.kt`. El nombre del archivo es histórico; agrupa los tipos auxiliares de la tabla LL(1).
@@ -196,7 +196,7 @@ Construcción de tabla LL(1) y parser predictivo.
 
 ### Ticket 14 -- `LL1TableBuilder`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 11, 13
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1TableBuilder.kt`
 - **Descripción**: `object LL1TableBuilder` con `fun build(grammar: Grammar, firstSets: FirstSets, followSets: FollowSets): LL1Table`.
@@ -212,7 +212,7 @@ Construcción de tabla LL(1) y parser predictivo.
 
 ### Ticket 15 -- `LL1Parser`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 14, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/ll1/LL1Parser.kt`
 - **Descripción**: `object LL1Parser` (mantener `object` para consistencia con `SLR1Parser` y `LALR1Parser`). Firma: `fun parse(entries: List<TokenEntry>, ignoredCategories: Set<String>, table: LL1Table): ParseResult`.
@@ -388,7 +388,7 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 
 ### Ticket 27 -- `Pipeline` orquestador
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 5, 7, 8, 10, 11, 12, 14, 17, 19, 21, 23, 15, 20, 24, 25, 26
 - **Archivos**: `frontend/syntaxAnalyzer/runtime/Pipeline.kt`
 - **Descripción**: `object Pipeline { fun runFull(yalexContent, yalpContent, inputContent, method): PipelineResult }`. `enum ParserMethod { LL1, SLR1, LALR1 }`. `data class PipelineResult` con todos los artefactos (tokens, grammar original, grammar tras precedence, grammar tras left recursion (solo si LL1), firstSets, followSets, slr1Automaton, lalr1Automaton, ll1Table, slr1Table, lalr1Table, parseResult). Aplica `LeftRecursionRewriter` solo si el método es `LL1`; para SLR/LALR pasa la salida de `PrecedenceRewriter` directamente.
