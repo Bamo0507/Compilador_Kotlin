@@ -7,6 +7,7 @@ import org.compiler.frontend.syntaxAnalyzer.slr1.models.SLR1Automata
 import org.compiler.frontend.syntaxAnalyzer.slr1.models.SLR1Item
 import org.compiler.frontend.syntaxAnalyzer.slr1.models.SLR1State
 import org.compiler.frontend.syntaxAnalyzer.visualization.DotExporter
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
@@ -93,9 +94,10 @@ class DotExporterTest {
     fun `renderToImage does not throw when dot binary is not available`() {
         // Uses valid DOT so that when dot is installed it produces an actual PNG file.
         // When dot is not installed, IOException is caught and false is returned without throwing.
-        val outputPath = "/Users/brandon/Documents/UVG/Github/Compilador_Kotlin/extras/dot_exporter_test.png"
+        val outputFile = File.createTempFile("dot_exporter_test", ".png")
+        outputFile.deleteOnExit()
         val threwException = try {
-            DotExporter.renderToImage(DotExporter.slr1ToDot(automaton), outputPath)
+            DotExporter.renderToImage(DotExporter.slr1ToDot(automaton), outputFile.absolutePath)
             false
         } catch (e: Exception) {
             true

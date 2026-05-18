@@ -11,5 +11,8 @@ build
 # Per-developer Gradle overrides (see gradle.properties.local.template)
 gradle.properties.local
 
+# Test-generated rendering artifacts
+extras/*.png
+
 
 
