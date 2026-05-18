@@ -1,113 +1,194 @@
-# Kotlin Java Compiler
-Analizador Lexico y Sintactico de Java usando Kotlin
+# Compilador Kotlin
 
-# Getting Started
+Generador de Analizador Lexico y Sintactico implementado en Kotlin sobre la JVM.
+Lee una especificacion `.yal` (definicion lexica) y `.yalp` (gramatica sintactica),
+construye los automatas y tablas correspondientes, y permite parsear cadenas
+con LL(1), SLR(1) o LALR(1) -- todo orquestado desde una GUI de escritorio
+escrita en Compose Multiplatform.
+
+---
+
 ## Requisitos
-- JDK 21 [{MacOs} {Linux}](https://adoptium.net/es/temurin/releases/?version=21) [{Windows}](https://adoptium.net/es/temurin/releases/?version=21&architecture=x64&image_type=jdk)
 
-MacOS/Linux:
+### JDK 21
+
+Compose Multiplatform 1.8.x corre sobre JVM 17+, pero el proyecto fija el toolchain
+en **Java 21**. Cualquier distribucion 21 sirve: Amazon Corretto, Eclipse Temurin, Oracle, etc.
+
+**Verificar:**
 ```bash
-# Check Java version and PATH
 java -version
-echo $PATH
+# debe imprimir "21.x.x" o superior
 ```
 
-Windows:
+**Si tienes varias versiones instaladas**, exporta `JAVA_HOME` apuntando al JDK 21:
+
 ```bash
-# Check Java version and PATH
-java -version
-echo $JAVA_HOME
+# macOS Corretto
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/amazon-corretto-21.jdk/Contents/Home
+
+# macOS Temurin (Adoptium)
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+
+# Linux (ajusta el path segun tu distro)
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+
+# Windows PowerShell
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21"
 ```
 
-- Gradle 8.0.0 o superior
-Linux:
+Si prefieres no exportar `JAVA_HOME` cada vez, copia el template
+`gradle.properties.local.template` a `gradle.properties.local` y ajusta el path
+local (ver "Overrides per developer" abajo).
+
+### Gradle
+
+No es necesario instalarlo: el proyecto incluye el wrapper (`./gradlew`).
+La version se resuelve automaticamente desde `gradle/wrapper/gradle-wrapper.properties`.
+
+### Graphviz (opcional, solo para renderizar imagenes del automata)
+
 ```bash
-sdk install gradle
+# macOS
+brew install graphviz
+
+# Linux Debian/Ubuntu
+sudo apt install graphviz
+
+# Windows
+choco install graphviz
 ```
 
-MacOS:
-```bash
-brew install gradle
-# or
-sudo port install gradle
-```
+Sin Graphviz, las funciones de exportacion siguen produciendo texto DOT correctamente,
+pero `DotExporter.renderToImage(...)` retornara `false` (no lanza excepcion).
 
-Windows e instalacion manual:
-```bash
-# Download and install Gradle from
-https://docs.gradle.org/current/userguide/installation.html#linux_installation
-```
+---
 
-## Compilar Codigo
+## Compilar
 
 ```bash
 ./gradlew build
 ```
 
-## Correr
+---
 
-### Ejecutar el Preprocesador
+## Ejecutar
+
+El proyecto tiene **tres entry points**:
+
+### 1. GUI (interfaz principal)
+
 ```bash
-./gradlew runPreprocessor 
+./gradlew runGui
 ```
 
-### Ejecutar el Analizador Lexico
+Abre la ventana Compose Desktop. Es la interfaz primaria del proyecto;
+desde ahi se carga el `.yal`, el `.yalp`, la cadena de entrada, se elige
+el metodo de parsing (LL(1)/SLR(1)/LALR(1)) y se visualizan tokens, arbol
+de derivacion, automata y tablas.
+
+### 2. Preprocesador (CLI, legacy de Proyecto 1)
+
+```bash
+./gradlew runPreprocessor
+```
+
+Lee `app/src/main/resources/java_lang.yal`, construye los DFAs minimizados,
+y escribe los YAMLs intermedios.
+
+### 3. Lexer (CLI, legacy de Proyecto 1)
+
 ```bash
 ./gradlew runLexer
 ```
 
-## File Structure
-```
-COMPILADOR_KOTLIN
-├── app
-│   ├── src
-│   │   ├── main
-│   │   │   ├── kotlin.org.compiler
-│   │   │   │   ├── lexicalAnalyzer
-│   │   │   │   |    ├── lexer/
-│   │   │   │   |    ├── manageGrammar/
-│   │   │   │   |    |   ├── models/
-│   │   │   │   |    |   ├── utils/
-│   │   │   │   |    |   ├── DFABuilder.kt
-│   │   │   │   |    |   ├── DFAMinimizer.kt
-│   │   │   │   |    |   ├── ShuntingYard.kt
-│   │   │   │   |    |   └── TreeBuilder.kt
-│   │   │   │   |    └── scanner/
-│   │   │   │   |       └── Scanner.kt
-│   │   │   │   ├── LexerApp.kt
-│   │   │   │   └── PreprocessorApp.kt
-│   │   └── resources
-│   │       ├── output
-│   │       │   ├── errors.txt
-│   │       │   ├── symbolTable.txt
-│   │       │   └── tokens.txt
-│   │       ├── input.java
-│   │       ├── java_lang.yal
-│   │       └── DFA.yaml
-├── build.gradle.kts
-├── gradle
-├── readme.md
-└── settings.gradle.kts
+Carga los YAMLs generados por el preprocesador y tokeniza
+`app/src/main/resources/input.java`.
+
+---
+
+## Empaquetar instalador nativo
+
+El plugin de Compose Desktop genera instaladores nativos sin dependencias adicionales:
+
+```bash
+./gradlew packageDmg          # macOS .dmg
+./gradlew packageMsi          # Windows .msi
+./gradlew packageDeb          # Linux .deb
+./gradlew packageDistributionForCurrentOS  # el formato correspondiente al SO actual
 ```
 
-# Input Files
-``` 
-app/src/main/resources/input.java
-app/src/main/resources/java_lang.yal
+Los instaladores quedan en `app/build/compose/binaries/main/<formato>/`.
+
+---
+
+## Tests
+
+```bash
+./gradlew test
 ```
 
-# Output Files
+Resultados en `app/build/reports/tests/test/index.html`.
+
+---
+
+## Overrides per developer
+
+Para que cada miembro del equipo configure su JDK sin afectar el repo:
+
+1. Copia `gradle.properties.local.template` a `gradle.properties.local`.
+2. Edita los valores locales (p.ej. `org.gradle.java.home`).
+3. `gradle.properties.local` esta en `.gitignore` -- no se commitea.
+
+Alternativamente exporta `JAVA_HOME` en tu shell.
+
+---
+
+## Estructura del proyecto
+
 ```
-app/src/main/resources/output/errors.txt
-app/src/main/resources/output/symbolTable.txt
-app/src/main/resources/output/tokens.txt
-app/src/main/resources/DFA.yaml
+Compilador_Kotlin/
+├── app/
+│   └── src/
+│       ├── main/
+│       │   ├── kotlin/org/compiler/
+│       │   │   ├── frontend/
+│       │   │   │   ├── lexicalAnalyzer/    Proyecto 1: regex -> DFA -> scanner
+│       │   │   │   └── syntaxAnalyzer/     Proyecto 2: gramatica -> tablas -> parser
+│       │   │   │       ├── grammar/        YalpReader, GrammarValidator, rewriters
+│       │   │   │       ├── sets/           FIRST/FOLLOW
+│       │   │   │       ├── ll1/            tabla y parser LL(1)
+│       │   │   │       ├── slr1/           automata, tabla y parser SLR(1)
+│       │   │   │       ├── lalr1/          merger, tabla y parser LALR(1)
+│       │   │   │       ├── runtime/        Pipeline, TokenStream, ParseTree
+│       │   │   │       └── visualization/  DotExporter, ParseTreeExporter, TableFormatter
+│       │   │   ├── gui/                    componentes Compose Desktop
+│       │   │   ├── models/                 LexemeLocation
+│       │   │   ├── diagnostics/            ErrorEntry y similares
+│       │   │   ├── symbolTable/            SymbolTable
+│       │   │   ├── LexerApp.kt             entry point CLI lexer
+│       │   │   ├── PreprocessorApp.kt      entry point CLI preprocesador
+│       │   │   └── GuiApp.kt               entry point GUI
+│       │   └── resources/                  inputs y outputs de los CLI
+│       └── test/kotlin/org/compiler/       tests de cada fase
+├── docs/
+│   ├── ROADMAP.md                          plan de 40 tickets en 12 fases
+│   └── architecture.md                     diseno canonico
+├── extras/                                 ejemplos y artefactos auxiliares
+├── gradle/libs.versions.toml               version catalog (Kotlin, Compose, etc.)
+├── gradle.properties                       config Gradle del repo
+├── gradle.properties.local.template        template de overrides locales
+├── build.gradle.kts                        config root
+└── app/build.gradle.kts                    config del modulo app
 ```
 
-# References
-- [Kotlin Documentation](https://kotlinlang.org/docs/home.html)
-- [Gradle Documentation](https://docs.gradle.org/current/userguide/userguide.html)
+---
+
+## Documentos de referencia
+
+- [Dragon Book](https://www.amazon.com/Compilers-Principles-Techniques-Tools-2nd/dp/0321486811) -- algoritmos canonicos
+- [Kotlin docs](https://kotlinlang.org/docs/home.html)
+- [Gradle docs](https://docs.gradle.org/current/userguide/userguide.html)
+- [Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/) -- framework de la GUI
 - [Java Language Specification](https://docs.oracle.com/javase/specs/)
-- [The Dragon Book](https://www.amazon.com/Compilers-Principles-Techniques-Tools-2nd/dp/0321486811)
 - [Ing. Pablo Koch](https://gt.linkedin.com/in/pablo-koch-075839119)
-- [Flex](https://github.com/Kosho969/Flex_Setup)

@@ -401,7 +401,7 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 
 ### Ticket 28 -- `DotExporter`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 16
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/DotExporter.kt`
 - **Descripción**: `object DotExporter` con tres funciones públicas. Genera texto Graphviz para los autómatas SLR(1) y LALR(1), y renderiza un PNG vía el comando `dot` del sistema.
@@ -454,7 +454,7 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 
 ### Ticket 29 -- `ParseTreeExporter`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 25
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/ParseTreeExporter.kt`
 - **Descripción**: `object ParseTreeExporter` con dos funciones que convierten un `ParseTree` en string: una versión texto indentado para CLI/consola y una versión DOT para renderizar con Graphviz.
@@ -535,7 +535,7 @@ Modelos compartidos por los tres parsers. Algunos tickets de esta fase deben ter
 
 ### Ticket 30 -- `TableFormatter`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 12, 13, 18, 22
 - **Archivos**: `frontend/syntaxAnalyzer/visualization/TableFormatter.kt`
 - **Descripción**: `object TableFormatter` con funciones que formatean las tablas y conjuntos del análisis sintáctico como strings multilinea alineados, listos para mostrar en un componente monoespaciado (terminal, `TextArea` Swing/Compose con fuente Courier, etc.).
@@ -652,11 +652,11 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 32 -- Setup de Compose Desktop
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
-- **Archivos**: `app/build.gradle.kts`
-- **Descripción**: agregar el plugin `org.jetbrains.compose` y declarar `compose.desktop.currentOs`, `compose.material`, `compose.foundation`. Registrar la task `runGui` con `JavaExec`.
-- **Aceptación**: un Hello World mínimo en Compose Desktop compila y `./gradlew runGui` lo ejecuta.
+- **Archivos**: `app/build.gradle.kts`, `gradle/libs.versions.toml`, `app/src/main/kotlin/org/compiler/GuiApp.kt`, `app/src/main/kotlin/org/compiler/gui/App.kt`, `README.md`
+- **Descripción**: plugins `org.jetbrains.kotlin.plugin.compose` y `org.jetbrains.compose` aplicados; dependencias `compose.desktop.currentOs`, `compose.material3` y `compose.materialIconsExtended`; bloque `compose.desktop { application { ... nativeDistributions { Dmg/Msi/Deb } } }` configurado; task `runGui` registrada con `JavaExec`. Versiones: Kotlin 2.1.21, Compose Multiplatform 1.8.2 (combinacion del template oficial de JetBrains).
+- **Aceptación**: `./gradlew runGui` arranca la ventana Compose Desktop con un Hello World en Material 3; `./gradlew packageDmg`/`packageMsi`/`packageDeb` empaqueta instaladores nativos.
 - **Plan**: §12.1, §13.3
 
 ### Ticket 33 -- `AppState`
@@ -765,14 +765,3 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 | 11 -- GUI | 8 | 32-39 |
 | 12 -- Integración | 1 | 40 |
 | **Total** | **40** | |
-
-## Sugerencia de paralelización inicial
-
-Con Fase 1 y Fase 2 ya completas y Ticket 12 (Sets) listo, los próximos frentes paralelos son:
-
-- **Ticket 10** (Extender Grammar para precedencia) -- desbloquea las demás fases que dependen de la gramática reescrita.
-- **Ticket 25** (Modelos Runtime) y **Ticket 26** (TokenStream) -- no dependen de la precedencia, se pueden arrancar en paralelo.
-- **Ticket 32** (Setup Compose) y **Ticket 34** (Componentes básicos GUI) -- arrancables en paralelo, no dependen de la precedencia.
-- **Ticket 31** (Recursos de prueba) -- arrancable en cuanto Ticket 10 esté listo (necesita la sintaxis nueva del `.yalp`).
-
-Una vez Ticket 11 (PrecedenceRewriter) cierra, las Fases 5 (LL1), 6 (SLR1), 7 (LALR1) son completamente independientes y paralelizables.
