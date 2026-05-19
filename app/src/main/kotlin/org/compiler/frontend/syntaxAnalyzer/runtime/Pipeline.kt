@@ -22,10 +22,9 @@ import org.compiler.frontend.syntaxAnalyzer.slr1.SLR1TableBuilder
 // Single entry point that chains the entire compilation: lex, parse-grammar,
 // validate, rewrite, FIRST/FOLLOW, table construction, and parse.
 //
-// Stages A..E are common to every parser method. Stage F branches on `method`
-// because each algorithm needs its own table/automaton. LL(1) is the only
-// method that requires left-recursion elimination: SLR(1) and LALR(1) keep
-// left-recursive productions intentionally (they yield smaller automata).
+// Stages A..E are common to every parser method. The pipeline builds all parser
+// artifacts in one pass so GUI method changes only need to rerun the selected
+// parser over the already-built tokens and tables.
 object Pipeline {
 
     fun runFull(
@@ -49,82 +48,52 @@ object Pipeline {
         // Stage C -- precedence rewriting is applied to every method.
         val precedenceRewrittenGrammar = PrecedenceRewriter.rewrite(originalGrammar)
 
-        // Stage D -- LL(1) only: eliminate left recursion. SLR/LALR skip this.
-        val leftRecursionRewrittenGrammar = when (method) {
-            ParserMethod.LL1 -> LeftRecursionRewriter.eliminateLeftRecursion(precedenceRewrittenGrammar)
-            else -> null
-        }
-        val workingGrammar = leftRecursionRewrittenGrammar ?: precedenceRewrittenGrammar
+        // Stage D -- build the two grammar variants needed by the supported methods.
+        val leftRecursionRewrittenGrammar =
+            LeftRecursionRewriter.eliminateLeftRecursion(precedenceRewrittenGrammar)
 
-        // Stage E -- FIRST/FOLLOW over the working grammar.
-        val firstSets = FirstSetComputer.compute(workingGrammar)
-        val followSets = FollowSetComputer.compute(workingGrammar, firstSets)
+        // Stage E -- FIRST/FOLLOW over both working grammars.
+        val ll1FirstSets = FirstSetComputer.compute(leftRecursionRewrittenGrammar)
+        val ll1FollowSets = FollowSetComputer.compute(leftRecursionRewrittenGrammar, ll1FirstSets)
+        val lrFirstSets = FirstSetComputer.compute(precedenceRewrittenGrammar)
+        val lrFollowSets = FollowSetComputer.compute(precedenceRewrittenGrammar, lrFirstSets)
 
-        val ignoredCategories = workingGrammar.ignoredTokens.map { it.name }.toSet()
+        val ll1Table = LL1TableBuilder.build(leftRecursionRewrittenGrammar, ll1FirstSets, ll1FollowSets)
+        val slr1Automaton = SLR1AutomataBuilder.build(precedenceRewrittenGrammar, lrFirstSets)
+        val slr1Table = SLR1TableBuilder.build(slr1Automaton)
+        val lalr1Automaton = LALR1AutomatonMerger.mergeFromSLR1(slr1Automaton)
+        val lalr1Table = LALR1TableBuilder.build(lalr1Automaton)
+
         val tokenEntries = lexerResult.entries
+        val ignoredCategories = precedenceRewrittenGrammar.ignoredTokens.map { it.name }.toSet()
 
-        // Stage F -- method-specific table construction and parsing.
-        return when (method) {
-            ParserMethod.LL1 -> {
-                val ll1Table = LL1TableBuilder.build(workingGrammar, firstSets, followSets)
-                val parseResult = LL1Parser.parse(tokenEntries, ignoredCategories, ll1Table)
-                PipelineResult(
-                    method = method,
-                    lexerResult = lexerResult,
-                    originalGrammar = originalGrammar,
-                    precedenceRewrittenGrammar = precedenceRewrittenGrammar,
-                    leftRecursionRewrittenGrammar = leftRecursionRewrittenGrammar,
-                    firstSets = firstSets,
-                    followSets = followSets,
-                    slr1Automaton = null,
-                    lalr1Automaton = null,
-                    ll1Table = ll1Table,
-                    slr1Table = null,
-                    lalr1Table = null,
-                    parseResult = parseResult
-                )
-            }
-            ParserMethod.SLR1 -> {
-                val slr1Automaton = SLR1AutomataBuilder.build(workingGrammar, firstSets)
-                val slr1Table = SLR1TableBuilder.build(slr1Automaton)
-                val parseResult = SLR1Parser.parse(tokenEntries, ignoredCategories, slr1Table)
-                PipelineResult(
-                    method = method,
-                    lexerResult = lexerResult,
-                    originalGrammar = originalGrammar,
-                    precedenceRewrittenGrammar = precedenceRewrittenGrammar,
-                    leftRecursionRewrittenGrammar = null,
-                    firstSets = firstSets,
-                    followSets = followSets,
-                    slr1Automaton = slr1Automaton,
-                    lalr1Automaton = null,
-                    ll1Table = null,
-                    slr1Table = slr1Table,
-                    lalr1Table = null,
-                    parseResult = parseResult
-                )
-            }
-            ParserMethod.LALR1 -> {
-                val slr1Automaton = SLR1AutomataBuilder.build(workingGrammar, firstSets)
-                val mergedAutomaton = LALR1AutomatonMerger.mergeFromSLR1(slr1Automaton)
-                val lalr1Table = LALR1TableBuilder.build(mergedAutomaton)
-                val parseResult = LALR1Parser.parse(tokenEntries, ignoredCategories, lalr1Table)
-                PipelineResult(
-                    method = method,
-                    lexerResult = lexerResult,
-                    originalGrammar = originalGrammar,
-                    precedenceRewrittenGrammar = precedenceRewrittenGrammar,
-                    leftRecursionRewrittenGrammar = null,
-                    firstSets = firstSets,
-                    followSets = followSets,
-                    slr1Automaton = slr1Automaton,
-                    lalr1Automaton = mergedAutomaton,
-                    ll1Table = null,
-                    slr1Table = null,
-                    lalr1Table = lalr1Table,
-                    parseResult = parseResult
-                )
-            }
+        val parseResult = when (method) {
+            ParserMethod.LL1 -> LL1Parser.parse(tokenEntries, ignoredCategories, ll1Table)
+            ParserMethod.SLR1 -> SLR1Parser.parse(tokenEntries, ignoredCategories, slr1Table)
+            ParserMethod.LALR1 -> LALR1Parser.parse(tokenEntries, ignoredCategories, lalr1Table)
         }
+
+        val activeFirstSets = if (method == ParserMethod.LL1) ll1FirstSets else lrFirstSets
+        val activeFollowSets = if (method == ParserMethod.LL1) ll1FollowSets else lrFollowSets
+
+        return PipelineResult(
+            method = method,
+            lexerResult = lexerResult,
+            originalGrammar = originalGrammar,
+            precedenceRewrittenGrammar = precedenceRewrittenGrammar,
+            leftRecursionRewrittenGrammar = leftRecursionRewrittenGrammar,
+            firstSets = activeFirstSets,
+            followSets = activeFollowSets,
+            ll1FirstSets = ll1FirstSets,
+            ll1FollowSets = ll1FollowSets,
+            lrFirstSets = lrFirstSets,
+            lrFollowSets = lrFollowSets,
+            slr1Automaton = slr1Automaton,
+            lalr1Automaton = lalr1Automaton,
+            ll1Table = ll1Table,
+            slr1Table = slr1Table,
+            lalr1Table = lalr1Table,
+            parseResult = parseResult
+        )
     }
 }

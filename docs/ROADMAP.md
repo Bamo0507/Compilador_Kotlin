@@ -661,7 +661,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 33 -- `AppState`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 27, 32
 - **Archivos**: `gui/state/AppState.kt`
 - **Descripción**: `class AppState` con todos los campos `mutableStateOf`. `onPlay()` invoca `Pipeline.runFull` y guarda el resultado. `changeMethod(newMethod)` solo re-ejecuta el parser del nuevo método sobre los tokens ya construidos.
@@ -670,7 +670,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 34 -- Componentes básicos de GUI
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 32
 - **Archivos**:
   - `gui/components/CodeEditor.kt`
@@ -682,7 +682,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 35 -- Componentes de resultados
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 25, 29, 32
 - **Archivos**:
   - `gui/components/TokenList.kt`
@@ -694,7 +694,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 36 -- `WorkspaceScreen`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 33, 34, 35
 - **Archivos**: `gui/screens/WorkspaceScreen.kt`
 - **Descripción**: layout principal con toolbar superior (dropdown + play), centro con tabs entre los tres editores, y panel derecho con sub-pestañas Tokens / Parse Tree / Errores.
@@ -703,7 +703,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 37 -- Pantallas secundarias
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 28, 30, 33
 - **Archivos**:
   - `gui/screens/AutomatonScreen.kt`
