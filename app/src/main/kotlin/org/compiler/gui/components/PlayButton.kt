@@ -57,11 +57,3 @@ fun PlayButton(
         }
     }
 }
-
-@Composable
-fun PlayButtonDemo() {
-    PlayButton(
-        isRunning = false,
-        onClick = {}
-    )
-}

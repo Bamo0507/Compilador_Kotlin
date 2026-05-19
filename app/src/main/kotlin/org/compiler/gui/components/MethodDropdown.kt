@@ -85,11 +85,3 @@ fun ParserMethod.displayName(): String = when (this) {
     ParserMethod.SLR1 -> "SLR(1)"
     ParserMethod.LALR1 -> "LALR(1)"
 }
-
-@Composable
-fun MethodDropdownDemo() {
-    MethodDropdown(
-        selectedMethod = ParserMethod.SLR1,
-        onMethodSelected = {}
-    )
-}

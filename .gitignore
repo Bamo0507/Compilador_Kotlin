@@ -8,8 +8,14 @@ build
 
 /.idea
 
+# Kotlin compiler session cache
+.kotlin
+
 # Per-developer Gradle overrides (see gradle.properties.local.template)
 gradle.properties.local
+
+# Per-developer Android/IntelliJ overrides
+local.properties
 
 # Test-generated rendering artifacts
 extras/*.png

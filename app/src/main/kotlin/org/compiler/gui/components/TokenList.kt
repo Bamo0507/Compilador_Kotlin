@@ -145,8 +145,3 @@ internal fun ResultPanel(
         }
     }
 }
-
-@Composable
-fun TokenListDemo() {
-    TokenList(entries = emptyList(), modifier = Modifier.fillMaxSize())
-}

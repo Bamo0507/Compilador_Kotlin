@@ -109,13 +109,3 @@ fun CodeEditor(
         }
     }
 }
-
-@Composable
-fun CodeEditorDemo() {
-    CodeEditor(
-        value = "let x = 1;\nlet y = x + 2;",
-        onValueChange = {},
-        label = "input.java",
-        modifier = Modifier.fillMaxSize()
-    )
-}

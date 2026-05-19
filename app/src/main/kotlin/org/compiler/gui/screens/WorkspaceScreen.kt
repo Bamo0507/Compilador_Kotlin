@@ -237,11 +237,3 @@ private fun CompilerTabs(
         }
     }
 }
-
-@Composable
-fun WorkspaceScreenDemo() {
-    WorkspaceScreen(
-        state = AppState(),
-        modifier = Modifier.fillMaxSize()
-    )
-}

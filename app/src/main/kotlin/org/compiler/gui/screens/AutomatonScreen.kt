@@ -11,8 +11,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -31,6 +33,11 @@ import org.compiler.frontend.syntaxAnalyzer.visualization.DotExporter
 private enum class AutomatonView {
     SLR1,
     LALR1
+}
+
+private fun AutomatonView.displayName(): String = when (this) {
+    AutomatonView.SLR1 -> "SLR(1) without merge"
+    AutomatonView.LALR1 -> "LALR(1) merged"
 }
 
 @Composable
@@ -55,17 +62,16 @@ fun AutomatonScreen(
             fontWeight = FontWeight.SemiBold
         )
 
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            FilterChip(
-                selected = selectedView == AutomatonView.SLR1,
-                onClick = { selectedView = AutomatonView.SLR1 },
-                label = { Text("SLR(1) sin merge") }
-            )
-            FilterChip(
-                selected = selectedView == AutomatonView.LALR1,
-                onClick = { selectedView = AutomatonView.LALR1 },
-                label = { Text("LALR(1) con merge") }
-            )
+        SingleChoiceSegmentedButtonRow {
+            val options = AutomatonView.entries
+            options.forEachIndexed { index, view ->
+                SegmentedButton(
+                    selected = selectedView == view,
+                    onClick = { selectedView = view },
+                    shape = SegmentedButtonDefaults.itemShape(index = index, count = options.size),
+                    label = { Text(view.displayName()) }
+                )
+            }
         }
 
         if (result == null) {
@@ -158,9 +164,4 @@ internal fun ReadOnlyMonospacePanel(
             .verticalScroll(rememberScrollState())
             .horizontalScroll(rememberScrollState())
     )
-}
-
-@Composable
-fun AutomatonScreenDemo() {
-    AutomatonScreen(result = null, modifier = Modifier.fillMaxSize())
 }

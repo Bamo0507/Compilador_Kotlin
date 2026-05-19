@@ -70,9 +70,8 @@ class PipelineTest {
 
         // parser.yalp is not LL(1): the table must report conflicts but the
         // pipeline must not throw.
-        assertNotNull(result.ll1Table)
-        assertFalse(result.ll1Table!!.isLL1, "parser.yalp must produce LL(1) conflicts")
-        assertTrue(result.ll1Table!!.conflicts.isNotEmpty())
+        assertFalse(result.ll1Table.isLL1, "parser.yalp must produce LL(1) conflicts")
+        assertTrue(result.ll1Table.conflicts.isNotEmpty())
 
         assertNotNull(result.leftRecursionRewrittenGrammar)
         assertNotNull(result.slr1Automaton)

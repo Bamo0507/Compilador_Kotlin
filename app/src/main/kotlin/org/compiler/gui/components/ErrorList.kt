@@ -152,8 +152,3 @@ private fun ParseResult?.errorsOrEmpty(): List<ParseError> = when (this) {
     is ParseResult.Rejected -> errors
     null -> emptyList()
 }
-
-@Composable
-fun ErrorListDemo() {
-    ErrorList(errors = emptyList(), modifier = Modifier.fillMaxSize())
-}

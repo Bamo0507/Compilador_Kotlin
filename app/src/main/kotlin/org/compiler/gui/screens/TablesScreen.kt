@@ -102,8 +102,3 @@ fun TablesScreen(
         }
     }
 }
-
-@Composable
-fun TablesScreenDemo() {
-    TablesScreen(result = null, modifier = Modifier.fillMaxSize())
-}
