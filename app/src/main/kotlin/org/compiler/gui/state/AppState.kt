@@ -19,6 +19,12 @@ class AppState(
     var yalexContent by mutableStateOf(initialYalexContent)
     var yalpContent by mutableStateOf(initialYalpContent)
     var inputContent by mutableStateOf(initialInputContent)
+    var yalexFilePath by mutableStateOf<String?>(null)
+        private set
+    var yalpFilePath by mutableStateOf<String?>(null)
+        private set
+    var inputFilePath by mutableStateOf<String?>(null)
+        private set
     var selectedMethod by mutableStateOf(ParserMethod.SLR1)
         private set
     var pipelineResult by mutableStateOf<PipelineResult?>(null)
@@ -44,6 +50,29 @@ class AppState(
         } finally {
             isRunning = false
         }
+    }
+
+    fun updateYalexContent(content: String, filePath: String? = yalexFilePath) {
+        yalexContent = content
+        yalexFilePath = filePath
+    }
+
+    fun updateYalpContent(content: String, filePath: String? = yalpFilePath) {
+        yalpContent = content
+        yalpFilePath = filePath
+    }
+
+    fun updateInputContent(content: String, filePath: String? = inputFilePath) {
+        inputContent = content
+        inputFilePath = filePath
+    }
+
+    fun reportFileError(message: String) {
+        errorMessage = message
+    }
+
+    fun clearError() {
+        errorMessage = null
     }
 
     fun changeMethod(newMethod: ParserMethod) {

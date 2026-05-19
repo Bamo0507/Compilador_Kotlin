@@ -714,7 +714,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 38 -- Menús File y View
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Ticket 33
 - **Archivos**:
   - `gui/components/FileMenu.kt`
@@ -725,7 +725,7 @@ La GUI es la **única interfaz** al usuario final. No hay CLI.
 
 ### Ticket 39 -- Punto de entrada GUI
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: Tickets 36, 37, 38
 - **Archivos**:
   - `gui/App.kt`
