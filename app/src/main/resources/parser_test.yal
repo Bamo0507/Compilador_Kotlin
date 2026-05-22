@@ -1,41 +1,89 @@
+(* Especificacion lexica para un subconjunto de Java.
+   Reconoce keywords, identificadores, literales (int, long, float, char, string),
+   todos los operadores de Java, separadores y comentarios. *)
+
 let digit = ['0'-'9']
 let letter = ['a'-'z''A'-'Z']
 let underscore = '_'
 
 let alphanumeric = letter | digit | underscore
+let id = (letter | underscore) alphanumeric*
+
 let integer = digit+
+let long_lit = digit+ ('l' | 'L')
 let float_basic = digit+ '.' digit*
 let float_short = '.' digit+
-let float = float_basic | float_short
+let float = (float_basic | float_short) (('f' | 'F' | 'd' | 'D'))?
 
-let id = (letter | underscore) alphanumeric*
-let whitespace = (' ' | '\t' | '\n')+
+let string_lit = '"' [^'"']* '"'
 
-let kw_class    = "class"
-let kw_function = "function"
-let kw_let      = "let"
-let kw_if       = "if"
-let kw_else     = "else"
-let kw_while    = "while"
-let kw_return   = "return"
-let kw_true     = "true"
-let kw_false    = "false"
+let whitespace = (' ' | '\t' | '\n' | '\r')+
 
-let op_or     = "||"
-let op_and    = "&&"
-let op_eq     = "=="
-let op_neq    = "!="
-let op_le     = "<="
-let op_ge     = ">="
-let op_lt     = "<"
-let op_gt     = ">"
+let kw_class     = "class"
+let kw_extends   = "extends"
+let kw_public    = "public"
+let kw_private   = "private"
+let kw_protected = "protected"
+let kw_static    = "static"
+let kw_final     = "final"
+let kw_abstract  = "abstract"
+let kw_void      = "void"
+let kw_int       = "int"
+let kw_long      = "long"
+let kw_short     = "short"
+let kw_byte      = "byte"
+let kw_double    = "double"
+let kw_float     = "float"
+let kw_boolean   = "boolean"
+let kw_char      = "char"
+let kw_if        = "if"
+let kw_else      = "else"
+let kw_while     = "while"
+let kw_for       = "for"
+let kw_return    = "return"
+let kw_break     = "break"
+let kw_continue  = "continue"
+let kw_new       = "new"
+let kw_true      = "true"
+let kw_false     = "false"
+let kw_null      = "null"
+let kw_this      = "this"
+
+let op_ushr_assign = ">>>="
+let op_shr_assign  = ">>="
+let op_shl_assign  = "<<="
+let op_ushr        = ">>>"
+let op_shr         = ">>"
+let op_shl         = "<<"
+let op_inc         = "++"
+let op_dec         = "--"
+let op_plus_assign  = "+="
+let op_minus_assign = "-="
+let op_times_assign = "*="
+let op_div_assign   = "/="
+let op_mod_assign   = "%="
+let op_and_assign   = "&="
+let op_or_assign    = "|="
+let op_xor_assign   = "^="
+let op_or   = "||"
+let op_and  = "&&"
+let op_eq   = "=="
+let op_neq  = "!="
+let op_le   = "<="
+let op_ge   = ">="
 let op_plus   = "+"
 let op_minus  = "-"
 let op_times  = "*"
 let op_div    = "/"
 let op_mod    = "%"
-let op_not    = "!"
+let op_lt     = "<"
+let op_gt     = ">"
 let op_assign = "="
+let op_not    = "!"
+let op_bitnot = "~"
+let op_bitand = "&"
+let op_bitor  = "|"
+let op_bitxor = "^"
 
 let lparen   = "("
 let rparen   = ")"
@@ -43,8 +91,9 @@ let lbrace   = "{"
 let rbrace   = "}"
 let lbracket = "["
 let rbracket = "]"
-let comma    = ","
 let semi     = ";"
+let comma    = ","
+let dot      = "."
 
 let line_comment  = "//" [^'\n']*
 let block_comment = "/*" ([^'*'] | ('*')+ [^'*' '/'])* ('*')+ "/"
@@ -54,38 +103,81 @@ rule tokens =
   | whitespace  { WHITESPACE }
   | comment     { COMMENT }
   | float       { FLOAT }
+  | long_lit    { LONG }
   | integer     { INT }
-  | kw_class    { KW_CLASS }
-  | kw_function { KW_FUNCTION }
-  | kw_let      { KW_LET }
-  | kw_if       { KW_IF }
-  | kw_else     { KW_ELSE }
-  | kw_while    { KW_WHILE }
-  | kw_return   { KW_RETURN }
-  | kw_true     { KW_TRUE }
-  | kw_false    { KW_FALSE }
-  | id          { ID }
+  | string_lit  { STRING_LIT }
+  | kw_class     { KW_CLASS }
+  | kw_extends   { KW_EXTENDS }
+  | kw_public    { KW_PUBLIC }
+  | kw_private   { KW_PRIVATE }
+  | kw_protected { KW_PROTECTED }
+  | kw_static    { KW_STATIC }
+  | kw_final     { KW_FINAL }
+  | kw_abstract  { KW_ABSTRACT }
+  | kw_void      { KW_VOID }
+  | kw_int       { KW_INT }
+  | kw_long      { KW_LONG }
+  | kw_short     { KW_SHORT }
+  | kw_byte      { KW_BYTE }
+  | kw_double    { KW_DOUBLE }
+  | kw_float     { KW_FLOAT }
+  | kw_boolean   { KW_BOOLEAN }
+  | kw_char      { KW_CHAR }
+  | kw_if        { KW_IF }
+  | kw_else      { KW_ELSE }
+  | kw_while     { KW_WHILE }
+  | kw_for       { KW_FOR }
+  | kw_return    { KW_RETURN }
+  | kw_break     { KW_BREAK }
+  | kw_continue  { KW_CONTINUE }
+  | kw_new       { KW_NEW }
+  | kw_true      { KW_TRUE }
+  | kw_false     { KW_FALSE }
+  | kw_null      { KW_NULL }
+  | kw_this      { KW_THIS }
+  | id           { ID }
+  | op_ushr_assign  { OP_USHR_ASSIGN }
+  | op_shr_assign   { OP_SHR_ASSIGN }
+  | op_shl_assign   { OP_SHL_ASSIGN }
+  | op_ushr         { OP_USHR }
+  | op_shr          { OP_SHR }
+  | op_shl          { OP_SHL }
+  | op_inc          { OP_INC }
+  | op_dec          { OP_DEC }
+  | op_plus_assign  { OP_PLUS_ASSIGN }
+  | op_minus_assign { OP_MINUS_ASSIGN }
+  | op_times_assign { OP_TIMES_ASSIGN }
+  | op_div_assign   { OP_DIV_ASSIGN }
+  | op_mod_assign   { OP_MOD_ASSIGN }
+  | op_and_assign   { OP_AND_ASSIGN }
+  | op_or_assign    { OP_OR_ASSIGN }
+  | op_xor_assign   { OP_XOR_ASSIGN }
   | op_or       { OP_OR }
   | op_and      { OP_AND }
   | op_eq       { OP_EQ }
   | op_neq      { OP_NEQ }
   | op_le       { OP_LE }
   | op_ge       { OP_GE }
-  | op_lt       { OP_LT }
-  | op_gt       { OP_GT }
   | op_plus     { OP_PLUS }
   | op_minus    { OP_MINUS }
   | op_times    { OP_TIMES }
   | op_div      { OP_DIV }
   | op_mod      { OP_MOD }
-  | op_not      { OP_NOT }
+  | op_lt       { OP_LT }
+  | op_gt       { OP_GT }
   | op_assign   { OP_ASSIGN }
+  | op_not      { OP_NOT }
+  | op_bitnot   { OP_BITNOT }
+  | op_bitand   { OP_BITAND }
+  | op_bitor    { OP_BITOR }
+  | op_bitxor   { OP_BITXOR }
   | lparen      { LPAREN }
   | rparen      { RPAREN }
   | lbrace      { LBRACE }
   | rbrace      { RBRACE }
   | lbracket    { LBRACKET }
   | rbracket    { RBRACKET }
-  | comma       { COMMA }
   | semi        { SEMI }
+  | comma       { COMMA }
+  | dot         { DOT }
   | eof         { EOF }

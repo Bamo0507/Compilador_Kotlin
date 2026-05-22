@@ -15,8 +15,12 @@ import kotlin.test.assertTrue
 class AppStateTest {
 
     private val simpleInput = """
-        let x = 1;
-        let y = 2 + 3;
+        public class A {
+            public int f() {
+                int x = 1;
+                return x + 2;
+            }
+        }
     """.trimIndent()
 
     private fun appState(): AppState =

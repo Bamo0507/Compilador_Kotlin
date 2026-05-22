@@ -21,8 +21,8 @@ class YalpReaderTest {
 
         val terminalNames = grammar.terminals.map { it.name }.toSet()
         assertTrue("KW_CLASS" in terminalNames)
-        assertTrue("KW_FUNCTION" in terminalNames)
-        assertTrue("KW_LET" in terminalNames)
+        assertTrue("KW_VOID" in terminalNames)
+        assertTrue("KW_RETURN" in terminalNames)
         assertTrue("ID" in terminalNames)
         assertTrue("INT" in terminalNames)
         assertTrue("FLOAT" in terminalNames)
@@ -38,16 +38,23 @@ class YalpReaderTest {
     }
 
     @Test
-    fun `parser yalp declares 8 precedence levels in the expected order`() {
+    fun `parser yalp declares 12 precedence levels in the expected order`() {
         val content = File("src/main/resources/parser.yalp").readText()
         val grammar = YalpReader.parse(content)
 
-        assertEquals(8, grammar.precedenceTable.size)
-        // First level (lowest precedence) is OP_OR; last level (highest) is OP_ASSIGN.
-        assertEquals(setOf(org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol.Terminal("OP_OR")),
-            grammar.precedenceTable[0].operators)
-        assertEquals(setOf(org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol.Terminal("OP_ASSIGN")),
-            grammar.precedenceTable[7].operators)
+        assertEquals(12, grammar.precedenceTable.size)
+        // First level (lowest precedence) is the assignment group; it includes OP_ASSIGN.
+        assertTrue(
+            Symbol.Terminal("OP_ASSIGN") in grammar.precedenceTable[0].operators,
+            "Lowest precedence level should include OP_ASSIGN"
+        )
+        assertEquals(Associativity.RIGHT, grammar.precedenceTable[0].associativity)
+        // Last level (highest precedence) is the unary group; it includes OP_NOT.
+        assertTrue(
+            Symbol.Terminal("OP_NOT") in grammar.precedenceTable[11].operators,
+            "Highest precedence level should include OP_NOT"
+        )
+        assertEquals(Associativity.RIGHT, grammar.precedenceTable[11].associativity)
     }
 
     @Test

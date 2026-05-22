@@ -100,7 +100,6 @@ object LeftRecursionRewriter {
             Production(
                 id = nextId(),
                 head = auxiliary,
-                // drop(1) removes the leading nonTerminal (the recursive reference)
                 body = production.body.drop(1) + auxiliary
             )
         }

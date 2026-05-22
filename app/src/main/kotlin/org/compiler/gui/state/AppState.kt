@@ -108,8 +108,27 @@ class AppState(
 
     private companion object {
         private val DEFAULT_INPUT = """
-            let x = 1;
-            let y = 2 + 3;
+            public class Counter {
+                private int count;
+
+                public void increment() {
+                    count = count + 1;
+                }
+
+                public int compute(int n) {
+                    int total = 0;
+                    int i = 0;
+                    while (i < n) {
+                        total = total + i * 2;
+                        i = i + 1;
+                    }
+                    if (total > 100) {
+                        return total;
+                    } else {
+                        return 0;
+                    }
+                }
+            }
         """.trimIndent()
 
         private fun loadResourceText(name: String): String =

@@ -13,11 +13,15 @@ import kotlin.test.assertTrue
 
 class PipelineTest {
 
-    // A small program with two var_decls: enough to exercise the parser without
-    // pulling in cadenas.txt (which has an intentional error in it).
+    // A small Java program: enough to exercise the parser without pulling in
+    // cadenas.txt (which has an intentional error in it).
     private val simpleInput = """
-        let x = 1;
-        let y = 2 + 3;
+        public class A {
+            public int f() {
+                int x = 1;
+                return x + 2;
+            }
+        }
     """.trimIndent()
 
     private fun readYalex(): String =

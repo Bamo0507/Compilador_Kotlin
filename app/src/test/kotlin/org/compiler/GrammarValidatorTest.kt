@@ -16,12 +16,21 @@ import kotlin.test.assertTrue
 class GrammarValidatorTest {
 
     private val javaLexerCategories = setOf(
-        "KW_CLASS", "KW_FUNCTION", "KW_LET", "KW_IF", "KW_ELSE", "KW_WHILE", "KW_RETURN",
-        "KW_TRUE", "KW_FALSE",
-        "ID", "INT", "FLOAT",
-        "OP_OR", "OP_AND", "OP_EQ", "OP_NEQ", "OP_LT", "OP_GT", "OP_LE", "OP_GE",
-        "OP_PLUS", "OP_MINUS", "OP_TIMES", "OP_DIV", "OP_MOD", "OP_NOT", "OP_ASSIGN",
-        "LPAREN", "RPAREN", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET", "COMMA", "SEMI",
+        "KW_CLASS", "KW_EXTENDS", "KW_PUBLIC", "KW_PRIVATE", "KW_PROTECTED", "KW_STATIC",
+        "KW_FINAL", "KW_ABSTRACT", "KW_VOID", "KW_INT", "KW_LONG", "KW_SHORT", "KW_BYTE",
+        "KW_DOUBLE", "KW_FLOAT", "KW_BOOLEAN", "KW_CHAR", "KW_IF", "KW_ELSE", "KW_WHILE",
+        "KW_FOR", "KW_RETURN", "KW_BREAK", "KW_CONTINUE", "KW_NEW", "KW_TRUE", "KW_FALSE",
+        "KW_NULL", "KW_THIS",
+        "ID", "INT", "LONG", "FLOAT", "STRING_LIT",
+        "OP_ASSIGN", "OP_PLUS_ASSIGN", "OP_MINUS_ASSIGN", "OP_TIMES_ASSIGN", "OP_DIV_ASSIGN",
+        "OP_MOD_ASSIGN", "OP_AND_ASSIGN", "OP_OR_ASSIGN", "OP_XOR_ASSIGN", "OP_SHL_ASSIGN",
+        "OP_SHR_ASSIGN", "OP_USHR_ASSIGN",
+        "OP_OR", "OP_AND", "OP_BITOR", "OP_BITXOR", "OP_BITAND",
+        "OP_EQ", "OP_NEQ", "OP_LT", "OP_GT", "OP_LE", "OP_GE",
+        "OP_SHL", "OP_SHR", "OP_USHR",
+        "OP_PLUS", "OP_MINUS", "OP_TIMES", "OP_DIV", "OP_MOD",
+        "OP_NOT", "OP_BITNOT", "OP_INC", "OP_DEC",
+        "LPAREN", "RPAREN", "LBRACE", "RBRACE", "LBRACKET", "RBRACKET", "SEMI", "COMMA", "DOT",
         "WHITESPACE", "COMMENT"
     )
 
