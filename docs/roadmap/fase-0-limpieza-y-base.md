@@ -18,37 +18,32 @@ que ya parsea. **Cero semántica todavía** — eso es correcto, esta fase es la
 
 ## Ticket 0.1 — Eliminar la documentación del proyecto anterior
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
-**Archivos a eliminar:**
+**Archivos eliminados:**
 
 - `docs/ROADMAP.md`
 - `docs/PROJECT_2_PLAN.md`
-- `docs/plans/` (completa)
-- `docs/semantica/` (completa)
+- `docs/plans/` (completa, 2 archivos)
 
 Queda solo `docs/roadmap/` (este plan) y lo que se cree de aquí en adelante.
 
-**Antes de borrar — etiquetar el commit actual:**
+**Sin tag de respaldo.** El equipo decidió no etiquetar: el trabajo del proyecto
+anterior ya se calificó y no hace falta conservarlo señalizado. Los archivos siguen
+siendo recuperables desde el historial mientras el commit exista:
 
 ```bash
-git tag proyecto2-lexer-parser-final
-git push origin proyecto2-lexer-parser-final
+git show 0319b23:docs/PROJECT_2_PLAN.md
 ```
-
-Con el tag, `git show proyecto2-lexer-parser-final:docs/PROJECT_2_PLAN.md`
-recupera cualquier archivo sin ensuciar el repo, y si algún día piden evidencia de
-la fase anterior, el tag es la respuesta.
 
 **Por qué eliminar y no dejar:**
 
 `PROJECT_2_PLAN.md` describe módulos que van a dejar de existir (LR(0), LR(1)) y
-tipos con nombres distintos a los reales — ya era un problema con el código
-actual. `docs/semantica/` tiene cinco documentos que asumen la gramática de Java y
-los parsers LR: la teoría sigue siendo válida, el plan ya no. Si se quedan en
-`docs/`, alguien —un compañero o el catedrático— los va a leer y buscar archivos
-que no existen.
+tipos con nombres distintos a los reales — ya era un problema con el código actual.
+`docs/plans/` documenta el reescritor de precedencia y la terminología SLR/LALR, que
+se van con los parsers. Si se quedan en `docs/`, alguien —un compañero o el
+catedrático— los va a leer y buscar archivos que no existen.
 
 Los entregables de documentación que pide el enunciado (arquitectura del proyecto
 y cómo ejecutarlo) son **nuevos**, así que borrar los viejos no quita nada de la
@@ -56,8 +51,7 @@ nota.
 
 **Aceptación:**
 
-- `docs/` no contiene nada del proyecto anterior.
-- El tag `proyecto2-lexer-parser-final` existe en el remoto.
+- `docs/` no contiene nada del proyecto anterior. ✅
 
 ---
 
