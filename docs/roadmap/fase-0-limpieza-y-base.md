@@ -57,7 +57,7 @@ nota.
 
 ## Ticket 0.2 — Eliminar los módulos que ANTLR reemplaza
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.1
 
 **Archivos a eliminar:**
@@ -72,7 +72,9 @@ nota.
 | `resources/*.yal`, `*.yalp`, `*.yaml`, `output/`, `cadenas.txt` | — | Especificaciones y AFD serializados |
 | `app/generatedTrees/` | — | PNGs de árboles sintácticos de regex |
 
-**Tests a eliminar** (22 archivos):
+**Tests a eliminar** (25 archivos: los 22 de los módulos que se van, más
+`ParseTreeExporterTest`, `PipelineTest` y `AppTest` —este último es boilerplate vacío
+de `gradle init`—). Sobrevive solo `AppStateTest`, que se ajusta en el 0.3:
 
 `JavaGrammarSpecTest`, `JavaLexerSpecTest`, `LexerTest`, `YalpReaderTest`,
 `GrammarValidatorTest`, `PrecedenceRewriterTest`, `PrecedenceOverrideTest`,
@@ -114,7 +116,9 @@ import org.compiler.frontend.syntaxAnalyzer.runtime.models.PipelineResult
 
 Aplazarlos los dejaba muertos en el repo durante cinco tickets (0.2 a 1.3), que es
 justo lo que esta fase existe para evitar. Borrando todo aquí queda **una sola
-frontera**: antes del ticket, 83 archivos; después, 11.
+frontera** para el código que ANTLR reemplaza: antes del ticket, 83 archivos;
+después, 19 — y de esos, los 8 que sobran son de GUI y diagnóstico, que se limpian
+en el 0.3 y el 0.6.
 
 **Por qué se borra:** es cerca del 87% del código actual. Ese trabajo **ya se
 calificó** — fue el Proyecto 1 y la fase anterior del 2. Dejarlo en el repo no suma
@@ -123,9 +127,13 @@ es lo que permite explicar qué hace ANTLR por dentro, y eso no vive en los arch
 
 **Aceptación:**
 
-- `find app/src/main -name "*.kt" | wc -l` baja de **83 a 11**.
+- `find app/src/main -name "*.kt" | wc -l` baja de **83 a 19**. ✅
+
+  Los 19 no son los 11 finales: faltan borrar 7 componentes de GUI (ticket 0.3) y
+  `DiagnosticsTable` (ticket 0.6). **19 − 7 − 1 = 11** al cerrar la fase.
+
 - El proyecto **no compila todavía**: es esperado, la GUI referencia lo borrado y
-  eso lo arregla el ticket 0.3.
+  eso lo arregla el ticket 0.3. ✅
 
 ---
 
