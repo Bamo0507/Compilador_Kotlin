@@ -4,11 +4,17 @@
 [versions]
 kotlin = "2.1.21"
 compose = "1.8.2"
-guava = "33.3.1-jre"
+antlr = "4.13.2"
 junit-jupiter-engine = "5.11.3"
 
 [libraries]
-guava = { module = "com.google.guava:guava", version.ref = "guava" }
+# El GENERADOR: lee Compiscript.g4 y escribe las clases Java. Solo en tiempo de build.
+antlr = { module = "org.antlr:antlr4", version.ref = "antlr" }
+
+# El RUNTIME: las clases base de las que hereda el codigo generado (Lexer, Parser,
+# BaseErrorListener, CharStreams...). Este si viaja en el jar final.
+antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
+
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter-engine" }
 
 [plugins]
