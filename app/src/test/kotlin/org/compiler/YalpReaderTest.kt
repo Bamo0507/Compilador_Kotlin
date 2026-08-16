@@ -38,23 +38,36 @@ class YalpReaderTest {
     }
 
     @Test
-    fun `parser yalp declares 12 precedence levels in the expected order`() {
+    fun `parser yalp declares 13 precedence levels in the expected order`() {
         val content = File("src/main/resources/parser.yalp").readText()
         val grammar = YalpReader.parse(content)
 
-        assertEquals(12, grammar.precedenceTable.size)
+        val lastLevel = grammar.precedenceTable.size - 1
+        assertEquals(13, grammar.precedenceTable.size)
         // First level (lowest precedence) is the assignment group; it includes OP_ASSIGN.
         assertTrue(
             Symbol.Terminal("OP_ASSIGN") in grammar.precedenceTable[0].operators,
             "Lowest precedence level should include OP_ASSIGN"
         )
         assertEquals(Associativity.RIGHT, grammar.precedenceTable[0].associativity)
-        // Last level (highest precedence) is the unary group; it includes OP_NOT.
+        // Second level is the ternary, right associative, between assignment and the
+        // logical operators -- exactly where Java puts it.
         assertTrue(
-            Symbol.Terminal("OP_NOT") in grammar.precedenceTable[11].operators,
+            Symbol.Terminal("QUESTION") in grammar.precedenceTable[1].operators,
+            "Second level should be the ternary group"
+        )
+        assertEquals(Associativity.RIGHT, grammar.precedenceTable[1].associativity)
+        // Last level (highest precedence) is the unary group; it includes OP_NOT and the
+        // UMINUS pseudo-token that gives unary minus its priority.
+        assertTrue(
+            Symbol.Terminal("OP_NOT") in grammar.precedenceTable[lastLevel].operators,
             "Highest precedence level should include OP_NOT"
         )
-        assertEquals(Associativity.RIGHT, grammar.precedenceTable[11].associativity)
+        assertTrue(
+            Symbol.Terminal("UMINUS") in grammar.precedenceTable[lastLevel].operators,
+            "Highest precedence level should include the UMINUS pseudo-token"
+        )
+        assertEquals(Associativity.RIGHT, grammar.precedenceTable[lastLevel].associativity)
     }
 
     @Test

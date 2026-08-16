@@ -1,34 +1,84 @@
-/* Gramatica de un subconjunto de Java.
-   Cubre: clases con herencia, modificadores, campos, metodos, tipos primitivos
-   y de clase, sentencias (if/else, while, for, return, break, continue), llamadas,
-   acceso a miembros (.), indexado [], creacion de objetos/arreglos (new), y
-   expresiones con TODOS los operadores de Java.
+/* Gramatica de Java (subconjunto fiel, JLS caps. 7-9 y 14-15).
+   Cubre: paquete e imports (incluido import a.b.*), clases con herencia e
+   interfaces implementadas, interfaces (con metodos default y constantes),
+   enums (basicos y con miembros), tipos anidados, modificadores completos,
+   bloques inicializadores estaticos y de instancia, campos y variables locales
+   con multiples declaradores, constructores con super(...)/this(...),
+   metodos con throws, acceso super.miembro, y las sentencias if/else, while,
+   do-while, for clasico y for-each, switch/case/default, return, break y
+   continue (con y sin etiqueta), sentencias etiquetadas, throw,
+   try/catch/finally, assert y synchronized. Expresiones con todos los
+   operadores binarios, los unarios prefijos !, ~, ++, --, y el incremento y
+   decremento POSTFIJO como sentencia y como actualizacion de for (i++;).
+   Tipos arreglo: primitivos en cualquier posicion (int[] x local, campo,
+   parametro, retorno) y de clase (String[]) en campos, parametros y retornos.
+   Literales: int (decimal/hex/bin), long, float/double, string, char, true,
+   false, null.
 
    Las producciones binarias y unarias de expr son AMBIGUAS por diseno -- el
    PrecedenceRewriter las desambigua usando los niveles declarados abajo, igual
    que en un .yacc real. Por eso aqui se listan planas (expr OP expr) y la
    precedencia/asociatividad vive en la tabla, no en la estructura.
 
-   Decisiones para mantener la gramatica parseable con un token de lookahead:
-   - Los cuerpos de if/while/for son block ({...}) obligatorio. Evita el
-     dangling-else y mantiene SLR(1)/LALR(1) sin conflictos.
-   - No hay declaracion de tipos arreglo (int[] x). Se conserva el acceso a[i]
-     y la creacion new T[n]. Esto evita el choque type-vs-expr sobre LBRACKET.
-   - Operadores omitidos a proposito (no encajan en binario-infijo/unario-prefijo):
-     ternario ?:, postfijo a++/a--, instanceof. Tampoco hay switch, do-while,
-     try/catch, genericos, lambdas ni anotaciones.
-   - Literal char ('a') omitido: su delimitador ' choca con la sintaxis del .yal
-     y rompe el minimizador del lexer (Proyecto 1). String ("...") si esta.
-   - Unario +/- omitido: comparte token con el binario +/-, y el rewriter (sin
-     %prec) no puede darle mayor precedencia, generando shift/reduce. Se conservan
-     los unarios con token propio: !, ~, ++, --. Para negativos usar (0 - x). */
+   Jerarquia de tipos (decision clave para mantener LR(1)):
+   - simple_type: primitivo o ID. Es lo que acepta new y catch.
+   - type: simple_type o arreglo de primitivo (int[]). Valido en locales y
+     for-each porque ningun primitivo inicia una expresion.
+   - decl_type: type o arreglo de clase (String[]). Valido SOLO en miembros y
+     parametros, contextos sin expresiones. En una sentencia, "A[] x;" choca
+     con la expresion "a[i] = ..." (reduce/reduce sobre LBRACKET con un token
+     de lookahead), por eso los locales de tipo arreglo de clase quedan fuera.
 
-%token KW_CLASS KW_EXTENDS
+   Decisiones para mantener la gramatica parseable con un token de lookahead:
+   - Los cuerpos de if/while/for/do admiten sentencia sin llaves
+     (if (x) return;). Esto reintroduce el dangling-else a proposito: genera
+     UN conflicto shift/reduce sobre KW_ELSE que se resuelve por shift, lo que
+     asocia el else al if mas cercano -- exactamente la semantica de Java y la
+     convencion del Dragon Book §4.8.2. Es el unico conflicto de la gramatica.
+   - Los bloques inicializadores comparten el prefijo modifiers con los demas
+     miembros (initializer_block : modifiers block). Separar "static { }" con
+     KW_STATIC propio crearia shift/reduce contra modifiers. El costo es que
+     la gramatica acepta "public { }" y el chequeo queda para semantica.
+   - instanceof SI soportado: "expr KW_INSTANCEOF decl_type". El rewriter lo
+     reconoce como operador binario con operando derecho FIJO (solo el lado
+     izquierdo entra en la cascada) y lo coloca en el nivel relacional, junto a
+     < > <= >=. Acepta tipos de clase y de arreglo (o instanceof String[]).
+   - ++/-- POSTFIJO si soportado en cualquier expresion; vive en el no-terminal
+     postfix (mismo nivel que . y []), no en la cascada.
+   - Ternario ?: SI soportado. El rewriter lo reconoce como forma de 5 simbolos
+     (expr QUESTION expr COLON expr) y genera
+     lvl : lvl+1 QUESTION lvl0 COLON lvl, o sea: condicion en el nivel mas
+     apretado, rama del medio en el mas flojo (por eso a ? b = 1 : c es legal) y
+     cola recursiva al mismo nivel, lo que da asociatividad DERECHA:
+     a ? b : c ? d : e agrupa a ? b : (c ? d : e). Solo QUESTION necesita nivel
+     de precedencia; COLON queda fuera de la tabla porque tambien lo usan case,
+     assert, las etiquetas y el for-each.
+   - Ya no queda ningun operador de Java sin soportar.
+   - Cast (T) x omitido: choca con la expresion parentizada (expr) y requiere
+     mas de un token de lookahead.
+   - Anotaciones soportadas como modifier: marcador (@Override) y con
+     argumentos (@SuppressWarnings("all")).
+   - Sin genericos (List<T> exige cooperacion lexer-parser por >>), lambdas,
+     referencias a metodo (::), inicializadores de arreglo {1,2}, varargs,
+     try-with-resources, clases anonimas ni o.new Inner().
+   - Arreglos: hasta dos dimensiones en declaraciones y en new. Los locales de
+     tipo arreglo de CLASE (String[] s;) siguen fuera (ver arriba).
+   - Unario +/- SI soportado via %prec UMINUS. El token OP_MINUS vive en el
+     nivel aditivo (para la resta), pero la produccion "OP_MINUS expr" lleva la
+     etiqueta UMINUS, un pseudo-token declarado en el nivel unario (el mas
+     alto). Asi -2 + 3 agrupa (-2) + 3 y -a * b agrupa (-a) * b. UMINUS no lo
+     produce el lexer nunca: existe solo como rotulo de prioridad. */
+
+%token KW_PACKAGE KW_IMPORT
+%token KW_CLASS KW_INTERFACE KW_ENUM KW_EXTENDS KW_IMPLEMENTS
 %token KW_PUBLIC KW_PRIVATE KW_PROTECTED KW_STATIC KW_FINAL KW_ABSTRACT
+%token KW_SYNCHRONIZED KW_NATIVE KW_STRICTFP KW_TRANSIENT KW_VOLATILE
 %token KW_VOID KW_INT KW_LONG KW_SHORT KW_BYTE KW_DOUBLE KW_FLOAT KW_BOOLEAN KW_CHAR
-%token KW_IF KW_ELSE KW_WHILE KW_FOR KW_RETURN KW_BREAK KW_CONTINUE KW_NEW
-%token KW_TRUE KW_FALSE KW_NULL KW_THIS
-%token ID INT LONG FLOAT STRING_LIT
+%token KW_IF KW_ELSE KW_WHILE KW_DO KW_FOR KW_SWITCH KW_CASE KW_DEFAULT
+%token KW_RETURN KW_BREAK KW_CONTINUE KW_NEW KW_THROW KW_THROWS
+%token KW_TRY KW_CATCH KW_FINALLY KW_ASSERT
+%token KW_TRUE KW_FALSE KW_NULL KW_THIS KW_SUPER KW_INSTANCEOF
+%token ID INT LONG FLOAT STRING_LIT CHAR_LIT
 %token OP_ASSIGN OP_PLUS_ASSIGN OP_MINUS_ASSIGN OP_TIMES_ASSIGN OP_DIV_ASSIGN OP_MOD_ASSIGN
 %token OP_AND_ASSIGN OP_OR_ASSIGN OP_XOR_ASSIGN OP_SHL_ASSIGN OP_SHR_ASSIGN OP_USHR_ASSIGN
 %token OP_OR OP_AND OP_BITOR OP_BITXOR OP_BITAND
@@ -36,40 +86,100 @@
 %token OP_SHL OP_SHR OP_USHR
 %token OP_PLUS OP_MINUS OP_TIMES OP_DIV OP_MOD
 %token OP_NOT OP_BITNOT OP_INC OP_DEC
-%token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET SEMI COMMA DOT
+%token LPAREN RPAREN LBRACE RBRACE LBRACKET RBRACKET SEMI COMMA DOT COLON AT QUESTION
 
 IGNORE WHITESPACE COMMENT
 
 /* Precedencia: las lineas mas abajo tienen MAYOR precedencia.
    Refleja la jerarquia de operadores de Java, de menor a mayor. */
 %right OP_ASSIGN OP_PLUS_ASSIGN OP_MINUS_ASSIGN OP_TIMES_ASSIGN OP_DIV_ASSIGN OP_MOD_ASSIGN OP_AND_ASSIGN OP_OR_ASSIGN OP_XOR_ASSIGN OP_SHL_ASSIGN OP_SHR_ASSIGN OP_USHR_ASSIGN
+%right QUESTION
 %left  OP_OR
 %left  OP_AND
 %left  OP_BITOR
 %left  OP_BITXOR
 %left  OP_BITAND
 %left  OP_EQ OP_NEQ
-%left  OP_LT OP_GT OP_LE OP_GE
+%left  OP_LT OP_GT OP_LE OP_GE KW_INSTANCEOF
 %left  OP_SHL OP_SHR OP_USHR
 %left  OP_PLUS OP_MINUS
 %left  OP_TIMES OP_DIV OP_MOD
-%right OP_NOT OP_BITNOT OP_INC OP_DEC
+%right OP_NOT OP_BITNOT OP_INC OP_DEC UMINUS
 
 %%
 
-program : type_decl_list
+program : package_opt import_list type_decl_list
         ;
+
+package_opt : KW_PACKAGE qualified_name SEMI
+            |
+            ;
+
+import_list : import_list import_decl
+            |
+            ;
+
+import_decl : KW_IMPORT qualified_name SEMI
+            | KW_IMPORT qualified_name DOT OP_TIMES SEMI
+            ;
+
+qualified_name : qualified_name DOT ID
+               | ID
+               ;
 
 type_decl_list : type_decl_list type_decl
                | type_decl
                ;
 
 type_decl : class_decl
+          | interface_decl
+          | enum_decl
           ;
 
-class_decl : modifiers KW_CLASS ID class_body
-           | modifiers KW_CLASS ID KW_EXTENDS ID class_body
+class_decl : modifiers KW_CLASS ID extends_opt implements_opt class_body
            ;
+
+extends_opt : KW_EXTENDS ID
+            |
+            ;
+
+implements_opt : KW_IMPLEMENTS class_type_list
+               |
+               ;
+
+class_type_list : class_type_list COMMA ID
+                | ID
+                ;
+
+interface_decl : modifiers KW_INTERFACE ID iface_extends_opt LBRACE iface_member_list RBRACE
+               ;
+
+iface_extends_opt : KW_EXTENDS class_type_list
+                  |
+                  ;
+
+iface_member_list : iface_member_list iface_member
+                  |
+                  ;
+
+iface_member : modifiers decl_type ID LPAREN param_list RPAREN throws_opt SEMI
+             | modifiers KW_VOID ID LPAREN param_list RPAREN throws_opt SEMI
+             | modifiers decl_type ID LPAREN param_list RPAREN throws_opt block
+             | modifiers KW_VOID ID LPAREN param_list RPAREN throws_opt block
+             | modifiers decl_type declarator_list SEMI
+             ;
+
+enum_decl : modifiers KW_ENUM ID implements_opt LBRACE enum_constants RBRACE
+          | modifiers KW_ENUM ID implements_opt LBRACE enum_constants SEMI member_list RBRACE
+          ;
+
+enum_constants : enum_constants COMMA enum_constant
+               | enum_constant
+               ;
+
+enum_constant : ID
+              | ID LPAREN arg_list RPAREN
+              ;
 
 modifiers : modifiers modifier
           |
@@ -81,6 +191,14 @@ modifier : KW_PUBLIC
          | KW_STATIC
          | KW_FINAL
          | KW_ABSTRACT
+         | KW_SYNCHRONIZED
+         | KW_NATIVE
+         | KW_STRICTFP
+         | KW_TRANSIENT
+         | KW_VOLATILE
+         | KW_DEFAULT
+         | AT ID
+         | AT ID LPAREN arg_list RPAREN
          ;
 
 class_body : LBRACE member_list RBRACE
@@ -92,15 +210,37 @@ member_list : member_list member
 
 member : field_decl
        | method_decl
+       | constructor_decl
+       | class_decl
+       | interface_decl
+       | enum_decl
+       | initializer_block
        ;
 
-field_decl : modifiers type ID SEMI
-           | modifiers type ID OP_ASSIGN expr SEMI
+initializer_block : modifiers block
+                  ;
+
+field_decl : modifiers decl_type declarator_list SEMI
            ;
 
-method_decl : modifiers type ID LPAREN param_list RPAREN block
-            | modifiers KW_VOID ID LPAREN param_list RPAREN block
+declarator_list : declarator_list COMMA declarator
+                | declarator
+                ;
+
+declarator : ID
+           | ID OP_ASSIGN expr
+           ;
+
+method_decl : modifiers decl_type ID LPAREN param_list RPAREN throws_opt block
+            | modifiers KW_VOID ID LPAREN param_list RPAREN throws_opt block
             ;
+
+constructor_decl : modifiers ID LPAREN param_list RPAREN throws_opt block
+                 ;
+
+throws_opt : KW_THROWS class_type_list
+           |
+           ;
 
 param_list : param_list_nonempty
            |
@@ -110,12 +250,23 @@ param_list_nonempty : param_list_nonempty COMMA param
                     | param
                     ;
 
-param : type ID
+param : decl_type ID
+      | KW_FINAL decl_type ID
       ;
 
-type : primitive_type
-     | ID
+simple_type : primitive_type
+            | ID
+            ;
+
+type : simple_type
+     | primitive_type LBRACKET RBRACKET
+     | primitive_type LBRACKET RBRACKET LBRACKET RBRACKET
      ;
+
+decl_type : type
+          | ID LBRACKET RBRACKET
+          | ID LBRACKET RBRACKET LBRACKET RBRACKET
+          ;
 
 primitive_type : KW_INT
                | KW_LONG
@@ -134,30 +285,56 @@ stmt_list : stmt_list stmt
           |
           ;
 
+/* Division del JLS §14.2: dentro de un bloque se admiten declaraciones
+   (BlockStatement = stmt), pero el cuerpo sin llaves de un if/while/for solo
+   admite sentencias (Statement = embedded_stmt). Asi "if (x) int y = 1;"
+   queda correctamente rechazado, igual que en javac. */
 stmt : local_var_decl
-     | if_stmt
-     | while_stmt
-     | for_stmt
-     | return_stmt
-     | break_stmt
-     | continue_stmt
-     | expr_stmt
-     | block
+     | embedded_stmt
      ;
 
-local_var_decl : type ID SEMI
-               | type ID OP_ASSIGN expr SEMI
+embedded_stmt : block
+              | SEMI
+              | if_stmt
+              | while_stmt
+              | do_while_stmt
+              | for_stmt
+              | switch_stmt
+              | return_stmt
+              | break_stmt
+              | continue_stmt
+              | throw_stmt
+              | try_stmt
+              | assert_stmt
+              | synchronized_stmt
+              | labeled_stmt
+              | explicit_ctor_stmt
+              | expr_stmt
+              ;
+
+local_var_decl : type declarator_list SEMI
+               | KW_FINAL type declarator_list SEMI
                ;
 
-if_stmt : KW_IF LPAREN expr RPAREN block
-        | KW_IF LPAREN expr RPAREN block KW_ELSE block
-        | KW_IF LPAREN expr RPAREN block KW_ELSE if_stmt
+/* Cuerpos sin llaves: el cuerpo es embedded_stmt, no block. Esto reintroduce
+   el dangling-else de forma DELIBERADA -- las dos primeras producciones
+   generan un shift/reduce sobre KW_ELSE que el SLR1TableBuilder resuelve por
+   shift, asociando el else al if mas cercano (semantica de Java, Dragon Book
+   §4.8.2). Es el unico conflicto de la gramatica y JavaGrammarSpecTest
+   verifica que siga siendo exactamente ese. */
+if_stmt : KW_IF LPAREN expr RPAREN embedded_stmt
+        | KW_IF LPAREN expr RPAREN embedded_stmt KW_ELSE embedded_stmt
         ;
 
-while_stmt : KW_WHILE LPAREN expr RPAREN block
+while_stmt : KW_WHILE LPAREN expr RPAREN embedded_stmt
            ;
 
-for_stmt : KW_FOR LPAREN for_init SEMI expr_opt SEMI expr_opt RPAREN block
+do_while_stmt : KW_DO embedded_stmt KW_WHILE LPAREN expr RPAREN SEMI
+              ;
+
+for_stmt : KW_FOR LPAREN for_init SEMI expr_opt SEMI for_update RPAREN embedded_stmt
+         | KW_FOR LPAREN type ID COLON expr RPAREN embedded_stmt
+         | KW_FOR LPAREN KW_FINAL type ID COLON expr RPAREN embedded_stmt
          ;
 
 for_init : local_var_init
@@ -165,27 +342,92 @@ for_init : local_var_init
          |
          ;
 
-local_var_init : type ID OP_ASSIGN expr
+local_var_init : type declarator_list
                ;
 
 expr_opt : expr
          |
          ;
 
+for_update : for_update_list
+           |
+           ;
+
+for_update_list : for_update_list COMMA expr
+                | expr
+                ;
+
+switch_stmt : KW_SWITCH LPAREN expr RPAREN LBRACE switch_group_list RBRACE
+            ;
+
+switch_group_list : switch_group_list switch_group
+                  |
+                  ;
+
+switch_group : switch_label stmt_list
+             ;
+
+switch_label : KW_CASE expr COLON
+             | KW_DEFAULT COLON
+             ;
+
 return_stmt : KW_RETURN expr SEMI
             | KW_RETURN SEMI
             ;
 
 break_stmt : KW_BREAK SEMI
+           | KW_BREAK ID SEMI
            ;
 
 continue_stmt : KW_CONTINUE SEMI
+              | KW_CONTINUE ID SEMI
               ;
+
+throw_stmt : KW_THROW expr SEMI
+           ;
+
+try_stmt : KW_TRY block catch_list
+         | KW_TRY block catch_list finally_clause
+         | KW_TRY block finally_clause
+         ;
+
+catch_list : catch_list catch_clause
+           | catch_clause
+           ;
+
+/* Multi-catch (JLS §14.20): catch (IOException | SQLException e). Los tipos se
+   separan con OP_BITOR; dentro del parentesis no hay contexto de expresion,
+   asi que no hay ambiguedad con el operador binario |. */
+catch_clause : KW_CATCH LPAREN catch_type_list ID RPAREN block
+             | KW_CATCH LPAREN KW_FINAL catch_type_list ID RPAREN block
+             ;
+
+catch_type_list : catch_type_list OP_BITOR simple_type
+                | simple_type
+                ;
+
+finally_clause : KW_FINALLY block
+               ;
+
+assert_stmt : KW_ASSERT expr SEMI
+            | KW_ASSERT expr COLON expr SEMI
+            ;
+
+synchronized_stmt : KW_SYNCHRONIZED LPAREN expr RPAREN block
+                  ;
+
+labeled_stmt : ID COLON stmt
+             ;
+
+explicit_ctor_stmt : KW_SUPER LPAREN arg_list RPAREN SEMI
+                   | KW_THIS LPAREN arg_list RPAREN SEMI
+                   ;
 
 expr_stmt : expr SEMI
           ;
 
-expr : expr OP_ASSIGN expr
+expr : expr QUESTION expr COLON expr
+     | expr OP_ASSIGN expr
      | expr OP_PLUS_ASSIGN expr
      | expr OP_MINUS_ASSIGN expr
      | expr OP_TIMES_ASSIGN expr
@@ -208,6 +450,7 @@ expr : expr OP_ASSIGN expr
      | expr OP_GT expr
      | expr OP_LE expr
      | expr OP_GE expr
+     | expr KW_INSTANCEOF decl_type
      | expr OP_SHL expr
      | expr OP_SHR expr
      | expr OP_USHR expr
@@ -220,12 +463,21 @@ expr : expr OP_ASSIGN expr
      | OP_BITNOT expr
      | OP_INC expr
      | OP_DEC expr
+     | OP_MINUS expr %prec UMINUS
+     | OP_PLUS expr %prec UMINUS
      | postfix
      ;
 
+/* El ++/-- POSTFIJO vive aqui, no en la cascada de precedencia de expr: en Java
+   tiene la misma precedencia que el acceso a miembro (.) y el indexado ([]),
+   que es justo lo que agrupa este no-terminal. Por eso no necesita %prec ni un
+   nivel nuevo, y a diferencia del prefijo (++a, que si esta en la cascada) su
+   operando ya viene completo por la izquierda. */
 postfix : postfix DOT ID
         | postfix DOT ID LPAREN arg_list RPAREN
         | postfix LBRACKET expr RBRACKET
+        | postfix OP_INC
+        | postfix OP_DEC
         | primary
         ;
 
@@ -235,13 +487,17 @@ primary : ID
         | LONG
         | FLOAT
         | STRING_LIT
+        | CHAR_LIT
         | KW_TRUE
         | KW_FALSE
         | KW_NULL
         | KW_THIS
+        | KW_SUPER DOT ID
+        | KW_SUPER DOT ID LPAREN arg_list RPAREN
         | LPAREN expr RPAREN
-        | KW_NEW type LPAREN arg_list RPAREN
-        | KW_NEW type LBRACKET expr RBRACKET
+        | KW_NEW simple_type LPAREN arg_list RPAREN
+        | KW_NEW simple_type LBRACKET expr RBRACKET
+        | KW_NEW simple_type LBRACKET expr RBRACKET LBRACKET expr RBRACKET
         ;
 
 arg_list : arg_list_nonempty

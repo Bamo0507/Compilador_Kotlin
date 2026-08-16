@@ -34,6 +34,12 @@ class AppState(
     var errorMessage by mutableStateOf<String?>(null)
         private set
 
+    // Disables the Run button right away; the GUI calls this before dispatching
+    // onPlay to a background thread, so a double click cannot start two runs.
+    fun markRunning() {
+        isRunning = true
+    }
+
     fun onPlay() {
         isRunning = true
         errorMessage = null
@@ -44,9 +50,11 @@ class AppState(
                 inputContent = inputContent,
                 method = selectedMethod
             )
-        } catch (exception: Exception) {
+        } catch (throwable: Throwable) {
+            // Throwable, not Exception: a StackOverflowError from a deeply nested
+            // input must surface as a banner instead of killing the window.
             pipelineResult = null
-            errorMessage = exception.message ?: exception::class.simpleName ?: "Unknown error"
+            errorMessage = throwable.message ?: throwable::class.simpleName ?: "Unknown error"
         } finally {
             isRunning = false
         }
@@ -88,8 +96,8 @@ class AppState(
                 followSets = if (newMethod == ParserMethod.LL1) currentResult.ll1FollowSets else currentResult.lrFollowSets,
                 parseResult = parseResult
             )
-        } catch (exception: Exception) {
-            errorMessage = exception.message ?: exception::class.simpleName ?: "Unknown error"
+        } catch (throwable: Throwable) {
+            errorMessage = throwable.message ?: throwable::class.simpleName ?: "Unknown error"
         }
     }
 
@@ -108,24 +116,60 @@ class AppState(
 
     private companion object {
         private val DEFAULT_INPUT = """
-            public class Counter {
-                private int count;
+            package com.example.app;
 
-                public void increment() {
-                    count = count + 1;
+            import java.util.List;
+            import java.io.*;
+
+            public class Counter implements Runnable {
+                private int count, step = 1;
+                private int offset = -1;
+                private static final int LIMIT = 0xFF;
+
+                public Counter(int start) throws Exception {
+                    count = start;
                 }
 
-                public int compute(int n) {
-                    int total = 0;
-                    int i = 0;
-                    while (i < n) {
-                        total = total + i * 2;
-                        i = i + 1;
+                public void run() {
+                    char sep = ':';
+                    String label = "count:\t";
+                    do {
+                        count = count + step;
+                    } while (count < LIMIT);
+
+                    switch (count % 3) {
+                        case 0:
+                            label = "multiple\n";
+                            break;
+                        default:
+                            break;
+                    }
+
+                    try {
+                        process(label, sep);
+                    } catch (Exception e) {
+                        count = 0;
+                    } finally {
+                        count = count + 1;
+                    }
+                }
+
+                public int process(String label, char sep) {
+                    int total = -offset;
+                    for (int i = 0; i < count; i++) {
+                        total += i * 2 - offset;
                     }
                     if (total > 100) {
                         return total;
                     } else {
                         return 0;
+                    }
+                }
+
+                public static void main(String[] args) {
+                    int[] seeds = new int[3];
+                    for (int seed : seeds) {
+                        seed++;
                     }
                 }
             }

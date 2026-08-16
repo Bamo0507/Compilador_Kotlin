@@ -22,7 +22,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -118,6 +121,7 @@ fun WorkspaceScreen(
                         )
                         else -> ErrorList(
                             parseResult = result?.parseResult,
+                            lexerErrors = result?.lexerResult?.errors ?: emptyList(),
                             modifier = Modifier.fillMaxSize()
                         )
                     }
@@ -132,6 +136,10 @@ private fun WorkspaceToolbar(
     state: AppState,
     modifier: Modifier = Modifier
 ) {
+    // The pipeline builds every parser artifact in one pass, which can take a
+    // moment on large grammars. Running it on Dispatchers.Default keeps the UI
+    // responsive; AppState fields are snapshot state, so background writes are safe.
+    val scope = rememberCoroutineScope()
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -159,7 +167,10 @@ private fun WorkspaceToolbar(
         )
         PlayButton(
             isRunning = state.isRunning,
-            onClick = state::onPlay
+            onClick = {
+                state.markRunning()
+                scope.launch(Dispatchers.Default) { state.onPlay() }
+            }
         )
     }
 }

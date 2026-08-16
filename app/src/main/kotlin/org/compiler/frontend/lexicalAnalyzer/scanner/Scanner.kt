@@ -22,6 +22,17 @@ import kotlin.collections.iterator
 const val BUFFER_SIZE = 10
 const val EOF = '\u0000'
 
+// Prefix that marks a .yal rule as an error rule instead of a token category.
+const val ERROR_CATEGORY_PREFIX = "ERROR_"
+
+// Turns the category name into prose, so the .yal alone decides what the message says:
+// ERROR_UNCLOSED_STRING -> "Unclosed string".
+private fun describeErrorCategory(category: String): String =
+    category.removePrefix(ERROR_CATEGORY_PREFIX)
+        .lowercase()
+        .replace('_', ' ')
+        .replaceFirstChar { it.uppercase() }
+
 data class BufferCursor(
     val bufferIndex: Int, 
     val posInsideBuffer: Int
@@ -38,7 +49,9 @@ private val mapper = ObjectMapper(YAMLFactory()).apply {
 private fun resolveInputChar(value: String): Char = when (value) {
     "\\t" -> '\t'
     "\\n" -> '\n'
+    "\\r" -> '\r'
     "\\q" -> '\''
+    "\\\"" -> '"'
     else  -> value.single()
 }
 
@@ -300,6 +313,25 @@ fun scan(source: String) {
                 currentPosition = newPosition
                 lexembegin = newCursor
             }
+            // Categories named ERROR_* are declared in the .yal for malformed constructs
+            // (unclosed string, unclosed comment, malformed number). They never produce a
+            // token: the whole bad lexeme is consumed and reported once, which keeps the
+            // parser from receiving nonsense and gives a diagnostic that names the problem
+            // instead of "expected one of: COMMA, DOT, ...".
+            best.first.startsWith(ERROR_CATEGORY_PREFIX) -> {
+                val lexeme = extractLexeme(segments, lexembegin, best.second)
+                DiagnosticsTable.report(
+                    CompilerError.LexerError(
+                        location = LexemeLocation(line = currentLine, position = currentPosition),
+                        message = "${describeErrorCategory(best.first)}: \"$lexeme\"",
+                        invalidLexeme = lexeme
+                    )
+                )
+                val (newLine, newPosition) = advanceLineAndPosition(currentLine, currentPosition, lexeme)
+                currentLine = newLine
+                currentPosition = newPosition
+                lexembegin = advanceCursor(segments, lexembegin, best.second)
+            }
             best.first == "WHITESPACE" || best.first == "COMMENT" -> {
                 // skip whitespace and comments — neither produces a token
                 val lexeme = extractLexeme(segments, lexembegin, best.second)
@@ -311,7 +343,10 @@ fun scan(source: String) {
             else -> {
                 val lexeme = extractLexeme(segments, lexembegin, best.second)
                 val location = LexemeLocation(line = currentLine, position = currentPosition)
-                val symbolIndex = if (best.first == "KEYWORD") null
+                // Reserved words never enter the symbol table (Dragon Book §2.6):
+                // covers both the generic KEYWORD category and per-word KW_* categories.
+                val isKeyword = best.first == "KEYWORD" || best.first.startsWith("KW_")
+                val symbolIndex = if (isKeyword) null
                                   else SymbolTable.addOrGet(lexeme, location)
                 TokenEntrys.addEntry(
                     TokenEntry(

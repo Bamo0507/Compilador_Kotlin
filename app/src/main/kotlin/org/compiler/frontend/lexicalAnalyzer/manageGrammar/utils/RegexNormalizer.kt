@@ -12,13 +12,18 @@ val ALPHABET: Set<Char> = buildSet {
     for (code in 32..126) add(code.toChar())
     add('\t')
     add('\n')
+    // Carriage return matters for real files: without it, a source saved with Windows
+    // line endings (CRLF) reports a lexical error on every single line.
+    add('\r')
 }
 
 // Resolves the raw content between single quotes to the actual character.
 private fun resolveCharLiteral(content: String): Char = when (content) {
     "\\t"  -> '\t'
     "\\n" -> '\n'
+    "\\r" -> '\r'
     "\\q" -> '\''
+    "\\\"" -> '"'
     else  -> content[0]
 }
 
@@ -27,8 +32,9 @@ private fun resolveCharLiteral(content: String): Char = when (content) {
 private fun charToAtom(c: Char): String = when {
     c == '\t' -> "'\\t'"
     c == '\n' -> "'\\n'"
+    c == '\r' -> "'\\r'"
     c == '\'' -> "'\\q'"  // single-quote must be quoted — splitIntoAtoms uses ' as atom delimiter
-    c == '"'  -> "'\"'"  // double-quote must be quoted — splitIntoAtoms treats raw " as string delimiter
+    c == '"'  -> "'\\\"'" // double-quote escaped as \" — a raw " would be misread as a string delimiter by normalizeCharClasses
     c == ' '  -> "' '"   // space must be quoted — splitIntoAtoms skips raw spaces
     c in REGEX_METACHARACTERS -> "'$c'"
     else -> c.toString()
@@ -214,6 +220,13 @@ fun normalizeCharClasses(pattern: String): String {
     var i = 0
     while (i < pattern.length) {
         when {
+            // Single-quoted atom ('a', '\n', '\"'): copy verbatim. Without this,
+            // a " inside the atom would be misread as a string-literal opener.
+            pattern[i] == '\'' -> {
+                result.append(pattern[i]); i++
+                while (i < pattern.length && pattern[i] != '\'') { result.append(pattern[i]); i++ }
+                if (i < pattern.length) { result.append(pattern[i]); i++ }
+            }
             pattern[i] == '"' -> {
                 result.append(pattern[i]); i++
                 while (i < pattern.length && pattern[i] != '"') { result.append(pattern[i]); i++ }

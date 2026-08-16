@@ -17,6 +17,7 @@ object GrammarValidator {
         checkUnreachableNonTerminals(grammar, errors)
         checkDuplicateProductions(grammar, errors)
         checkPrecedenceOperatorsDeclared(grammar, errors)
+        checkPrecedenceLabelsResolve(grammar, errors)
         checkOperatorAppearsInSingleLevel(grammar, errors)
 
         return errors
@@ -139,24 +140,54 @@ object GrammarValidator {
         }
     }
 
-    // Each operator listed in a %left or %right declaration must also appear as a %token.
-    // Otherwise the lexer never produces that category and the precedence is dead weight.
+    // Each operator listed in a %left or %right declaration must also appear as a %token,
+    // otherwise the lexer never produces that category and the precedence is dead weight.
+    // The one exception is a pseudo-token: an operator that exists only to be named by a
+    // %prec override (the classic UMINUS). It is never lexed and never appears in a body,
+    // so it is legitimate precisely when some production points at it.
     private fun checkPrecedenceOperatorsDeclared(
         grammar: Grammar,
         errors: MutableList<ValidationError>
     ) {
         val declaredTerminals = grammar.terminals
+        val precedenceLabelsUsed = grammar.productions.mapNotNull { it.precedenceLabel }.toSet()
         val reported = mutableSetOf<Symbol.Terminal>()
 
         grammar.precedenceTable.forEach { level ->
             level.operators
-                .filter { operator -> operator !in declaredTerminals && operator !in reported }
+                .filter { operator ->
+                    operator !in declaredTerminals &&
+                        operator !in precedenceLabelsUsed &&
+                        operator !in reported
+                }
                 .forEach { operator ->
                     errors.add(ValidationError(
-                        "Operator '${operator.name}' in precedence declaration is not declared as a %token"
+                        "Operator '${operator.name}' in precedence declaration is neither a %token " +
+                            "nor used as a %prec label"
                     ))
                     reported.add(operator)
                 }
+        }
+    }
+
+    // A %prec label must name something that actually has a precedence level, otherwise the
+    // override silently does nothing (a typo would leave the production at the wrong level).
+    private fun checkPrecedenceLabelsResolve(
+        grammar: Grammar,
+        errors: MutableList<ValidationError>
+    ) {
+        val leveledOperators = grammar.precedenceTable.flatMap { level -> level.operators }.toSet()
+        val reported = mutableSetOf<Symbol.Terminal>()
+
+        grammar.productions.forEach { production ->
+            val label = production.precedenceLabel ?: return@forEach
+            if (label !in leveledOperators && label !in reported) {
+                errors.add(ValidationError(
+                    "%prec label '${label.name}' in production '${production.head.name}' has no " +
+                        "precedence level declared with %left or %right"
+                ))
+                reported.add(label)
+            }
         }
     }
 

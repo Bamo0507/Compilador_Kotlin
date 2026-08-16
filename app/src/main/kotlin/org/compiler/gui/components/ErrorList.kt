@@ -25,16 +25,19 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import org.compiler.diagnostics.CompilerError
 import org.compiler.frontend.syntaxAnalyzer.runtime.models.ParseError
 import org.compiler.frontend.syntaxAnalyzer.runtime.models.ParseResult
 
 @Composable
 fun ErrorList(
     parseResult: ParseResult?,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    lexerErrors: List<CompilerError.LexerError> = emptyList()
 ) {
     ErrorList(
         errors = parseResult.errorsOrEmpty(),
+        lexerErrors = lexerErrors,
         hasRun = parseResult != null,
         modifier = modifier
     )
@@ -44,9 +47,10 @@ fun ErrorList(
 fun ErrorList(
     errors: List<ParseError>,
     modifier: Modifier = Modifier,
+    lexerErrors: List<CompilerError.LexerError> = emptyList(),
     hasRun: Boolean = true
 ) {
-    val isEmpty = errors.isEmpty()
+    val isEmpty = errors.isEmpty() && lexerErrors.isEmpty()
     ResultPanel(
         title = "Errors",
         empty = false,
@@ -55,11 +59,11 @@ fun ErrorList(
     ) {
         when {
             !hasRun -> EmptyStatus(
-                message = "Run the parser to inspect syntax errors.",
+                message = "Run the parser to inspect lexical and syntax errors.",
                 isPositive = false
             )
             isEmpty -> EmptyStatus(
-                message = "No syntax errors found.",
+                message = "No lexical or syntax errors found.",
                 isPositive = true
             )
             else -> Column(
@@ -68,8 +72,11 @@ fun ErrorList(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
+                lexerErrors.forEachIndexed { index, error ->
+                    LexerErrorItem(index + 1, error)
+                }
                 errors.forEachIndexed { index, error ->
-                    ErrorItem(index + 1, error)
+                    ErrorItem(lexerErrors.size + index + 1, error)
                 }
             }
         }
@@ -97,6 +104,52 @@ private fun EmptyStatus(
             style = MaterialTheme.typography.bodyMedium,
             color = colors.onSurfaceVariant
         )
+    }
+}
+
+@Composable
+private fun LexerErrorItem(
+    index: Int,
+    error: CompilerError.LexerError
+) {
+    val colors = MaterialTheme.colorScheme
+    val location = "Line ${error.location.line}, column ${error.location.position}"
+
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .border(1.dp, colors.error.copy(alpha = 0.35f), MaterialTheme.shapes.extraSmall)
+            .background(colors.errorContainer.copy(alpha = 0.42f), MaterialTheme.shapes.extraSmall)
+            .padding(10.dp)
+            .semantics { contentDescription = "Lexical error $index at $location" },
+        horizontalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Icon(
+            imageVector = Icons.Filled.ErrorOutline,
+            contentDescription = null,
+            tint = colors.error
+        )
+        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(
+                text = "$index. $location [lexical]",
+                style = MaterialTheme.typography.labelMedium,
+                color = colors.onErrorContainer,
+                fontWeight = FontWeight.SemiBold
+            )
+            Text(
+                text = error.message,
+                style = MaterialTheme.typography.bodySmall,
+                color = colors.onErrorContainer
+            )
+            Text(
+                text = "Found: ${error.invalidLexeme}",
+                style = MaterialTheme.typography.bodySmall.copy(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp
+                ),
+                color = colors.onErrorContainer.copy(alpha = 0.82f)
+            )
+        }
     }
 }
 

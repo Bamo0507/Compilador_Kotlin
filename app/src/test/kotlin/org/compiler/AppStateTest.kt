@@ -51,6 +51,12 @@ class AppStateTest {
 
         assertNull(state.errorMessage)
         assertNotNull(state.pipelineResult)
+        // The exact program a user sees on first launch must lex cleanly and parse.
+        assertTrue(state.pipelineResult!!.lexerResult.errors.isEmpty())
+        assertTrue(
+            state.pipelineResult!!.parseResult is ParseResult.Accepted,
+            "Default input must be Accepted, got ${state.pipelineResult!!.parseResult}"
+        )
     }
 
     @Test

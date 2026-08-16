@@ -79,7 +79,9 @@ fun buildSyntaxTree(augmentedPostfix: String): TreeNode {
 private fun resolveSymbol(content: String): Char = when (content) {
     "\\t" -> '\t'
     "\\n" -> '\n'
+    "\\r" -> '\r'
     "\\q" -> '\''
+    "\\\"" -> '"'
     else  -> content[0]
 }
 

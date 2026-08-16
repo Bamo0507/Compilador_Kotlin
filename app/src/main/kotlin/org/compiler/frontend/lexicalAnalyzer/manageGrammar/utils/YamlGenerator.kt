@@ -33,7 +33,9 @@ private fun yamlQuoted(value: String): String = "'${value.replace("'", "''")}'"
 private fun charToYamlInput(c: Char): String = when (c) {
     '\t' -> "\\t"
     '\n' -> "\\n"
+    '\r' -> "\\r"
     '\'' -> "\\q"
+    '"' -> "\\\""
     else -> c.toString()
 }
 

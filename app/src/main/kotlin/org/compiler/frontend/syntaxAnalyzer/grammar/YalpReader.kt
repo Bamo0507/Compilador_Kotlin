@@ -8,6 +8,8 @@ import org.compiler.frontend.syntaxAnalyzer.grammar.models.Symbol
 import java.io.File
 
 object YalpReader {
+    private const val PREC_DIRECTIVE = "%prec"
+
     fun read(filePath: String): Grammar = parse(File(filePath).readText())
 
     fun parse(content: String): Grammar {
@@ -120,10 +122,22 @@ object YalpReader {
             val alternatives = block.substring(colonIdx + 1).split("|").map { it.trim() }
 
             for (alt in alternatives) {
-                val body = alt.split(Regex("\\s+"))
-                    .filter { it.isNotEmpty() }
-                    .map { classifySymbol(it, terminalNames) }
-                productions.add(Production(idCounter++, head, body))
+                val symbols = alt.split(Regex("\\s+")).filter { it.isNotEmpty() }
+
+                // A trailing "%prec LABEL" is a precedence override, not part of the body.
+                val precIndex = symbols.indexOf(PREC_DIRECTIVE)
+                val precedenceLabel = if (precIndex >= 0) {
+                    require(precIndex + 1 < symbols.size) {
+                        "$PREC_DIRECTIVE in production '${head.name}' is missing its label"
+                    }
+                    Symbol.Terminal(symbols[precIndex + 1])
+                } else {
+                    null
+                }
+                val bodySymbols = if (precIndex >= 0) symbols.subList(0, precIndex) else symbols
+
+                val body = bodySymbols.map { classifySymbol(it, terminalNames) }
+                productions.add(Production(idCounter++, head, body, precedenceLabel))
             }
         }
 
