@@ -62,6 +62,38 @@ class AntlrSmokeTest {
     }
 
     @Test
+    fun `float es un tipo valido y 3 punto 14 es un literal`() {
+        val parser = parse("let pi: float = 3.14;")
+
+        parser.program()
+
+        assertEquals(0, parser.numberOfSyntaxErrors)
+    }
+
+    // FloatLiteral exige digitos a AMBOS lados del punto. Si se permitiera `3.`,
+    // entonces `3.foo` quedaria ambiguo entre "flotante incompleto" y "acceso a
+    // propiedad del numero 3", porque chocaria con  suffixOp: '.' Identifier.
+    @Test
+    fun `un flotante sin digitos a la derecha del punto es error`() {
+        val parser = parse("let x: float = 3.;")
+
+        parser.program()
+
+        assertTrue(parser.numberOfSyntaxErrors > 0)
+    }
+
+    // El lexer de ANTLR usa coincidencia mas larga, asi que ante `3.14` gana
+    // FloatLiteral (4 caracteres) sobre IntegerLiteral (1).
+    @Test
+    fun `mezclar entero y flotante parsea, el tipo lo valida la Fase 4`() {
+        val parser = parse("let suma = 1.5 + 2;")
+
+        parser.program()
+
+        assertEquals(0, parser.numberOfSyntaxErrors)
+    }
+
+    @Test
     fun `un programa mal formado reporta errores sintacticos`() {
         val parser = parse("let x: integer = ;")
 

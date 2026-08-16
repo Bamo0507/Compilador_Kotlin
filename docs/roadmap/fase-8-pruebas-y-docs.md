@@ -224,7 +224,6 @@ print(perro.hablar());
 - `README.md` (reescribir)
 - `docs/arquitectura.md` (NUEVO)
 - `docs/reglas-de-tipos.md` (ya creado en 4.1 — revisar que esté completo)
-- `docs/decisiones-gramatica.md` (ya creado en 0.5 — revisar)
 
 ### `README.md`: cómo ejecutar
 
@@ -280,8 +279,6 @@ El documento que explica el diseño. Secciones:
 - `docs/arquitectura.md` tiene las ocho secciones.
 - `docs/reglas-de-tipos.md` tiene una fila por función pública de `TypeRules`, y
   cada fila nombra un test que existe.
-- `docs/decisiones-gramatica.md` lista cada cambio hecho al `.g4` con su
-  justificación.
 - No hay ningún documento en `docs/` que describa código que no existe. *Fue un
   problema real en el proyecto anterior.*
 
@@ -374,5 +371,5 @@ se va a entregar. Cualquiera que falle es un ticket antes de la presentación.
 | Ticket | Deja listo |
 |---|---|
 | 8.1 | Un programa `.cps` válido y uno inválido por regla, corriendo en la suite |
-| 8.2 | `README.md`, `arquitectura.md`, `reglas-de-tipos.md`, `decisiones-gramatica.md` |
+| 8.2 | `README.md`, `arquitectura.md`, `reglas-de-tipos.md` |
 | 8.3 | La lista de verificación del día de la presentación, recorrida completa |

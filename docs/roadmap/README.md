@@ -216,8 +216,8 @@ tiene su razón anotada porque van a ser preguntadas.
 
 | # | Decisión | Elegida | Por qué |
 |---|---|---|---|
-| 1 | `float` en el lenguaje | **Se agrega a la gramática** | El enunciado pide aritmética sobre `integer` o `float`, y la gramática de ejemplo no tenía `float`. Se extiende `baseType` y se agrega `FloatLiteral`. Ver ticket 0.5 y `docs/decisiones-gramatica.md`. |
-| 2 | Modificar `Compiscript.g4` | **Sí, documentando cada cambio** | El enunciado dice *"a partir de la gramática oficial y extenderlo"*. Todo cambio queda registrado con su justificación. |
+| 1 | `float` en el lenguaje | **Se agrega a la gramática** | El enunciado pide aritmética sobre `integer` o `float`, y la gramática de ejemplo no tenía `float`. Se extiende `baseType` y se agrega `FloatLiteral`. Ver ticket 0.5. |
+| 2 | Modificar `Compiscript.g4` | **Sí, documentando cada cambio en esta tabla** | El enunciado dice *"a partir de la gramática oficial y extenderlo"*. Se descartó un `docs/decisiones-gramatica.md` aparte: con un solo cambio, un tercer documento se desactualiza más rápido de lo que se lee. Cada cambio futuro entra aquí. |
 | 3 | Ejecución de código | **Sí, es requisito** | El catedrático espera las tres cosas: árbol sintáctico, árbol validado semánticamente, y el resultado de ejecutar. No está en la rúbrica escrita, pero sí se pidió. |
 | 4 | Condición del `switch` | **Comparable con sus `case`, no `boolean`** | Toda condición de control de flujo se resuelve como operación booleana: en `switch (x) { case 1: }` lo que ocurre es `x == 1`, una comparación que produce `boolean`. La regla real es que el sujeto y los `case` sean comparables entre sí. |
 | 5 | Fall-through en el `switch` | **No existe** | Se deduce del propio enunciado: `break` solo se permite dentro de bucles, así que no hay forma de expresar caída al siguiente caso. Cada `case` ejecuta su cuerpo y el `switch` termina. |

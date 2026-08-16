@@ -129,8 +129,9 @@ es lo que permite explicar qué hace ANTLR por dentro, y eso no vive en los arch
 
 - `find app/src/main -name "*.kt" | wc -l` baja de **83 a 19**. ✅
 
-  Los 19 no son los 11 finales: faltan borrar 7 componentes de GUI (ticket 0.3) y
-  `DiagnosticsTable` (ticket 0.6). **19 − 7 − 1 = 11** al cerrar la fase.
+  Los 19 no son la cifra final: faltan borrar 7 componentes de GUI (ticket 0.3) y
+  `DiagnosticsTable` (ticket 0.6), y **agregar** `Diagnostics.kt`, que lo reemplaza.
+  **19 − 7 − 1 + 1 = 12** al cerrar la fase.
 
 - El proyecto **no compila todavía**: es esperado, la GUI referencia lo borrado y
   eso lo arregla el ticket 0.3. ✅
@@ -291,15 +292,15 @@ que no compila hace imposible saber si el siguiente cambio rompió algo.
 - `AppStateTest` en verde, con 5 casos. ✅
 - `grep -rn "yalex\|yalp\|ParserMethod\|pipelineResult\|onPlay" app/src` no devuelve
   nada. ✅
-- `find app/src/main -name "*.kt" | wc -l` da **12**: los 11 finales más
-  `DiagnosticsTable`, que borra el 0.6. ✅
+- `find app/src/main -name "*.kt" | wc -l` da **12**: los 11 que sobreviven más
+  `DiagnosticsTable`, que el 0.6 cambia por `Diagnostics.kt`. ✅
 - `./gradlew runGui` abre una ventana con editor, botón y lista de errores vacía.
 
 ---
 
 ## Ticket 0.4 — Configurar ANTLR en Gradle
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.3
 
 **Archivos:**
@@ -325,39 +326,96 @@ corra el generador automáticamente antes de compilar.
 
 **Configuración:**
 
+Primero al catálogo de versiones, que es la convención del proyecto:
+
+```toml
+# gradle/libs.versions.toml
+[versions]
+antlr = "4.13.2"
+
+[libraries]
+# El GENERADOR: lee Compiscript.g4 y escribe las clases Java. Solo en tiempo de build.
+antlr = { module = "org.antlr:antlr4", version.ref = "antlr" }
+
+# El RUNTIME: las clases base de las que hereda el codigo generado (Lexer, Parser,
+# BaseErrorListener, CharStreams...). Este si viaja en el jar final.
+antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
+```
+
+Después el plugin y las dependencias:
+
 ```kotlin
 plugins {
-    kotlin("jvm")
-    antlr                                      // el plugin viene con Gradle
-    // ... los de Compose que ya existen
+    // ... los de Kotlin y Compose que ya existen
+
+    // Viene con Gradle, no lleva version.
+    antlr
 }
 
 dependencies {
-    antlr("org.antlr:antlr4:4.13.2")                    // el generador
-    implementation("org.antlr:antlr4-runtime:4.13.2")    // lo que el código generado necesita al correr
+    // `antlr(...)` no es `implementation(...)`: es una configuracion propia que el
+    // plugin registra, y es la que le dice a Gradle con que jar correr el generador.
+    antlr(libs.antlr)
+    implementation(libs.antlr.runtime)
 }
 
 tasks.generateGrammarSource {
-    // -visitor y -listener son OBLIGATORIOS:
-    // por defecto ANTLR solo genera el listener.
+    // Es `arguments + listOf(...)` y NO `arguments = listOf(...)`: el plugin ya puso
+    // argumentos ahi (los directorios de salida), y reemplazarlos rompe la generacion.
     arguments = arguments + listOf(
+        // OBLIGATORIOS los dos: por defecto ANTLR genera SOLO el listener, y sin
+        // -visitor no existe CompiscriptBaseVisitor, del que hereda el AstBuilder.
         "-visitor",
         "-listener",
+
+        // Sin esto las clases salen sin `package` y Kotlin no puede importarlas.
         "-package", "org.compiler.parser"
     )
+
+    // El -package de arriba solo escribe la linea `package` DENTRO de los .java; el
+    // plugin igual los deja planos en generated-src/antlr/main. Compilan asi, pero
+    // deja un arbol donde carpeta y paquete no coinciden.
+    outputDirectory =
+        layout.buildDirectory.dir("generated-src/antlr/main/org/compiler/parser").get().asFile
 }
 
-// Necesario en proyectos Kotlin: el compilador de Kotlin debe correr DESPUÉS de
-// que ANTLR haya generado las clases Java, no antes.
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile> {
-    dependsOn(tasks.generateGrammarSource)
+// El plugin `antlr` es de la era pre-Kotlin: declara la dependencia para compileJava,
+// no para compileKotlin. Sin esto, Gradle compila Kotlin antes de que exista
+// CompiscriptParser.java y falla con `unresolved reference`.
+//
+// Son TODAS las AntlrTask y no solo `generateGrammarSource`: el plugin registra una
+// por source set, asi que tambien existe `generateTestGrammarSource`. Apuntando solo
+// a la de main, compileTestKotlin falla con "uses this output without declaring an
+// explicit dependency".
+tasks.withType<KotlinCompile>().configureEach {
+    dependsOn(tasks.withType<AntlrTask>())
 }
 ```
 
-**Por qué el `dependsOn` explícito:** sin él, Gradle a veces intenta compilar
-Kotlin antes de que exista `CompiscriptParser.java` y falla con
-`unresolved reference` de forma **intermitente** — el peor tipo de error, porque a
-veces funciona y parece que el problema es otro.
+**El `dependsOn` tuvo que ampliarse.** La versión original de este ticket apuntaba
+solo a `tasks.generateGrammarSource`, y el build **falló al ejecutarlo**:
+
+```
+Task ':app:compileTestKotlin' uses this output of task ':app:generateTestGrammarSource'
+without declaring an explicit or implicit dependency.
+```
+
+El plugin registra una `AntlrTask` **por source set**, así que además de la de `main`
+existe `generateTestGrammarSource` — para un `src/test/antlr` que aquí ni siquiera
+existe. Apuntar a `tasks.withType<AntlrTask>()` cubre las dos.
+
+**Y el `outputDirectory` no venía en el ticket.** El `-package` solo escribe la línea
+`package` dentro de los `.java`; los archivos igual quedaban planos.
+
+### Las cinco dependencias muertas que se van aquí
+
+| Dependencia | Único consumidor | Estado |
+|---|---|---|
+| `guru.nidi:graphviz-java` | `TreeVisualizer`, `ParseTreeImage` | borrados en 0.2 y 0.3 |
+| `jackson-databind` | `Scanner.kt` | borrado en 0.2 |
+| `jackson-dataformat-yaml` | idem | idem |
+| `jackson-module-kotlin` | idem | idem |
+| `libs.guava` | **ninguno** | ya estaba muerta antes de empezar |
 
 **Por qué el runtime de Java y no `antlr-kotlin` de Strumenta:** el de Strumenta
 es para Kotlin Multiplatform. Este proyecto es JVM puro, y Kotlin consume clases
@@ -373,38 +431,45 @@ NPEs. Hay que ser explícito al consumir contextos:
 val declaredType: TypeReference? = ctx.typeAnnotation()?.let { buildTypeReference(it.type()) }
 ```
 
+### `AntlrSmokeTest`: prueba el BUILD, no el lenguaje
+
+Cinco casos, y ninguno verifica semántica. Verifican que **la configuración de este
+ticket sigue en pie**, para que romperla falle aquí y no veinte tickets después:
+
+| Test | Qué protege |
+|---|---|
+| un programa mínimo parsea | la generación funciona |
+| clases + funciones + control de flujo parsean | la gramática está completa |
+| un programa mal formado reporta errores | `numberOfSyntaxErrors` responde |
+| **el `BaseVisitor` existe y se puede heredar** | la bandera `-visitor`: sin ella este test **no compila** |
+| **el `BaseVisitor` tiene 52 métodos `visit`** | si el número cambia, cambió el `.g4` — y eso obliga a revisar el `AstBuilder` |
+
+Ese último confirmó empíricamente el conteo del ticket 2.2: **42 métodos por regla +
+10 por alternativa etiquetada = 52.**
+
 **Aceptación:**
 
-- `./gradlew generateGrammarSource` produce `CompiscriptLexer.java`,
-  `CompiscriptParser.java`, `CompiscriptBaseListener.java` y
-  `CompiscriptBaseVisitor.java` en
-  `app/build/generated-src/antlr/main/org/compiler/parser/`.
-- Este test de humo compila y pasa:
+- `./gradlew generateGrammarSource` produce los archivos generados en
+  `app/build/generated-src/antlr/main/org/compiler/parser/`. ✅
 
-  ```kotlin
-  @Test
-  fun `ANTLR genera un parser que acepta un programa minimo`() {
-      val lexer = CompiscriptLexer(CharStreams.fromString("let x: integer = 1;"))
-      val parser = CompiscriptParser(CommonTokenStream(lexer))
-      val tree = parser.program()
-      assertEquals(0, parser.numberOfSyntaxErrors)
-      assertNotNull(tree)
-  }
-  ```
+  Son **seis** y no cuatro: además del lexer, el parser y las dos plantillas *Base*,
+  ANTLR genera las **interfaces** `CompiscriptListener` y `CompiscriptVisitor`.
 
-- `./gradlew clean build` en verde desde cero.
+- `./gradlew clean build` en verde desde cero. ✅ *(10 tests, 0 fallos)*
+- Los archivos generados **no se commitean**: viven bajo `app/build/`, que ya está en
+  `.gitignore`. ✅
 
 ---
 
 ## Ticket 0.5 — Extender `Compiscript.g4` con `float`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.4
 
 **Archivos:**
 
 - `app/src/main/antlr/Compiscript.g4` (modificar)
-- `docs/decisiones-gramatica.md` (NUEVO)
+- `app/src/test/kotlin/org/compiler/AntlrSmokeTest.kt` (ampliar)
 
 **Qué se hace:** tres cambios mínimos y **nada más**.
 
@@ -451,25 +516,28 @@ Se implementan en la Fase 4; se anotan aquí para que no se olviden:
 5. `%` (módulo) **solo aplica a `integer`** — decisión 12 del README
 6. Comparaciones `< <= > >=` y `== !=` entre `integer` y `float` son legales
 
-### `docs/decisiones-gramatica.md`
+### Sin documento aparte de decisiones de gramática
 
-Documento corto con cada cambio al `.g4`, la razón, y la cita del enunciado que lo
-justifica. Arranca con `float`: el enunciado pide aritmética sobre `integer` o
-`float`, y la gramática de ejemplo no tenía `float`. Este es el documento que se
-abre si preguntan *"¿por qué modificaste la gramática oficial?"*.
+El plan original creaba `docs/decisiones-gramatica.md` para registrar cada cambio al
+`.g4`. **Se descartó por decisión del equipo.** La justificación del cambio vive en
+este ticket y en la decisión 1 del README, que es donde se va a buscar; un tercer
+documento con una sola entrada se desactualiza más rápido de lo que se lee.
+
+Si más adelante se toca la gramática otra vez, el lugar es la tabla de decisiones del
+README.
 
 **Aceptación:**
 
-- `let pi: float = 3.14;` parsea sin errores sintácticos.
-- `let x: float = 3.;` produce error sintáctico.
-- `let y = 1.5 + 2;` parsea (la validación del tipo llega en la Fase 4).
-- `docs/decisiones-gramatica.md` existe y explica el cambio con su justificación.
+- `let pi: float = 3.14;` parsea sin errores sintácticos. ✅
+- `let x: float = 3.;` produce error sintáctico. ✅
+- `let y = 1.5 + 2;` parsea; la validación del tipo llega en la Fase 4. ✅
+- `./gradlew build` en verde. ✅ *(13 tests, 0 fallos)*
 
 ---
 
 ## Ticket 0.6 — `Diagnostics`: de singleton a instancia, y los tres niveles de error
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.3
 
 **Archivos:**
@@ -568,12 +636,31 @@ instancia que se pasa a cada fase, el pipeline nuevo (Fase 7) nunca lanza por
 errores del usuario: los acumula y los devuelve. Las excepciones quedan
 exclusivamente para bugs del compilador.
 
+### Los campos extra de `CompilerError` también se van
+
+Las variantes viejas cargaban datos que solo tenían sentido con el lexer y el parser
+propios:
+
+```kotlin
+data class LexerError(..., val invalidLexeme: String)
+data class ParserError(..., val foundCategory: String, val foundLexeme: String,
+                            val expectedCategories: List<String>)
+```
+
+Con ANTLR, ese detalle **ya viene dentro del `message`** que arma él mismo
+(*"mismatched input ';' expecting {'let', 'var', ...}"*). Reconstruirlo aparte sería
+duplicar información que no se puede mantener sincronizada.
+
+Las tres variantes quedan con los mismos dos campos, y por eso `ErrorList` puede leer
+solo `location` y `message` — que fue lo que se hizo en el 0.3.
+
 **Aceptación:**
 
-- `SemanticError` existe con `location` y `message`.
-- Dos instancias distintas de `Diagnostics` no comparten errores (test explícito).
-- `all()` devuelve los errores ordenados por línea y luego por columna.
-- `grep -rn "object Diagnostics\|DiagnosticsTable" app/src` no devuelve nada.
+- `SemanticError` existe con `location` y `message`. ✅
+- Dos instancias distintas de `Diagnostics` no comparten errores. ✅ *(test explícito)*
+- `all()` devuelve los errores ordenados por línea y luego por columna. ✅
+- `grep -rn "object Diagnostics\|DiagnosticsTable" app/src` no devuelve nada. ✅
+- `./gradlew build` en verde. ✅ *(17 tests, 0 fallos)*
 
 ---
 
@@ -582,7 +669,7 @@ exclusivamente para bugs del compilador.
 | Ticket | Qué deja listo |
 |---|---|
 | 0.1 | Docs del proyecto anterior eliminados, con tag de respaldo |
-| 0.2 | 83 archivos `.kt` reducidos a 11 (el proyecto queda roto a propósito) |
+| 0.2 | 83 archivos `.kt` reducidos a 19 (el proyecto queda roto a propósito) |
 | 0.3 | Proyecto compilando; GUI mínima; un solo camino de escritura del editor |
 | 0.4 | ANTLR generando lexer, parser, listener y visitor desde el `.g4` |
 | 0.5 | `float` en la gramática, con el documento de decisiones iniciado |
