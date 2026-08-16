@@ -18,8 +18,6 @@ import androidx.compose.ui.unit.dp
 import org.compiler.gui.components.AppView
 import org.compiler.gui.components.FileMenu
 import org.compiler.gui.components.ViewMenu
-import org.compiler.gui.screens.AutomatonScreen
-import org.compiler.gui.screens.TablesScreen
 import org.compiler.gui.screens.WorkspaceScreen
 import org.compiler.gui.state.AppState
 
@@ -43,17 +41,12 @@ fun App() {
                     )
                 }
                 HorizontalDivider()
+
+                // Una sola vista por ahora. El `when` se conserva para que agregar
+                // las pantallas de la Fase 7 sea agregar ramas, no reestructurar.
                 when (selectedView) {
                     AppView.WORKSPACE -> WorkspaceScreen(
                         state = appState,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    AppView.AUTOMATA -> AutomatonScreen(
-                        result = appState.pipelineResult,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                    AppView.TABLES -> TablesScreen(
-                        result = appState.pipelineResult,
                         modifier = Modifier.fillMaxSize()
                     )
                 }

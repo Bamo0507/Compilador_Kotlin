@@ -21,62 +21,46 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import org.compiler.diagnostics.CompilerError
-import org.compiler.frontend.syntaxAnalyzer.runtime.models.ParseError
-import org.compiler.frontend.syntaxAnalyzer.runtime.models.ParseResult
 
+/**
+ * La lista de errores del programa del usuario.
+ *
+ * Solo lee `location` y `message`, que son los miembros de la interfaz
+ * [CompilerError]: no toca los campos propios de cada variante. Por eso sobrevive sin
+ * cambios al ticket 0.6, que reescribe esas variantes.
+ *
+ * La etiqueta por nivel (lexico / sintactico / semantico) llega en la Fase 7, junto
+ * con el salto al editor al hacer clic.
+ */
 @Composable
 fun ErrorList(
-    parseResult: ParseResult?,
+    errors: List<CompilerError>,
     modifier: Modifier = Modifier,
-    lexerErrors: List<CompilerError.LexerError> = emptyList()
-) {
-    ErrorList(
-        errors = parseResult.errorsOrEmpty(),
-        lexerErrors = lexerErrors,
-        hasRun = parseResult != null,
-        modifier = modifier
-    )
-}
-
-@Composable
-fun ErrorList(
-    errors: List<ParseError>,
-    modifier: Modifier = Modifier,
-    lexerErrors: List<CompilerError.LexerError> = emptyList(),
     hasRun: Boolean = true
 ) {
-    val isEmpty = errors.isEmpty() && lexerErrors.isEmpty()
-    ResultPanel(
-        title = "Errors",
-        empty = false,
-        emptyMessage = "",
-        modifier = modifier
-    ) {
+    Column(modifier = modifier.fillMaxSize()) {
         when {
-            !hasRun -> EmptyStatus(
-                message = "Run the parser to inspect lexical and syntax errors.",
+            !hasRun -> StatusMessage(
+                message = "Presiona compilar para revisar el programa.",
                 isPositive = false
             )
-            isEmpty -> EmptyStatus(
-                message = "No lexical or syntax errors found.",
+
+            errors.isEmpty() -> StatusMessage(
+                message = "Sin errores.",
                 isPositive = true
             )
+
             else -> Column(
                 modifier = Modifier
                     .fillMaxSize()
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                lexerErrors.forEachIndexed { index, error ->
-                    LexerErrorItem(index + 1, error)
-                }
                 errors.forEachIndexed { index, error ->
-                    ErrorItem(lexerErrors.size + index + 1, error)
+                    ErrorItem(index + 1, error)
                 }
             }
         }
@@ -84,7 +68,7 @@ fun ErrorList(
 }
 
 @Composable
-private fun EmptyStatus(
+private fun StatusMessage(
     message: String,
     isPositive: Boolean
 ) {
@@ -108,59 +92,12 @@ private fun EmptyStatus(
 }
 
 @Composable
-private fun LexerErrorItem(
-    index: Int,
-    error: CompilerError.LexerError
-) {
-    val colors = MaterialTheme.colorScheme
-    val location = "Line ${error.location.line}, column ${error.location.position}"
-
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .border(1.dp, colors.error.copy(alpha = 0.35f), MaterialTheme.shapes.extraSmall)
-            .background(colors.errorContainer.copy(alpha = 0.42f), MaterialTheme.shapes.extraSmall)
-            .padding(10.dp)
-            .semantics { contentDescription = "Lexical error $index at $location" },
-        horizontalArrangement = Arrangement.spacedBy(10.dp)
-    ) {
-        Icon(
-            imageVector = Icons.Filled.ErrorOutline,
-            contentDescription = null,
-            tint = colors.error
-        )
-        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-            Text(
-                text = "$index. $location [lexical]",
-                style = MaterialTheme.typography.labelMedium,
-                color = colors.onErrorContainer,
-                fontWeight = FontWeight.SemiBold
-            )
-            Text(
-                text = error.message,
-                style = MaterialTheme.typography.bodySmall,
-                color = colors.onErrorContainer
-            )
-            Text(
-                text = "Found: ${error.invalidLexeme}",
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp
-                ),
-                color = colors.onErrorContainer.copy(alpha = 0.82f)
-            )
-        }
-    }
-}
-
-@Composable
 private fun ErrorItem(
     index: Int,
-    error: ParseError
+    error: CompilerError
 ) {
     val colors = MaterialTheme.colorScheme
-    val location = error.location?.let { "Line ${it.line}, column ${it.position}" } ?: "End of input"
-    val found = error.foundToken?.lexeme?.let { "Found: $it" } ?: "Found: EOF"
+    val location = "Línea ${error.location.line}, columna ${error.location.position}"
 
     Row(
         modifier = Modifier
@@ -168,7 +105,7 @@ private fun ErrorItem(
             .border(1.dp, colors.error.copy(alpha = 0.35f), MaterialTheme.shapes.extraSmall)
             .background(colors.errorContainer.copy(alpha = 0.42f), MaterialTheme.shapes.extraSmall)
             .padding(10.dp)
-            .semantics { contentDescription = "Syntax error $index at $location" },
+            .semantics { contentDescription = "Error $index en $location" },
         horizontalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Icon(
@@ -188,20 +125,6 @@ private fun ErrorItem(
                 style = MaterialTheme.typography.bodySmall,
                 color = colors.onErrorContainer
             )
-            Text(
-                text = found,
-                style = MaterialTheme.typography.bodySmall.copy(
-                    fontFamily = FontFamily.Monospace,
-                    fontSize = 12.sp
-                ),
-                color = colors.onErrorContainer.copy(alpha = 0.82f)
-            )
         }
     }
-}
-
-private fun ParseResult?.errorsOrEmpty(): List<ParseError> = when (this) {
-    is ParseResult.Accepted -> errors
-    is ParseResult.Rejected -> errors
-    null -> emptyList()
 }

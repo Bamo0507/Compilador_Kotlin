@@ -26,7 +26,7 @@ fun FileMenu(
         onClick = { expanded = true },
         modifier = modifier
     ) {
-        Text("File")
+        Text("Archivo")
     }
 
     DropdownMenu(
@@ -34,136 +34,78 @@ fun FileMenu(
         onDismissRequest = { expanded = false }
     ) {
         DropdownMenuItem(
-            text = { Text("Open .yalex / .yal") },
+            text = { Text("Abrir...") },
             onClick = {
                 expanded = false
-                openTextFile("Open lexical specification") { content, path ->
-                    state.updateYalexContent(content, path)
-                    state.clearError()
-                }.onFailure { state.reportFileError("Could not open lexer file: ${it.message}") }
+                open(state)
             }
         )
         DropdownMenuItem(
-            text = { Text("Open .yalp") },
+            text = { Text("Guardar") },
             onClick = {
                 expanded = false
-                openTextFile("Open parser grammar") { content, path ->
-                    state.updateYalpContent(content, path)
-                    state.clearError()
-                }.onFailure { state.reportFileError("Could not open grammar file: ${it.message}") }
+                save(state)
             }
         )
         DropdownMenuItem(
-            text = { Text("Open Input") },
+            text = { Text("Guardar como...") },
             onClick = {
                 expanded = false
-                openTextFile("Open input program") { content, path ->
-                    state.updateInputContent(content, path)
-                    state.clearError()
-                }.onFailure { state.reportFileError("Could not open input file: ${it.message}") }
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Save All") },
-            onClick = {
-                expanded = false
-                saveAll(state)
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Save Lexer As...") },
-            onClick = {
-                expanded = false
-                saveTextFileAs("Save lexical specification", state.yalexContent) { path ->
-                    state.updateYalexContent(state.yalexContent, path)
-                    state.clearError()
-                }.onFailure { state.reportFileError("Could not save lexer file: ${it.message}") }
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Save Grammar As...") },
-            onClick = {
-                expanded = false
-                saveTextFileAs("Save parser grammar", state.yalpContent) { path ->
-                    state.updateYalpContent(state.yalpContent, path)
-                    state.clearError()
-                }.onFailure { state.reportFileError("Could not save grammar file: ${it.message}") }
-            }
-        )
-        DropdownMenuItem(
-            text = { Text("Save Input As...") },
-            onClick = {
-                expanded = false
-                saveTextFileAs("Save input program", state.inputContent) { path ->
-                    state.updateInputContent(state.inputContent, path)
-                    state.clearError()
-                }.onFailure { state.reportFileError("Could not save input file: ${it.message}") }
+                saveAs(state)
             }
         )
     }
 }
 
-private fun openTextFile(
-    title: String,
-    onLoaded: (content: String, path: String) -> Unit
-): Result<Unit> = runCatching {
-    val file = chooseFile(title, FileDialog.LOAD) ?: return@runCatching
-    onLoaded(file.readText(), file.absolutePath)
-}
+private fun open(state: AppState) {
+    runCatching {
+        val file = chooseFile("Abrir programa Compiscript", FileDialog.LOAD) ?: return
 
-private fun saveTextFileAs(
-    title: String,
-    content: String,
-    onSaved: (path: String) -> Unit
-): Result<Unit> = runCatching {
-    val file = chooseFile(title, FileDialog.SAVE) ?: return@runCatching
-    file.writeText(content)
-    onSaved(file.absolutePath)
-}
-
-private fun saveAll(state: AppState) {
-    val results = listOf(
-        saveKnownOrAs(state.yalexFilePath, "Save lexical specification", state.yalexContent) {
-            state.updateYalexContent(state.yalexContent, it)
-        },
-        saveKnownOrAs(state.yalpFilePath, "Save parser grammar", state.yalpContent) {
-            state.updateYalpContent(state.yalpContent, it)
-        },
-        saveKnownOrAs(state.inputFilePath, "Save input program", state.inputContent) {
-            state.updateInputContent(state.inputContent, it)
-        }
-    )
-    val failure = results.firstOrNull { it.isFailure }?.exceptionOrNull()
-    if (failure != null) {
-        state.reportFileError("Could not save files: ${failure.message}")
-    } else {
-        state.clearError()
+        // Los dos campos se escriben juntos porque el archivo abierto cambia los dos.
+        state.sourceContent = file.readText()
+        state.sourceFilePath = file.absolutePath
+        state.errorMessage = null
+    }.onFailure {
+        state.errorMessage = "No se pudo abrir el archivo: ${it.message}"
     }
 }
 
-private fun saveKnownOrAs(
-    path: String?,
-    title: String,
-    content: String,
-    onSaved: (path: String) -> Unit
-): Result<Unit> = runCatching {
-    if (path != null) {
-        File(path).writeText(content)
-        onSaved(path)
-    } else {
-        val file = chooseFile(title, FileDialog.SAVE) ?: return@runCatching
-        file.writeText(content)
-        onSaved(file.absolutePath)
+// Guarda sobre la ruta conocida; si no hay ninguna, se comporta como "Guardar como".
+private fun save(state: AppState) {
+    val path = state.sourceFilePath
+    if (path == null) {
+        saveAs(state)
+        return
+    }
+
+    runCatching {
+        File(path).writeText(state.sourceContent)
+        state.errorMessage = null
+    }.onFailure {
+        state.errorMessage = "No se pudo guardar el archivo: ${it.message}"
     }
 }
 
-private fun chooseFile(
-    title: String,
-    mode: Int
-): File? {
+// Aqui solo cambia la RUTA: el contenido ya esta en el editor. Es el caso que hacia
+// incomodo tener una funcion `updateSource(content, path)` en AppState.
+private fun saveAs(state: AppState) {
+    runCatching {
+        val file = chooseFile("Guardar programa Compiscript", FileDialog.SAVE) ?: return
+
+        file.writeText(state.sourceContent)
+        state.sourceFilePath = file.absolutePath
+        state.errorMessage = null
+    }.onFailure {
+        state.errorMessage = "No se pudo guardar el archivo: ${it.message}"
+    }
+}
+
+private fun chooseFile(title: String, mode: Int): File? {
     val dialog = FileDialog(null as Frame?, title, mode)
+    dialog.file = "*.cps"
     dialog.isVisible = true
+
     val directory = dialog.directory ?: return null
-    val file = dialog.file ?: return null
-    return File(directory, file)
+    val name = dialog.file ?: return null
+    return File(directory, name)
 }

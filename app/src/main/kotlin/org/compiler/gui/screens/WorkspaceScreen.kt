@@ -3,7 +3,6 @@ package org.compiler.gui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -15,28 +14,18 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import org.compiler.gui.components.CodeEditor
 import org.compiler.gui.components.ErrorList
-import org.compiler.gui.components.MethodDropdown
-import org.compiler.gui.components.ParseTreeView
 import org.compiler.gui.components.PlayButton
-import org.compiler.gui.components.TokenList
 import org.compiler.gui.state.AppState
 
 @Composable
@@ -44,9 +33,6 @@ fun WorkspaceScreen(
     state: AppState,
     modifier: Modifier = Modifier
 ) {
-    var editorTab by remember { mutableIntStateOf(0) }
-    var resultTab by remember { mutableIntStateOf(0) }
-    val result = state.pipelineResult
     val colors = MaterialTheme.colorScheme
 
     Column(
@@ -64,68 +50,31 @@ fun WorkspaceScreen(
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             WorkspacePanel(
-                title = "Source Workspace",
+                title = state.sourceFilePath ?: "Programa sin guardar",
                 modifier = Modifier
                     .weight(1.55f)
                     .fillMaxHeight()
             ) {
-                CompilerTabs(
-                    selectedIndex = editorTab,
-                    labels = listOf("Lexer (.yal)", "Grammar (.yalp)", "Input"),
-                    onSelected = { editorTab = it }
+                CodeEditor(
+                    value = state.sourceContent,
+                    onValueChange = { state.sourceContent = it },
+                    modifier = Modifier.fillMaxSize()
                 )
-                Box(modifier = Modifier.fillMaxSize().padding(top = 10.dp)) {
-                    when (editorTab) {
-                        0 -> CodeEditor(
-                            value = state.yalexContent,
-                            onValueChange = { state.yalexContent = it },
-                            label = "Lexical specification",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        1 -> CodeEditor(
-                            value = state.yalpContent,
-                            onValueChange = { state.yalpContent = it },
-                            label = "Parser grammar",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        else -> CodeEditor(
-                            value = state.inputContent,
-                            onValueChange = { state.inputContent = it },
-                            label = "Input program",
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
             }
 
             WorkspacePanel(
-                title = "Results",
+                title = "Errores",
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxHeight()
             ) {
-                CompilerTabs(
-                    selectedIndex = resultTab,
-                    labels = listOf("Tokens", "Parse Tree", "Errors"),
-                    onSelected = { resultTab = it }
+                // Siempre vacia hasta la Fase 7: el pipeline todavia no existe, asi
+                // que no hay de donde sacar errores.
+                ErrorList(
+                    errors = emptyList(),
+                    hasRun = false,
+                    modifier = Modifier.fillMaxSize()
                 )
-                Box(modifier = Modifier.fillMaxSize().padding(top = 10.dp)) {
-                    when (resultTab) {
-                        0 -> TokenList(
-                            entries = result?.lexerResult?.entries ?: emptyList(),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        1 -> ParseTreeView(
-                            parseResult = result?.parseResult,
-                            modifier = Modifier.fillMaxSize()
-                        )
-                        else -> ErrorList(
-                            parseResult = result?.parseResult,
-                            lexerErrors = result?.lexerResult?.errors ?: emptyList(),
-                            modifier = Modifier.fillMaxSize()
-                        )
-                    }
-                }
             }
         }
     }
@@ -136,10 +85,11 @@ private fun WorkspaceToolbar(
     state: AppState,
     modifier: Modifier = Modifier
 ) {
-    // The pipeline builds every parser artifact in one pass, which can take a
-    // moment on large grammars. Running it on Dispatchers.Default keeps the UI
-    // responsive; AppState fields are snapshot state, so background writes are safe.
+    // La compilacion corre en Dispatchers.Default para que la ventana no se congele.
+    // Los campos de AppState son estado de snapshot, asi que escribirlos desde un
+    // hilo de fondo es seguro.
     val scope = rememberCoroutineScope()
+
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -149,27 +99,25 @@ private fun WorkspaceToolbar(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Compiler Kotlin",
+                text = "Compiscript",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "Lexical and syntactic analyzer workspace",
+                text = "Analizador semántico",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
-        MethodDropdown(
-            selectedMethod = state.selectedMethod,
-            onMethodSelected = state::changeMethod,
-            enabled = !state.isRunning
-        )
         PlayButton(
             isRunning = state.isRunning,
             onClick = {
+                // markRunning() corre en el hilo de UI y deshabilita el boton YA.
+                // Sin esto, entre el clic y el arranque del hilo de fondo hay una
+                // ventana donde un doble clic arranca dos compilaciones.
                 state.markRunning()
-                scope.launch(Dispatchers.Default) { state.onPlay() }
+                scope.launch(Dispatchers.Default) { state.onCompile() }
             }
         )
     }
@@ -220,31 +168,5 @@ private fun WorkspacePanel(
             modifier = Modifier.padding(bottom = 8.dp)
         )
         content()
-    }
-}
-
-@Composable
-private fun CompilerTabs(
-    selectedIndex: Int,
-    labels: List<String>,
-    onSelected: (Int) -> Unit
-) {
-    TabRow(
-        selectedTabIndex = selectedIndex,
-        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-        contentColor = MaterialTheme.colorScheme.primary
-    ) {
-        labels.forEachIndexed { index, label ->
-            Tab(
-                selected = selectedIndex == index,
-                onClick = { onSelected(index) },
-                text = {
-                    Text(
-                        text = label,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            )
-        }
     }
 }

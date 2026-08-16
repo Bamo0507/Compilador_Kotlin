@@ -139,7 +139,7 @@ es lo que permite explicar qué hace ANTLR por dentro, y eso no vive en los arch
 
 ## Ticket 0.3 — Dejar el proyecto compilando con una GUI mínima
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.2
 
 **Archivos:**
@@ -154,8 +154,24 @@ es lo que permite explicar qué hace ANTLR por dentro, y eso no vive en los arch
 | `gui/components/ViewMenu.kt` | SIMPLIFICAR: por ahora solo `WORKSPACE` |
 | `gui/state/AppState.kt` | REESCRIBIR mínimo |
 | `gui/screens/WorkspaceScreen.kt` | SIMPLIFICAR |
-| `gui/components/CodeEditor.kt`, `FileMenu.kt`, `PlayButton.kt`, `ErrorList.kt` | SE QUEDAN |
-| `app/src/test/kotlin/org/compiler/AppStateTest.kt` | AJUSTAR |
+| `gui/components/FileMenu.kt` | SIMPLIFICAR: tres editores a uno, extensión `.cps` |
+| `gui/components/ErrorList.kt` | SIMPLIFICAR: recibe `List<CompilerError>` en vez de `ParseResult` |
+| `gui/App.kt` | SIMPLIFICAR: el `when` de vistas queda con una rama |
+| `gui/components/CodeEditor.kt`, `PlayButton.kt` | SE QUEDAN sin cambios |
+| `app/src/test/kotlin/org/compiler/AppStateTest.kt` | REESCRIBIR |
+| `app/build.gradle.kts` | Quitar las tareas `runPreprocessor` y `runLexer` |
+
+**Dos ajustes que el ticket no preveía y salieron al ejecutarlo:**
+
+`ErrorList` recibía `ParseResult` y `ParseError`, tipos que el 0.2 borró. Se reescribió
+para tomar `List<CompilerError>` y leer **solo** `location` y `message` —los miembros de
+la interfaz, no los campos de cada variante—, así que sobrevive sin cambios al 0.6, que
+reescribe esas variantes.
+
+`build.gradle.kts` registraba `runPreprocessor` y `runLexer` apuntando a
+`PreprocessorAppKt` y `LexerAppKt`, borrados en el 0.2. No rompían `build`, pero
+invocarlas fallaba con *"main class not found"*. Queda solo `runGui`. Las cinco
+dependencias muertas (graphviz, los tres Jackson y guava) se quitan en el 0.4.
 
 **Qué se hace:** dejar la GUI en su forma más simple que compile y arranque —
 **un editor de texto, un botón de compilar, y una lista de errores vacía**. Sin
@@ -271,11 +287,13 @@ que no compila hace imposible saber si el siguiente cambio rompió algo.
 
 **Aceptación:**
 
-- `./gradlew build` pasa.
+- `./gradlew build` pasa. ✅ *(BUILD SUCCESSFUL, 18s)*
+- `AppStateTest` en verde, con 5 casos. ✅
+- `grep -rn "yalex\|yalp\|ParserMethod\|pipelineResult\|onPlay" app/src` no devuelve
+  nada. ✅
+- `find app/src/main -name "*.kt" | wc -l` da **12**: los 11 finales más
+  `DiagnosticsTable`, que borra el 0.6. ✅
 - `./gradlew runGui` abre una ventana con editor, botón y lista de errores vacía.
-- `AppStateTest` en verde.
-- `grep -rn "yalex\|yalp\|ParserMethod" app/src/main` no devuelve nada: no quedó
-  ninguna referencia a los tres editores ni a la elección de método de parsing.
 
 ---
 
