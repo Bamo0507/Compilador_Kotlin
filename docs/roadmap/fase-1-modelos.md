@@ -34,7 +34,7 @@ entre todos y se mergean juntos.
 
 ## Ticket 1.1 — `Type`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.6
 
 **Archivos:**
@@ -240,16 +240,19 @@ real de memoria."*
 
 ### Aceptación
 
-- `ArrayType(IntegerType) == ArrayType(IntegerType)` es `true`.
-- `ClassType("Perro") == ClassType("Gato")` es `false`.
-- `ArrayType(ArrayType(IntegerType)).name` es `"integer[][]"`.
+- `ArrayType(IntegerType) == ArrayType(IntegerType)` es `true`. ✅
+- `ClassType("Perro") == ClassType("Gato")` es `false`. ✅
+- `ArrayType(ArrayType(IntegerType)).name` es `"integer[][]"`. ✅
 - `FunctionType(listOf(IntegerType, IntegerType), IntegerType).name` es
-  `"(integer, integer) -> integer"`.
+  `"(integer, integer) -> integer"`. ✅
 - `IntegerType === IntegerType` (identidad de referencia): prueba de que los
-  primitivos son singletons y de que compararlos no recorre nada.
+  primitivos son singletons y de que compararlos no recorre nada. ✅
 - Un `when (type)` sin rama `else` compila (prueba de que el `sealed` está
-  completo).
-- `Type.kt` no importa `Scope` ni `Symbol` (prueba de que no hay ciclo).
+  completo). ✅ *El test `categoria(type)` lo verifica: si se agrega un `Type` nuevo y
+  no se cubre ahí, el test no compila.*
+- `Type.kt` no importa `Scope` ni `Symbol` (prueba de que no hay ciclo). ✅
+  *El archivo no tiene ningún `import`.*
+- `./gradlew build` en verde, 8 tests en `TypeTest`. ✅
 
 ### Respaldo
 
