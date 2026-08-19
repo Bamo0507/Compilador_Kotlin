@@ -66,8 +66,9 @@ class Scope(
     /**
      * El lookup general: para resolver un nombre suelto como `x` o `saludar`.
      *
-     * Busca en este nivel, luego en la cadena de superclases, y por ultimo hacia
-     * afuera. Gana la primera coincidencia, que es la regla del ambito mas anidado.
+     * Busca en este nivel, luego en la cadena de superclases, y por ultimo en la de
+     * ambitos que lo contienen. Gana la primera coincidencia, que es la regla del
+     * ambito mas anidado.
      */
     fun lookup(name: String): Symbol? {
         val local = symbols[name]
@@ -80,14 +81,14 @@ class Scope(
     }
 
     /**
-     * Solo ESTE nivel, sin subir a ningun lado.
+     * Solo ESTE nivel, sin recorrer ninguna cadena.
      *
      * Para detectar redeclaracion, y para buscar el `constructor` de una clase.
      */
     fun lookupLocal(name: String): Symbol? = symbols[name]
 
     /**
-     * Este nivel y la cadena de superclases, SIN salir hacia afuera.
+     * Este nivel y la cadena de superclases, sin mirar los ambitos que lo contienen.
      *
      * Es lo que necesita `perro.nombre`: un campo heredado de Animal si, una variable
      * global llamada `nombre` no.
@@ -95,12 +96,12 @@ class Scope(
     fun lookupMember(name: String): Symbol? =
         symbols[name] ?: superclass?.lookupMember(name)
 
-    // El ambito de clase mas cercano hacia afuera. Lo usa `this`.
+    // La clase mas cercana que me contiene. Lo usa `this`.
     fun enclosingClass(): Scope? =
         if (kind == ScopeKind.CLASS) this else parent?.enclosingClass()
 
-    // Cuantos ambitos de FUNCION hay entre aqui y la raiz. Clases, bloques y bucles
-    // no cuentan.
+    // Cuantas funciones hay en la cadena entre aqui y la raiz. Clases, bloques y
+    // bucles no cuentan.
     fun functionDepth(): Int =
         (if (kind == ScopeKind.FUNCTION) 1 else 0) + (parent?.functionDepth() ?: 0)
 
