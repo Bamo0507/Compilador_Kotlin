@@ -274,4 +274,262 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
     // primaryAtom: 'this'   # ThisExpr
     override fun visitThisExpr(ctx: ThisExprContext): Node =
         ThisReference(locationOf(ctx))
+
+    // =============================================
+    // TypeReference
+    // =============================================
+
+    // "integer[][]" -> TypeReference("integer", 2)
+    //
+    // Las dimensiones son la cantidad de pares '[' ']'. Como cada par son DOS hijos
+    // terminales, se divide entre 2.
+    //
+    // El /2 funciona porque `baseType` es una REGLA, no un token: los unicos hijos
+    // terminales de `type` son los corchetes.
+    private fun buildTypeReference(ctx: TypeContext): TypeReference {
+        val bracketPairs = (0 until ctx.childCount)
+            .map { ctx.getChild(it) }
+            .filterIsInstance<TerminalNode>()
+            .count() / 2
+
+        return TypeReference(
+            // ctx.baseType().text es seguro aqui: baseType es siempre UN token, sea
+            // 'integer' o un Identifier. La advertencia sobre ctx.text aplica a nodos
+            // con varios hijos, no a este.
+            baseName = ctx.baseType().text,
+            arrayDimensions = bracketPairs,
+            location = locationOf(ctx)
+        )
+    }
+
+    // parameter: Identifier (':' type)?
+    //
+    // Es un ayudante y no un visitor porque Parameter no es Statement ni Expression: es
+    // un Node aparte, y el unico que lo construye es visitFunctionDeclaration.
+    private fun buildParameter(ctx: ParameterContext): Parameter =
+        Parameter(
+            name = ctx.Identifier().text,
+            declaredType = ctx.type()?.let { buildTypeReference(it) },   // null si no se anoto
+            location = locationOf(ctx)
+        )
+
+    // variableDeclaration: ('let' | 'var') Identifier typeAnnotation? initializer? ';'
+    override fun visitVariableDeclaration(ctx: VariableDeclarationContext): Node =
+        VariableDeclaration(
+            name = ctx.Identifier().text,
+            declaredType = ctx.typeAnnotation()?.let { buildTypeReference(it.type()) },
+            initializer = ctx.initializer()?.let { visit(it.expression()) as Expression },
+            isConstant = false,
+            location = locationOf(ctx)
+        )
+
+    // constantDeclaration: 'const' Identifier typeAnnotation? '=' expression ';'
+    //
+    // Mismo nodo que la variable, con isConstant = true. La `const` SIEMPRE tiene
+    // inicializador: la gramática lo exige, no hace falta validarlo aquí.
+    override fun visitConstantDeclaration(ctx: ConstantDeclarationContext): Node =
+        VariableDeclaration(
+            name = ctx.Identifier().text,
+            declaredType = ctx.typeAnnotation()?.let { buildTypeReference(it.type()) },
+            initializer = visit(ctx.expression()) as Expression,
+            isConstant = true,
+            location = locationOf(ctx)
+        )
+
+    // functionDeclaration: 'function' Identifier '(' parameters? ')' (':' type)? block
+    override fun visitFunctionDeclaration(ctx: FunctionDeclarationContext): Node =
+        FunctionDeclaration(
+            name = ctx.Identifier().text,
+            parameters = ctx.parameters()?.parameter()?.map { buildParameter(it) } ?: emptyList(),
+            returnType = ctx.type()?.let { buildTypeReference(it) },
+            body = visit(ctx.block()) as Block,
+            location = locationOf(ctx)
+        )
+
+    // classDeclaration: 'class' Identifier (':' Identifier)? '{' classMember* '}'
+    //
+    // El segundo Identifier, si existe, es la superclase.
+    override fun visitClassDeclaration(ctx: ClassDeclarationContext): Node {
+        val identifiers = ctx.Identifier()
+        return ClassDeclaration(
+            name = identifiers[0].text,
+            superclassName = identifiers.getOrNull(1)?.text,
+            members = ctx.classMember().map { visit(it) as Statement },
+            location = locationOf(ctx)
+        )
+    }
+
+    // assignment (la regla de statement): dos formas.
+    override fun visitAssignment(ctx: AssignmentContext): Node {
+        val location = locationOf(ctx)
+
+        // Forma 1:  Identifier '=' expression ';'
+        //           (un solo `expression` hijo y ningún '.')
+        if (ctx.expression().size == 1) {
+            return Assignment(
+                target = Identifier(ctx.Identifier().text, location),
+                value = visit(ctx.expression(0)) as Expression,
+                location = location
+            )
+        }
+
+        // Forma 2:  expression '.' Identifier '=' expression ';'
+        return Assignment(
+            target = PropertyAccess(
+                target = visit(ctx.expression(0)) as Expression,
+                propertyName = ctx.Identifier().text,
+                location = location
+            ),
+            value = visit(ctx.expression(1)) as Expression,
+            location = location
+        )
+    }
+
+    // expressionStatement: expression ';'
+    //
+    // Si la expresion resulta ser una asignacion, se DESARMA y se rearma como el mismo
+    // nodo Assignment que produce la regla `assignment`. Asi el AST tiene una sola forma
+    // de asignar A NIVEL DE SENTENCIA, sin importar por que camino de la gramatica llego.
+    //
+    // AssignmentExpression sigue existiendo para el caso ANIDADO —`let y = (x = 5);`,
+    // `if (x = 1)`—, asi que la Fase 4 tiene las dos funciones. Las tres reglas comunes
+    // (lvalue, constante, asignabilidad) viven en un ayudante compartido; ver ticket 4.4.
+    override fun visitExpressionStatement(ctx: ExpressionStatementContext): Node {
+        val expr = visit(ctx.expression()) as Expression
+        val location = locationOf(ctx)
+
+        return if (expr is AssignmentExpression) {
+            Assignment(target = expr.target, value = expr.value, location = location)
+        } else {
+            ExpressionStatement(expr = expr, location = location)
+        }
+    }
+
+    // ifStatement: 'if' '(' expression ')' block ('else' block)?
+    override fun visitIfStatement(ctx: IfStatementContext): Node =
+        If(
+            condition = visit(ctx.expression()) as Expression,
+            thenBranch = visit(ctx.block(0)) as Block,
+            elseBranch = ctx.block(1)?.let { visit(it) as Block },
+            location = locationOf(ctx)
+        )
+
+    // whileStatement: 'while' '(' expression ')' block
+    override fun visitWhileStatement(ctx: WhileStatementContext): Node =
+        While(
+            condition = visit(ctx.expression()) as Expression,
+            body = visit(ctx.block()) as Block,
+            location = locationOf(ctx)
+        )
+
+    // doWhileStatement: 'do' block 'while' '(' expression ')' ';'
+    override fun visitDoWhileStatement(ctx: DoWhileStatementContext): Node =
+        DoWhile(
+            body = visit(ctx.block()) as Block,
+            condition = visit(ctx.expression()) as Expression,
+            location = locationOf(ctx)
+        )
+
+    override fun visitForStatement(ctx: ForStatementContext): Node {
+        // El inicializador es opcional: si es solo ';', ambos hijos vienen nulos.
+        val initializer: Statement? = when {
+            ctx.variableDeclaration() != null -> visit(ctx.variableDeclaration()) as Statement
+            ctx.assignment() != null          -> visit(ctx.assignment()) as Statement
+            else                              -> null
+        }
+
+        // Las dos expresiones opcionales son, en orden: condición y actualización.
+        // Si solo viene una, la LISTA no dice cuál es. Se resuelve por posición del
+        // token: la que está antes del ';' separador es la condición.
+        //
+        // El ';' separador es SIEMPRE el último ';' hijo directo de forStatement:
+        //   for (let i = 0; i < 3; i++)   -> hijos ';': uno (el separador)
+        //   for (; i < 3; i++)            -> hijos ';': dos (el del init vacío y el separador)
+        val separatorIndex = ctx.children
+            .filterIsInstance<TerminalNode>()
+            .last { it.text == ";" }
+            .symbol.tokenIndex
+
+        val expressions = ctx.expression()
+
+        return For(
+            initializer = initializer,
+            condition = expressions.firstOrNull { it.start.tokenIndex < separatorIndex }
+                ?.let { visit(it) as Expression },
+            update = expressions.firstOrNull { it.start.tokenIndex > separatorIndex }
+                ?.let { visit(it) as Expression },
+            body = visit(ctx.block()) as Block,
+            location = locationOf(ctx)
+        )
+    }
+
+    // foreachStatement: 'foreach' '(' Identifier 'in' expression ')' block
+    override fun visitForeachStatement(ctx: ForeachStatementContext): Node =
+        ForEach(
+            variableName = ctx.Identifier().text,
+            iterable = visit(ctx.expression()) as Expression,
+            body = visit(ctx.block()) as Block,
+            location = locationOf(ctx)
+        )
+
+    // switchStatement: 'switch' '(' expression ')' '{' switchCase* defaultCase? '}'
+    override fun visitSwitchStatement(ctx: SwitchStatementContext): Node =
+        Switch(
+            subject = visit(ctx.expression()) as Expression,
+            cases = ctx.switchCase().map { visit(it) as SwitchCase },
+
+            // El `default` NO necesita su propio visitor: aqui se leen sus statements
+            // directo. El `?` es lo que distingue "sin default" (null) de "default
+            // vacio" (lista vacia), y la Fase 5 usa esa diferencia para decidir si un
+            // switch garantiza retorno en todos los caminos.
+            defaultBody = ctx.defaultCase()?.statement()?.map { visit(it) as Statement },
+            location = locationOf(ctx)
+        )
+
+    // switchCase: 'case' expression ':' statement*
+    //
+    // HACE FALTA sobrescribirlo. Sin este metodo corre el default, y visitChildren
+    // devuelve el ULTIMO `statement` del cuerpo: un Statement, no un SwitchCase. El
+    // `as SwitchCase` del llamador lanzaria ClassCastException en ejecucion.
+    //
+    // El cuerpo es List<Statement> y no un Block porque la gramatica no le pone llaves
+    // al case. Por eso un `case` no abre ambito por si mismo: lo abre el TypeChecker de
+    // la Fase 4, con el nombre "case@N".
+    override fun visitSwitchCase(ctx: SwitchCaseContext): Node =
+        SwitchCase(
+            value = visit(ctx.expression()) as Expression,
+            body = ctx.statement().map { visit(it) as Statement },
+            location = locationOf(ctx)
+        )
+
+    // tryCatchStatement: 'try' block 'catch' '(' Identifier ')' block
+    override fun visitTryCatchStatement(ctx: TryCatchStatementContext): Node =
+        TryCatch(
+            tryBlock = visit(ctx.block(0)) as Block,
+            catchParameterName = ctx.Identifier().text,
+            catchBlock = visit(ctx.block(1)) as Block,
+            location = locationOf(ctx)
+        )
+
+    // printStatement: 'print' '(' expression ')' ';'
+    override fun visitPrintStatement(ctx: PrintStatementContext): Node =
+        Print(visit(ctx.expression()) as Expression, locationOf(ctx))
+
+    // returnStatement: 'return' expression? ';'
+    override fun visitReturnStatement(ctx: ReturnStatementContext): Node =
+        Return(ctx.expression()?.let { visit(it) as Expression }, locationOf(ctx))
+
+    override fun visitBreakStatement(ctx: BreakStatementContext): Node =
+        Break(locationOf(ctx))
+
+    override fun visitContinueStatement(ctx: ContinueStatementContext): Node =
+        Continue(locationOf(ctx))
+
+    // block: '{' statement* '}'
+    override fun visitBlock(ctx: BlockContext): Node =
+        Block(ctx.statement().map { visit(it) as Statement }, locationOf(ctx))
+
+    // program: statement* EOF
+    override fun visitProgram(ctx: ProgramContext): Node =
+        Program(ctx.statement().map { visit(it) as Statement }, locationOf(ctx))
 }
