@@ -24,7 +24,7 @@ casos, no por dificultad.
 
 ## Ticket 2.1 — `SyntaxAnalyzer` y captura de errores de ANTLR
 
-- **Estado**: pendiente
+- **Estado**: terminado 
 - **Depende de**: 0.6, 1.5
 
 **Archivos:**
