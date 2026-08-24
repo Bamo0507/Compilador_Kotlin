@@ -137,7 +137,7 @@ que encontrarlo, y la clase puede estar declarada más abajo que su uso.
 
 ## Ticket 3.1 — `TypeResolver`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1, 1.3, 1.5
 
 **Archivos:**
@@ -274,8 +274,8 @@ falso.
 
 ### Aceptación
 
-- `resolve(TypeReference("integer", 0))` devuelve `IntegerType`.
-- `resolve(TypeReference("integer", 2))` devuelve `ArrayType(ArrayType(IntegerType))`.
+- `resolve(TypeReference("integer", 0))` devuelve `IntegerType`. ✅
+- `resolve(TypeReference("integer", 2))` devuelve `ArrayType(ArrayType(IntegerType))`. ✅
 - `resolve(TypeReference("Perro", 0))` con `Perro` declarada devuelve `ClassType("Perro")`.
 - `resolve(TypeReference("Gato", 0))` con `Gato` **no** declarada devuelve `ErrorType` y
   reporta un `SemanticError` con la línea y columna del `TypeReference`.
@@ -285,7 +285,7 @@ falso.
   Fase 4 emitiría un segundo error.*
 - `resolve(TypeReference("contador", 0))` con `contador` declarada como **variable**
   devuelve `ErrorType` y reporta el error: existe el nombre, pero no es una clase.
-- `resolve(null)` devuelve `null` sin reportar nada.
+- `resolve(null)` devuelve `null` sin reportar nada. ✅
 - `resolve(TypeReference("integer", 1))` dos veces devuelve tipos iguales (`==`).
 - `PRIMITIVE_TYPES` tiene exactamente cuatro entradas, y sus claves son iguales a
   los `name` de `IntegerType`, `FloatType`, `StringType` y `BooleanType`. Ningún

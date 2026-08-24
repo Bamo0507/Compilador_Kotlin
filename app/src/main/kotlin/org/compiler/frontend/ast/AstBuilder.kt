@@ -8,12 +8,17 @@ import org.compiler.models.LexemeLocation
 import org.compiler.parser.CompiscriptBaseVisitor
 import org.compiler.parser.CompiscriptParser.*   // los *Context estan anidados aqui
 
+/**
+ * Convierte el arbol de ANTLR en el AST propio.
+ *
+ * El <Node> es el tipo de retorno de todos los metodos, asi que las expresiones llevan
+ * `as Expression` y las sentencias `as Statement` al consumir un hijo.
+ *
+ * Un metodo por regla, salvo las de puro paso —expression, statement, classMember—,
+ * donde el visitChildren por defecto ya propaga el nodo del hijo.
+ */
 class AstBuilder : CompiscriptBaseVisitor<Node>() {
-
-    //=============================================
-    //  Helpers
-    //=============================================
-
+    //  Ayudantes
     // La ubicacion de un nodo es la de su PRIMER token.
     // ANTLR cuenta columnas desde 0; LexemeLocation desde 1.
     private fun locationOf(ctx: ParserRuleContext): LexemeLocation =
@@ -22,22 +27,17 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             position = ctx.start.charPositionInLine + 1
         )
 
-    // Los operadores de una regla con forma  X (op X)*  son los hijos que NO son
-    // sub-expresiones: los nodos terminales. Se leen en orden de aparicion.
-    //
-    //   a + b - c   ->  ["+", "-"]
+    // En una regla con forma  X (op X)*  los unicos hijos terminales son los
+    // operadores:  a + b - c  ->  ["+", "-"]
     private fun operatorSymbolsOf(ctx: ParserRuleContext): List<String> =
         (0 until ctx.childCount)
             .map { ctx.getChild(it) }
             .filterIsInstance<TerminalNode>()
             .map { it.text }
 
-    // Pliega a la IZQUIERDA una lista plana de operandos con sus operadores.
+    // Pliega a la IZQUIERDA:  [a, b, c] con ["+", "-"]  ->  ((a + b) - c)
     //
-    //   [a, b, c] con ["+", "-"]  ->  BinaryOperation(BinaryOperation(a,+,b), -, c)
-    //
-    // El `left = result` es todo el secreto: cada vuelta mete lo ACUMULADO a la
-    // izquierda. Por eso queda ((a+b)-c) y no (a+(b-c)).
+    // El `left = result` es todo el secreto. Plegado al reves, 10 - 3 - 2 daria 9.
     private fun foldBinaryLeft(
         operands: List<Expression>,
         operatorSymbols: List<String>
@@ -54,11 +54,10 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
         return result
     }
 
-    // Las SEIS reglas binarias tienen la misma forma  X (op X)*, asi que comparten
-    // esto. La unica diferencia entre ellas es el accesor del hijo.
+    // Lo comparten las seis reglas binarias: solo cambia el accesor del hijo.
     //
-    // El `if (size == 1)` es la regla que COLAPSA LA TORRE, y vivir aqui garantiza que
-    // las seis la tengan: no se puede olvidar en una.
+    // El `if (size == 1)` colapsa la torre de precedencia, y vivir aqui garantiza que
+    // las seis lo tengan.
     private fun foldFlatBinary(
         ctx: ParserRuleContext,
         operands: List<ParserRuleContext>
@@ -70,27 +69,22 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // arguments: expression (',' expression)*
     //
-    // El `?` del llamador (`arguments?` en la gramatica) es lo que hace posible `f()`
-    // sin argumentos, y por eso el parametro es nullable.
+    // Nullable porque el llamador declara `arguments?`, y eso es lo que permite `f()`.
     private fun buildArguments(ctx: ArgumentsContext?): List<Expression> =
         ctx?.expression()?.map { visit(it) as Expression } ?: emptyList()
 
-    // Quita las comillas de un StringLiteral.
-    //
-    // No hay escapes que procesar: la gramatica dice
-    //   StringLiteral: '"' (~["\r\n])* '"'
-    // o sea cualquier caracter menos comilla y salto de linea. Un backslash es un
-    // backslash literal, no un escape.
+    // Quita las comillas. No hay escapes que procesar: la gramatica acepta cualquier
+    // caracter menos comilla y salto de linea, asi que un backslash es literal.
     private fun unquote(text: String): String = text.substring(1, text.length - 1)
 
     //=============================================
-    //  La asignacion como expresion, y el ternario
+    //  Asignacion como expresion, y ternario
     //=============================================
 
-    // lhs=leftHandSide '=' assignmentExpr            # AssignExpr
+    // lhs=leftHandSide '=' assignmentExpr   # AssignExpr
     //
-    // El `lhs=` de la gramatica es una ETIQUETA DE CAMPO, y genera el accesor ctx.lhs.
-    // Recursiva por la derecha, asi que `a = b = c` ya agrupa como `a = (b = c)`.
+    // El `lhs=` genera el accesor ctx.lhs. Recursiva por la derecha, asi que
+    // `a = b = c` ya agrupa como `a = (b = c)`.
     override fun visitAssignExpr(ctx: AssignExprContext): Node =
         AssignmentExpression(
             target = visit(ctx.lhs) as Expression,
@@ -100,12 +94,8 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // lhs=leftHandSide '.' Identifier '=' assignmentExpr   # PropertyAssignExpr
     //
-    // `obj.prop = valor`. El target se arma como PropertyAccess, asi que el resto del
-    // compilador ve la misma forma que produce la cadena de sufijos.
-    //
-    // OJO: en la practica ANTLR casi nunca entra por aqui: leftHandSide absorbe el
-    // `.prop` como suffixOp y `obj.prop = 5` entra por AssignExpr. Se cubre igual
-    // porque la alternativa existe en la gramatica.
+    // ANTLR casi nunca entra por aqui: leftHandSide absorbe el `.prop` como suffixOp y
+    // `obj.prop = 5` cae en AssignExpr. Se cubre porque la alternativa existe.
     override fun visitPropertyAssignExpr(ctx: PropertyAssignExprContext): Node {
         val location = locationOf(ctx)
         return AssignmentExpression(
@@ -119,20 +109,16 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
         )
     }
 
-    // conditionalExpr    # ExprNoAssign
+    // conditionalExpr   # ExprNoAssign
     //
-    // Alternativa de puro paso. Habria que dejarla al default, PERO la regla tiene
-    // etiquetas: sin este metodo, `visitExprNoAssign` no se escribe y el default de
-    // ANTLR aplica igual. Se escribe explicito para que las tres alternativas de
+    // El default de ANTLR haria lo mismo. Se escribe para que las tres alternativas de
     // assignmentExpr esten a la vista juntas.
     override fun visitExprNoAssign(ctx: ExprNoAssignContext): Node =
         visit(ctx.conditionalExpr())
 
-    // conditionalExpr
-    //   : logicalOrExpr ('?' expression ':' expression)?   # TernaryExpr
+    // conditionalExpr: logicalOrExpr ('?' expression ':' expression)?   # TernaryExpr
     //
-    // El metodo se llama visitTernaryExpr, NO visitConditionalExpr: la regla tiene
-    // una alternativa etiquetada y ANTLR genera el metodo por etiqueta.
+    // Se llama visitTernaryExpr y no visitConditionalExpr: la regla esta etiquetada.
     override fun visitTernaryExpr(ctx: TernaryExprContext): Node {
         val condition = visit(ctx.logicalOrExpr()) as Expression
 
@@ -150,6 +136,7 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
     //=============================================
     //  Los seis niveles binarios
     //=============================================
+
     override fun visitLogicalOrExpr(ctx: LogicalOrExprContext): Node =
         foldFlatBinary(ctx, ctx.logicalAndExpr())
 
@@ -168,13 +155,22 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
     override fun visitMultiplicativeExpr(ctx: MultiplicativeExprContext): Node =
         foldFlatBinary(ctx, ctx.unaryExpr())
 
+    //=============================================
+    //  Sufijos, unario y primarias
+    //=============================================
+
+    // leftHandSide: primaryAtom (suffixOp)*
+    //
+    // Cada sufijo envuelve el resultado acumulado:
+    //   perro.dueno.nombre  ->  PropertyAccess(PropertyAccess(perro, dueno), nombre)
+    //   lista[0][1]         ->  IndexAccess(IndexAccess(lista, 0), 1)
+    //   perro.hablar()      ->  FunctionCall(PropertyAccess(perro, hablar), [])
+    //
+    // Los tres visitX de suffixOp no se sobrescriben: un sufijo suelto no significa
+    // nada sin el lado izquierdo, asi que se inspeccionan por tipo aqui.
     override fun visitLeftHandSide(ctx: LeftHandSideContext): Node {
         var result = visit(ctx.primaryAtom()) as Expression
 
-        // Cada sufijo envuelve el resultado acumulado. Así,
-        //   perro.dueno.nombre  ->  PropertyAccess(PropertyAccess(perro, dueno), nombre)
-        //   lista[0][1]         ->  IndexAccess(IndexAccess(lista, 0), 1)
-        //   perro.hablar()      ->  FunctionCall(PropertyAccess(perro, hablar), [])
         for (suffix in ctx.suffixOp()) {
             result = when (suffix) {
                 is CallExprContext -> FunctionCall(
@@ -213,22 +209,20 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // primaryExpr: literalExpr | leftHandSide | '(' expression ')'
     //
-    // Las dos primeras alternativas funcionarian con el default (un hijo, es regla),
-    // pero la tercera no: su ultimo hijo es ')' y devolveria null. Como la regla no
-    // tiene etiquetas, ANTLR genera UN metodo para las tres, asi que hay que cubrirlas.
+    // Se sobrescribe por la tercera alternativa: su ultimo hijo es ')' y el default
+    // devolveria null.
     override fun visitPrimaryExpr(ctx: PrimaryExprContext): Node = when {
-        ctx.literalExpr() != null  -> visit(ctx.literalExpr())
+        ctx.literalExpr() != null -> visit(ctx.literalExpr())
         ctx.leftHandSide() != null -> visit(ctx.leftHandSide())
 
-        // El caso `(expr)`. Los parentesis DESAPARECEN: ya hicieron su trabajo al
-        // parsear, le dieron forma al arbol. El AST guarda la forma, no la notacion.
+        // Los parentesis DESAPARECEN: ya le dieron forma al arbol al parsear.
         else -> visit(ctx.expression())
     }
 
     // literalExpr: Literal | arrayLiteral | 'null' | 'true' | 'false'
     //
-    // El tipo del literal se decide por la FORMA del texto: la gramatica no tiene
-    // tokens separados para true/false/null, los declara como literales de cadena.
+    // El tipo se decide por la forma del texto: la gramatica declara true, false y null
+    // como literales de cadena, sin tokens propios.
     override fun visitLiteralExpr(ctx: LiteralExprContext): Node {
         if (ctx.arrayLiteral() != null) return visit(ctx.arrayLiteral())
 
@@ -236,15 +230,14 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
         val location = locationOf(ctx)
 
         return when {
-            text == "null"        -> Literal(null, NullType, location)
-            text == "true"        -> Literal(true, BooleanType, location)
-            text == "false"       -> Literal(false, BooleanType, location)
+            text == "null" -> Literal(null, NullType, location)
+            text == "true" -> Literal(true, BooleanType, location)
+            text == "false" -> Literal(false, BooleanType, location)
             text.startsWith("\"") -> Literal(unquote(text), StringType, location)
-            text.contains(".")    -> Literal(text.toDouble(), FloatType, location)
+            text.contains(".") -> Literal(text.toDouble(), FloatType, location)
 
-            // toLong y no toInt: 99999999999 es sintacticamente valido pero no cabe en
-            // Int. Guardandolo en Long, la Fase 4 detecta el desborde y lo REPORTA con
-            // linea y columna; con toInt el AstBuilder lanzaria antes de llegar ahi.
+            // toLong y no toInt: 99999999999 no cabe en Int, y guardarlo en Long deja
+            // que la Fase 4 reporte el desborde en vez de reventar aqui.
             else -> Literal(text.toLong(), IntegerType, location)
         }
     }
@@ -256,9 +249,6 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             location = locationOf(ctx)
         )
 
-    // =============================================
-    //  Los tres átomos
-    // =============================================
     // primaryAtom: Identifier   # IdentifierExpr
     override fun visitIdentifierExpr(ctx: IdentifierExprContext): Node =
         Identifier(ctx.Identifier().text, locationOf(ctx))
@@ -275,17 +265,14 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
     override fun visitThisExpr(ctx: ThisExprContext): Node =
         ThisReference(locationOf(ctx))
 
-    // =============================================
-    // TypeReference
-    // =============================================
+    //=============================================
+    //  Tipos y parametros
+    //=============================================
 
-    // "integer[][]" -> TypeReference("integer", 2)
+    // type: baseType ('[' ']')*
     //
-    // Las dimensiones son la cantidad de pares '[' ']'. Como cada par son DOS hijos
-    // terminales, se divide entre 2.
-    //
-    // El /2 funciona porque `baseType` es una REGLA, no un token: los unicos hijos
-    // terminales de `type` son los corchetes.
+    // Las dimensiones son los pares de corchetes. El /2 funciona porque baseType es una
+    // regla y no un token: los unicos hijos terminales de `type` son los corchetes.
     private fun buildTypeReference(ctx: TypeContext): TypeReference {
         val bracketPairs = (0 until ctx.childCount)
             .map { ctx.getChild(it) }
@@ -293,9 +280,6 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             .count() / 2
 
         return TypeReference(
-            // ctx.baseType().text es seguro aqui: baseType es siempre UN token, sea
-            // 'integer' o un Identifier. La advertencia sobre ctx.text aplica a nodos
-            // con varios hijos, no a este.
             baseName = ctx.baseType().text,
             arrayDimensions = bracketPairs,
             location = locationOf(ctx)
@@ -304,14 +288,18 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // parameter: Identifier (':' type)?
     //
-    // Es un ayudante y no un visitor porque Parameter no es Statement ni Expression: es
-    // un Node aparte, y el unico que lo construye es visitFunctionDeclaration.
+    // Ayudante y no visitor porque Parameter no es Statement ni Expression, y el unico
+    // que lo construye es visitFunctionDeclaration.
     private fun buildParameter(ctx: ParameterContext): Parameter =
         Parameter(
             name = ctx.Identifier().text,
-            declaredType = ctx.type()?.let { buildTypeReference(it) },   // null si no se anoto
+            declaredType = ctx.type()?.let { buildTypeReference(it) },
             location = locationOf(ctx)
         )
+
+    //=============================================
+    //  Declaraciones
+    //=============================================
 
     // variableDeclaration: ('let' | 'var') Identifier typeAnnotation? initializer? ';'
     override fun visitVariableDeclaration(ctx: VariableDeclarationContext): Node =
@@ -325,8 +313,7 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // constantDeclaration: 'const' Identifier typeAnnotation? '=' expression ';'
     //
-    // Mismo nodo que la variable, con isConstant = true. La `const` SIEMPRE tiene
-    // inicializador: la gramática lo exige, no hace falta validarlo aquí.
+    // Mismo nodo que la variable. El inicializador no lleva `?`: la gramatica lo exige.
     override fun visitConstantDeclaration(ctx: ConstantDeclarationContext): Node =
         VariableDeclaration(
             name = ctx.Identifier().text,
@@ -348,7 +335,7 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // classDeclaration: 'class' Identifier (':' Identifier)? '{' classMember* '}'
     //
-    // El segundo Identifier, si existe, es la superclase.
+    // Dos Identifier posibles; el segundo, si existe, es la superclase.
     override fun visitClassDeclaration(ctx: ClassDeclarationContext): Node {
         val identifiers = ctx.Identifier()
         return ClassDeclaration(
@@ -359,12 +346,20 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
         )
     }
 
-    // assignment (la regla de statement): dos formas.
+    //=============================================
+    //  Sentencias simples
+    //=============================================
+
+    // assignment
+    //   : Identifier '=' expression ';'
+    //   | expression '.' Identifier '=' expression ';'
+    //
+    // La regla no tiene etiquetas, asi que hay un solo metodo y la alternativa se
+    // deduce de cuantos `expression` hijos hay.
     override fun visitAssignment(ctx: AssignmentContext): Node {
         val location = locationOf(ctx)
 
-        // Forma 1:  Identifier '=' expression ';'
-        //           (un solo `expression` hijo y ningún '.')
+        // Forma 1: x = 5;
         if (ctx.expression().size == 1) {
             return Assignment(
                 target = Identifier(ctx.Identifier().text, location),
@@ -373,7 +368,7 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             )
         }
 
-        // Forma 2:  expression '.' Identifier '=' expression ';'
+        // Forma 2: obj.prop = 5;
         return Assignment(
             target = PropertyAccess(
                 target = visit(ctx.expression(0)) as Expression,
@@ -387,13 +382,9 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
 
     // expressionStatement: expression ';'
     //
-    // Si la expresion resulta ser una asignacion, se DESARMA y se rearma como el mismo
-    // nodo Assignment que produce la regla `assignment`. Asi el AST tiene una sola forma
-    // de asignar A NIVEL DE SENTENCIA, sin importar por que camino de la gramatica llego.
-    //
-    // AssignmentExpression sigue existiendo para el caso ANIDADO —`let y = (x = 5);`,
-    // `if (x = 1)`—, asi que la Fase 4 tiene las dos funciones. Las tres reglas comunes
-    // (lvalue, constante, asignabilidad) viven en un ayudante compartido; ver ticket 4.4.
+    // Si la expresion es una asignacion se rearma como Assignment, para que el AST tenga
+    // una sola forma de asignar a nivel de sentencia. Es lo que atrapa `lista[0] = 5;`,
+    // que la regla `assignment` no acepta.
     override fun visitExpressionStatement(ctx: ExpressionStatementContext): Node {
         val expr = visit(ctx.expression()) as Expression
         val location = locationOf(ctx)
@@ -404,6 +395,22 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             ExpressionStatement(expr = expr, location = location)
         }
     }
+
+    // printStatement: 'print' '(' expression ')' ';'
+    override fun visitPrintStatement(ctx: PrintStatementContext): Node =
+        Print(visit(ctx.expression()) as Expression, locationOf(ctx))
+
+    // block: '{' statement* '}'
+    override fun visitBlock(ctx: BlockContext): Node =
+        Block(ctx.statement().map { visit(it) as Statement }, locationOf(ctx))
+
+    // program: statement* EOF
+    override fun visitProgram(ctx: ProgramContext): Node =
+        Program(ctx.statement().map { visit(it) as Statement }, locationOf(ctx))
+
+    //=============================================
+    //  Control de flujo
+    //=============================================
 
     // ifStatement: 'if' '(' expression ')' block ('else' block)?
     override fun visitIfStatement(ctx: IfStatementContext): Node =
@@ -430,21 +437,21 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             location = locationOf(ctx)
         )
 
+    // forStatement
+    //   : 'for' '(' (variableDeclaration | assignment | ';') expression? ';' expression? ')' block
     override fun visitForStatement(ctx: ForStatementContext): Node {
-        // El inicializador es opcional: si es solo ';', ambos hijos vienen nulos.
         val initializer: Statement? = when {
             ctx.variableDeclaration() != null -> visit(ctx.variableDeclaration()) as Statement
-            ctx.assignment() != null          -> visit(ctx.assignment()) as Statement
-            else                              -> null
+            ctx.assignment() != null -> visit(ctx.assignment()) as Statement
+            else -> null
         }
 
-        // Las dos expresiones opcionales son, en orden: condición y actualización.
-        // Si solo viene una, la LISTA no dice cuál es. Se resuelve por posición del
-        // token: la que está antes del ';' separador es la condición.
+        // ctx.expression() es una lista de 0, 1 o 2 elementos, y con uno solo no dice si
+        // es la condicion o la actualizacion. Se decide por posicion de token contra el
+        // ';' separador, que es el ULTIMO ';' hijo directo:
         //
-        // El ';' separador es SIEMPRE el último ';' hijo directo de forStatement:
-        //   for (let i = 0; i < 3; i++)   -> hijos ';': uno (el separador)
-        //   for (; i < 3; i++)            -> hijos ';': dos (el del init vacío y el separador)
+        //   for (let i = 0; i < 3; i = i + 1)   un ';' directo (el del init va adentro)
+        //   for (;; i = i + 1)                  dos, y la unica expresion es el update
         val separatorIndex = ctx.children
             .filterIsInstance<TerminalNode>()
             .last { it.text == ";" }
@@ -478,23 +485,16 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             subject = visit(ctx.expression()) as Expression,
             cases = ctx.switchCase().map { visit(it) as SwitchCase },
 
-            // El `default` NO necesita su propio visitor: aqui se leen sus statements
-            // directo. El `?` es lo que distingue "sin default" (null) de "default
-            // vacio" (lista vacia), y la Fase 5 usa esa diferencia para decidir si un
-            // switch garantiza retorno en todos los caminos.
+            // El `?` distingue "sin default" (null) de "default vacio" (lista vacia), y
+            // la Fase 5 usa esa diferencia.
             defaultBody = ctx.defaultCase()?.statement()?.map { visit(it) as Statement },
             location = locationOf(ctx)
         )
 
     // switchCase: 'case' expression ':' statement*
     //
-    // HACE FALTA sobrescribirlo. Sin este metodo corre el default, y visitChildren
-    // devuelve el ULTIMO `statement` del cuerpo: un Statement, no un SwitchCase. El
-    // `as SwitchCase` del llamador lanzaria ClassCastException en ejecucion.
-    //
-    // El cuerpo es List<Statement> y no un Block porque la gramatica no le pone llaves
-    // al case. Por eso un `case` no abre ambito por si mismo: lo abre el TypeChecker de
-    // la Fase 4, con el nombre "case@N".
+    // Sin este metodo, el default devolveria el ULTIMO statement del cuerpo y el
+    // `as SwitchCase` del llamador lanzaria ClassCastException.
     override fun visitSwitchCase(ctx: SwitchCaseContext): Node =
         SwitchCase(
             value = visit(ctx.expression()) as Expression,
@@ -511,25 +511,15 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             location = locationOf(ctx)
         )
 
-    // printStatement: 'print' '(' expression ')' ';'
-    override fun visitPrintStatement(ctx: PrintStatementContext): Node =
-        Print(visit(ctx.expression()) as Expression, locationOf(ctx))
-
     // returnStatement: 'return' expression? ';'
     override fun visitReturnStatement(ctx: ReturnStatementContext): Node =
         Return(ctx.expression()?.let { visit(it) as Expression }, locationOf(ctx))
 
+    // breakStatement: 'break' ';'
     override fun visitBreakStatement(ctx: BreakStatementContext): Node =
         Break(locationOf(ctx))
 
+    // continueStatement: 'continue' ';'
     override fun visitContinueStatement(ctx: ContinueStatementContext): Node =
         Continue(locationOf(ctx))
-
-    // block: '{' statement* '}'
-    override fun visitBlock(ctx: BlockContext): Node =
-        Block(ctx.statement().map { visit(it) as Statement }, locationOf(ctx))
-
-    // program: statement* EOF
-    override fun visitProgram(ctx: ProgramContext): Node =
-        Program(ctx.statement().map { visit(it) as Statement }, locationOf(ctx))
 }
