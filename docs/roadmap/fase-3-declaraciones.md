@@ -300,7 +300,7 @@ declaradas"* extendido a tipos.
 
 ## Ticket 3.2 — `DeclarationCollector`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.1
 
 **Archivos:**

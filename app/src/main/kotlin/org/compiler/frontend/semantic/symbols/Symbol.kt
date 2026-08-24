@@ -2,6 +2,10 @@ package org.compiler.frontend.semantic.symbols
 
 import org.compiler.models.LexemeLocation
 
+// La gramatica no tiene sintaxis de constructor: una clase lo declara como una funcion
+// que se LLAMA asi. Este es el unico lugar donde ese nombre esta escrito.
+const val CONSTRUCTOR_NAME = "constructor"
+
 /**
  * La ficha de un nombre declarado. Es la unidad de informacion de la tabla de
  * simbolos.
