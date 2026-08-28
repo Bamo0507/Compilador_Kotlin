@@ -20,8 +20,12 @@ import org.compiler.frontend.ast.models.UnaryOperation
 import org.compiler.frontend.ast.models.UnaryOperator
 import org.compiler.frontend.semantic.symbols.ArrayType
 import org.compiler.frontend.semantic.symbols.BooleanType
+import org.compiler.frontend.semantic.symbols.ClassType
+import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
+import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.ErrorType
 import org.compiler.frontend.semantic.symbols.FloatType
+import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
 import org.compiler.frontend.semantic.symbols.NullType
 import org.compiler.frontend.semantic.symbols.Scope
@@ -52,7 +56,17 @@ class TypeChecker(
         globalScope.lookupLocal(className)?.memberScope?.superclass?.name
     }
 
-    internal fun checkExpression(expr: Expression): TypedValue = when (expr) {
+    internal fun checkExpression(expr: Expression, scope: Scope = currentScope): TypedValue {
+        val previousScope = currentScope
+        currentScope = scope
+        return try {
+            checkExpressionInCurrentScope(expr)
+        } finally {
+            currentScope = previousScope
+        }
+    }
+
+    private fun checkExpressionInCurrentScope(expr: Expression): TypedValue = when (expr) {
         is Literal -> checkLiteral(expr)
         is Identifier -> checkIdentifier(expr)
         is BinaryOperation -> checkBinaryOperation(expr)
@@ -60,9 +74,14 @@ class TypeChecker(
         is TernaryOperation -> checkTernaryOperation(expr)
         is ArrayLiteral -> checkArrayLiteral(expr)
 
-        // Estos nodos se implementan en el ticket 4.3 y las asignaciones en 4.4.
-        is FunctionCall, is IndexAccess, is PropertyAccess, is ObjectCreation,
-        is ThisReference, is AssignmentExpression ->
+        is FunctionCall -> checkFunctionCall(expr)
+        is IndexAccess -> checkIndexAccess(expr)
+        is PropertyAccess -> checkPropertyAccess(expr)
+        is ObjectCreation -> checkObjectCreation(expr)
+        is ThisReference -> checkThisReference(expr)
+
+        // Las asignaciones se implementan en el ticket 4.4.
+        is AssignmentExpression ->
             error("La expresión '${expr::class.simpleName}' aún no pertenece al ticket 4.2")
     }
 
@@ -95,11 +114,11 @@ class TypeChecker(
             symbol.usedInNestedFunction = true
         }
 
-        if (!symbol.initialized && symbol.kind != org.compiler.frontend.semantic.symbols.DeclarationKind.FUNCTION) {
+        if (!symbol.initialized && symbol.kind != DeclarationKind.FUNCTION) {
             report(expr, "La variable '${expr.name}' se usa antes de tener un valor")
         }
 
-        val constant = if (symbol.kind == org.compiler.frontend.semantic.symbols.DeclarationKind.CONSTANT) {
+        val constant = if (symbol.kind == DeclarationKind.CONSTANT) {
             symbol.constantValue
         } else {
             null
@@ -189,6 +208,125 @@ class TypeChecker(
             }
         }
         return decorate(expr, TypedValue(ArrayType(unified)))
+    }
+
+    private fun checkFunctionCall(expr: FunctionCall): TypedValue {
+        val calleeType = checkExpression(expr.callee).type
+
+        if (calleeType == ErrorType) {
+            expr.arguments.forEach { checkExpression(it) }
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        if (calleeType !is FunctionType) {
+            report(expr, "'${describeCallee(expr.callee)}' no es una función")
+            expr.arguments.forEach { checkExpression(it) }
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        checkArguments(expr, calleeType.parameters, expr.arguments)
+        return decorate(expr, TypedValue(calleeType.returns))
+    }
+
+    private fun describeCallee(callee: Expression): String = when (callee) {
+        is Identifier -> callee.name
+        is PropertyAccess -> "${describeCallee(callee.target)}.${callee.propertyName}"
+        is ThisReference -> "this"
+        else -> "la expresión"
+    }
+
+    private fun checkArguments(node: Expression, expected: List<Type>, arguments: List<Expression>) {
+        val actual = arguments.map { checkExpression(it).type }
+        if (actual.size != expected.size) {
+            report(node, "Se esperaban ${expected.size} argumentos y se recibieron ${actual.size}")
+            return
+        }
+
+        expected.zip(actual).forEachIndexed { index, (expectedType, actualType) ->
+            if (!typeRules.isAssignable(expectedType, actualType)) {
+                report(arguments[index], "El argumento ${index + 1} debe ser '${expectedType.name}', " +
+                    "no '${actualType.name}'")
+            }
+        }
+    }
+
+    private fun checkPropertyAccess(expr: PropertyAccess): TypedValue {
+        val targetType = checkExpression(expr.target).type
+        if (targetType == ErrorType) return decorate(expr, TypedValue(ErrorType))
+
+        if (targetType !is ClassType) {
+            report(expr, "No se puede acceder a '.${expr.propertyName}' sobre " +
+                "'${targetType.name}': no es un objeto")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        val member = classScopeOf(targetType.className)?.lookupMember(expr.propertyName)
+        if (member == null) {
+            report(expr, "La clase '${targetType.className}' no tiene un miembro " +
+                "llamado '${expr.propertyName}'")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        expr.resolvedMember = member
+        member.useCount += 1
+        member.lastUseLine = expr.location.line
+        return decorate(expr, TypedValue(member.type))
+    }
+
+    private fun classScopeOf(className: String): Scope? =
+        globalScope.lookupLocal(className)?.memberScope
+
+    // Se invoca desde checkFunctionDeclaration en el ticket 4.4, cuando se entra al
+    // ámbito de una clase y las firmas de todos los métodos ya están disponibles.
+    private fun checkOverride(declaration: org.compiler.frontend.ast.models.FunctionDeclaration, classScope: Scope) {
+        val inherited = classScope.superclass?.lookupMember(declaration.name) ?: return
+        val ownType = classScope.lookupLocal(declaration.name)?.type ?: return
+        if (ownType != inherited.type) {
+            report(declaration, "El método '${declaration.name}' sobrescribe el de la superclase " +
+                "con otra firma: se esperaba '${inherited.type.name}' y es '${ownType.name}'")
+        }
+    }
+
+    private fun checkObjectCreation(expr: ObjectCreation): TypedValue {
+        val classSymbol = globalScope.lookupLocal(expr.className)
+        if (classSymbol == null || classSymbol.kind != DeclarationKind.CLASS) {
+            report(expr, "La clase '${expr.className}' no está declarada")
+            expr.arguments.forEach { checkExpression(it) }
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        val constructor = classSymbol.memberScope!!.lookupMember(CONSTRUCTOR_NAME)
+        val expectedParameters = (constructor?.type as? FunctionType)?.parameters ?: emptyList()
+        checkArguments(expr, expectedParameters, expr.arguments)
+        return decorate(expr, TypedValue(ClassType(expr.className)))
+    }
+
+    private fun checkThisReference(expr: ThisReference): TypedValue {
+        val classScope = currentScope.enclosingClass()
+        if (classScope == null) {
+            report(expr, "'this' solo se puede usar dentro de una clase")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+        return decorate(expr, TypedValue(ClassType(classScope.name)))
+    }
+
+    private fun checkIndexAccess(expr: IndexAccess): TypedValue {
+        val targetType = checkExpression(expr.target).type
+        val index = checkExpression(expr.index)
+        if (targetType == ErrorType) return decorate(expr, TypedValue(ErrorType))
+
+        if (targetType !is ArrayType) {
+            report(expr, "No se puede indexar sobre '${targetType.name}': no es una lista")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        if (index.type != IntegerType && index.type != ErrorType) {
+            report(expr.index, "El índice debe ser integer, no '${index.type.name}'")
+        }
+        if (index.constant is Long && index.constant < 0) {
+            report(expr.index, "El índice no puede ser negativo: ${index.constant}")
+        }
+        return decorate(expr, TypedValue(targetType.element))
     }
 
     private fun foldBinaryOperation(
