@@ -45,7 +45,7 @@ class ObjectValue(
 class FunctionValue(
     val declaration: FunctionDeclaration,
     val closure: Environment,
-    val boundThis: ObjectValue? = null    // no-null si es un método
+    val boundThis: ObjectValue? = null // no-null si es un método
 ) : RuntimeValue {
     override fun display() = "<function ${declaration.name}>"
 }

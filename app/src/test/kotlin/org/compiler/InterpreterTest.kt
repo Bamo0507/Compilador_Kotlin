@@ -378,4 +378,56 @@ class InterpreterTest {
             )
         )
     }
+
+    // ── Desreferenciar null ────────────────────────────────────────────────
+    //
+    // `let a: integer[] = null;` es legal para el TypeChecker, asi que usar ese nulo
+    // solo se puede detectar ejecutando. Sin los chequeos dinamicos esto lanzaba una
+    // ClassCastException que se escapaba del interprete.
+
+    @Test
+    fun `indexar un nulo produce RuntimeError y no una excepcion de Kotlin`() {
+        val result = run("let a: integer[] = null;\nprint(a[0]);")
+
+        assertNotNull(result.runtimeError)
+        assertTrue(result.runtimeError.message.contains("Se esperaba una lista"))
+        assertEquals(2, result.runtimeError.location.line)
+    }
+
+    @Test
+    fun `asignar a un campo de un nulo produce RuntimeError`() {
+        val result = run(
+            """
+            class P { let n: string; }
+            let p: P = null;
+            p.n = "x";
+            """.trimIndent()
+        )
+
+        assertNotNull(result.runtimeError)
+        assertTrue(result.runtimeError.message.contains("Se esperaba un objeto"))
+    }
+
+    @Test
+    fun `recorrer un nulo con foreach produce RuntimeError`() {
+        val result = run("let a: integer[] = null;\nforeach (x in a) { print(x); }")
+
+        assertNotNull(result.runtimeError)
+        assertTrue(result.runtimeError.message.contains("Se esperaba una lista"))
+    }
+
+    // Lo que hacia falta: el error tiene que ser del lenguaje para que el try/catch
+    // del propio programa lo pueda atrapar.
+    @Test
+    fun `el try catch del programa atrapa el desreferenciado de nulo`() {
+        assertEquals(
+            listOf("atrapado"),
+            output(
+                """
+                let a: integer[] = null;
+                try { print(a[0]); } catch (err) { print("atrapado"); }
+                """.trimIndent()
+            )
+        )
+    }
 }

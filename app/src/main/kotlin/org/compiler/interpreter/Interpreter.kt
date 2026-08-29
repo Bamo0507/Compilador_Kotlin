@@ -9,8 +9,8 @@ import org.compiler.models.LexemeLocation
 // El resultado de ejecutar un programa.
 
 data class ExecutionResult(
-    val output: List<String>,          // lo que imprimió print(), en orden
-    val runtimeError: RuntimeError?    // null si terminó bien
+    val output: List<String>, // lo que imprimió print(), en orden
+    val runtimeError: RuntimeError? // null si terminó bien
 )
 
 /**
@@ -31,7 +31,7 @@ class Interpreter {
     fun run(program: Program): ExecutionResult {
         program.statements.forEach { statement ->
             when (statement) {
-                is ClassDeclaration    -> classDeclarations[statement.name] = statement
+                is ClassDeclaration -> classDeclarations[statement.name] = statement
                 is FunctionDeclaration -> executeFunctionDeclaration(statement)
                 else -> Unit
             }
@@ -55,42 +55,42 @@ class Interpreter {
         expr.constantValue?.let { return toRuntimeValue(it) }
 
         return when (expr) {
-            is Literal              -> evaluateLiteral(expr)
-            is ArrayLiteral         -> evaluateArrayLiteral(expr)
-            is Identifier           -> evaluateIdentifier(expr)
-            is ThisReference        -> evaluateThis(expr)
-            is UnaryOperation       -> evaluateUnary(expr)
-            is BinaryOperation      -> evaluateBinary(expr)
-            is TernaryOperation     -> evaluateTernary(expr)
+            is Literal -> evaluateLiteral(expr)
+            is ArrayLiteral -> evaluateArrayLiteral(expr)
+            is Identifier -> evaluateIdentifier(expr)
+            is ThisReference -> evaluateThis(expr)
+            is UnaryOperation -> evaluateUnary(expr)
+            is BinaryOperation -> evaluateBinary(expr)
+            is TernaryOperation -> evaluateTernary(expr)
             is AssignmentExpression -> evaluateAssignmentExpression(expr)
-            is FunctionCall         -> evaluateFunctionCall(expr)
-            is IndexAccess          -> evaluateIndexAccess(expr)
-            is PropertyAccess       -> evaluatePropertyAccess(expr)
-            is ObjectCreation       -> evaluateObjectCreation(expr)
+            is FunctionCall -> evaluateFunctionCall(expr)
+            is IndexAccess -> evaluateIndexAccess(expr)
+            is PropertyAccess -> evaluatePropertyAccess(expr)
+            is ObjectCreation -> evaluateObjectCreation(expr)
         }
     }
 
     private fun execute(stmt: Statement): Unit = when (stmt) {
-        is VariableDeclaration  -> executeVariableDeclaration(stmt)
-        is FunctionDeclaration  -> executeFunctionDeclaration(stmt)
-        is Assignment           -> executeAssignment(stmt)
-        is ExpressionStatement  -> { evaluate(stmt.expr); Unit }
-        is Print                -> executePrint(stmt)
-        is Block                -> executeBlock(stmt, environment.child())
-        is If                   -> executeIf(stmt)
-        is While                -> executeWhile(stmt)
-        is DoWhile              -> executeDoWhile(stmt)
-        is For                  -> executeFor(stmt)
-        is ForEach              -> executeForEach(stmt)
-        is Switch               -> executeSwitch(stmt)
-        is TryCatch             -> executeTryCatch(stmt)
-        is Return               -> throw ReturnSignal(stmt.value?.let { evaluate(it) } ?: NullValue)
-        is Break                -> throw BreakSignal()
-        is Continue             -> throw ContinueSignal()
+        is VariableDeclaration -> executeVariableDeclaration(stmt)
+        is FunctionDeclaration -> executeFunctionDeclaration(stmt)
+        is Assignment -> executeAssignment(stmt)
+        is ExpressionStatement -> { evaluate(stmt.expr); Unit }
+        is Print -> executePrint(stmt)
+        is Block -> executeBlock(stmt, environment.child())
+        is If -> executeIf(stmt)
+        is While -> executeWhile(stmt)
+        is DoWhile -> executeDoWhile(stmt)
+        is For -> executeFor(stmt)
+        is ForEach -> executeForEach(stmt)
+        is Switch -> executeSwitch(stmt)
+        is TryCatch -> executeTryCatch(stmt)
+        is Return -> throw ReturnSignal(stmt.value?.let { evaluate(it) } ?: NullValue)
+        is Break -> throw BreakSignal()
+        is Continue -> throw ContinueSignal()
 
         // Las clases ya se registraron en run(). Anidadas en un bloque no se
         // soportan: es la misma limitacion documentada en la Pasada 1.
-        is ClassDeclaration     -> Unit
+        is ClassDeclaration -> Unit
     }
 
     // ===================================================
@@ -98,7 +98,7 @@ class Interpreter {
     // ===================================================
 
     private fun evaluateBinary(expr: BinaryOperation): RuntimeValue {
-        // Cortocircuito de && y ||: el lado derecho NO se evalua si el izquierdo decide. 
+        // Cortocircuito de && y ||: el lado derecho NO se evalua si el izquierdo decide.
         if (expr.operator == BinaryOperator.AND) {
             return BoolValue(asBoolean(evaluate(expr.left)) && asBoolean(evaluate(expr.right)))
         }
@@ -113,10 +113,10 @@ class Interpreter {
             OperatorGroup.ARITHMETIC -> arithmeticResult(expr, left, right)
             OperatorGroup.RELATIONAL -> BoolValue(compareValues(left, right).let { comparison ->
                 when (expr.operator) {
-                    BinaryOperator.LESS          -> comparison < 0
-                    BinaryOperator.LESS_EQUAL    -> comparison <= 0
-                    BinaryOperator.GREATER       -> comparison > 0
-                    else                         -> comparison >= 0
+                    BinaryOperator.LESS -> comparison < 0
+                    BinaryOperator.LESS_EQUAL -> comparison <= 0
+                    BinaryOperator.GREATER -> comparison > 0
+                    else -> comparison >= 0
                 }
             })
             OperatorGroup.EQUALITY -> BoolValue(
@@ -132,9 +132,9 @@ class Interpreter {
         left: RuntimeValue,
         right: RuntimeValue
     ): RuntimeValue = when (expr.type) {
-        StringType  -> StringValue(asString(left) + asString(right))
-        FloatType   -> FloatValue(applyFloat(expr.operator, asDouble(left), asDouble(right)))
-        else        -> IntValue(applyLong(expr.operator, asLong(left), asLong(right), expr))
+        StringType -> StringValue(asString(left) + asString(right))
+        FloatType -> FloatValue(applyFloat(expr.operator, asDouble(left), asDouble(right)))
+        else -> IntValue(applyLong(expr.operator, asLong(left), asLong(right), expr))
     }
 
     private fun applyLong(
@@ -143,7 +143,7 @@ class Interpreter {
         right: Long,
         expr: BinaryOperation
     ): Long = when (op) {
-        BinaryOperator.ADD      -> left + right
+        BinaryOperator.ADD -> left + right
         BinaryOperator.SUBTRACT -> left - right
         BinaryOperator.MULTIPLY -> left * right
         BinaryOperator.DIVIDE, BinaryOperator.MODULO -> {
@@ -158,17 +158,17 @@ class Interpreter {
 
     private fun applyFloat(op: BinaryOperator, left: Double, right: Double): Double =
         when (op) {
-            BinaryOperator.ADD      -> left + right
+            BinaryOperator.ADD -> left + right
             BinaryOperator.SUBTRACT -> left - right
             BinaryOperator.MULTIPLY -> left * right
-            BinaryOperator.DIVIDE   -> left / right
-            else -> error("'$op' no aplica a flotantes")   // MODULO es solo integer (A3)
+            BinaryOperator.DIVIDE -> left / right
+            else -> error("'$op' no aplica a flotantes") // MODULO es solo integer (A3)
         }
 
     private fun evaluateUnary(expr: UnaryOperation): RuntimeValue {
         val operand = evaluate(expr.operand)
         return when (expr.operator) {
-            UnaryOperator.NOT    -> BoolValue(!asBoolean(operand))
+            UnaryOperator.NOT -> BoolValue(!asBoolean(operand))
             UnaryOperator.NEGATE ->
                 if (expr.type == FloatType) FloatValue(-asDouble(operand))
                 else IntValue(-asLong(operand))
@@ -200,7 +200,7 @@ class Interpreter {
             ?: throw RuntimeError(expr.location, "'this' no está disponible aquí")
 
     private fun evaluateIndexAccess(expr: IndexAccess): RuntimeValue {
-        val array = evaluate(expr.target) as ArrayValue
+        val array = asArray(evaluate(expr.target), expr.location)
         return array.elements[boundsCheckedIndex(array, expr)]
     }
 
@@ -222,7 +222,7 @@ class Interpreter {
     // ===================================================
 
     private fun evaluateFunctionCall(expr: FunctionCall): RuntimeValue {
-        val callee = evaluate(expr.callee) as FunctionValue
+        val callee = asFunction(evaluate(expr.callee), expr.location)
         val arguments = expr.arguments.map { evaluate(it) }
         return invoke(callee, arguments, expr.location)
     }
@@ -236,7 +236,7 @@ class Interpreter {
     ): RuntimeValue {
         // El limite de recursion: sin esto, `function f(): integer { return f(); }`
         // tumba la ventana con un StackOverflowError, que ningun catch del usuario
-        // puede atrapar. 
+        // puede atrapar.
         if (callDepth >= MAX_CALL_DEPTH) {
             throw RuntimeError(location,
                 "Recursión demasiado profunda: más de $MAX_CALL_DEPTH llamadas anidadas")
@@ -256,9 +256,9 @@ class Interpreter {
         try {
             return try {
                 executeBlock(callee.declaration.body, callEnvironment)
-                NullValue                         // llegó al final sin return
+                NullValue // llegó al final sin return
             } catch (signal: ReturnSignal) {
-                signal.value                      // hubo return
+                signal.value // hubo return
             }
         } finally {
             // En el finally para que una excepcion no deje el contador inflado: si
@@ -273,8 +273,11 @@ class Interpreter {
     // ===================================================
 
     private fun evaluateObjectCreation(expr: ObjectCreation): RuntimeValue {
-        // El !! es deliberado: el TypeChecker ya valido que la clase existe. 
-        val declaration = classDeclarations[expr.className]!!
+        // La Fase 3 ya valido que la clase existe, pero solo se registran las del
+        // nivel superior: una anidada en un bloque llegaria aqui sin declaracion.
+        val declaration = classDeclarations[expr.className]
+            ?: throw RuntimeError(expr.location,
+                "La clase '${expr.className}' no está disponible en tiempo de ejecución")
         val instance = ObjectValue(expr.className, mutableMapOf())
 
         // Los campos, desde la superclase hacia abajo.
@@ -309,13 +312,13 @@ class Interpreter {
     private fun defaultValueFor(field: VariableDeclaration): RuntimeValue =
         when (field.declaredType?.name) {
             "integer" -> IntValue(0)
-            "float"   -> FloatValue(0.0)
-            "string"  -> StringValue("")
+            "float" -> FloatValue(0.0)
+            "string" -> StringValue("")
             "boolean" -> BoolValue(false)
 
             // Clases y arreglos SI arrancan en null: son referencias, y `null` es
             // un valor legitimo de su tipo.
-            else      -> NullValue
+            else -> NullValue
         }
 
     // Un acceso a propiedad devuelve un CAMPO o un METODO ligado.
@@ -371,7 +374,7 @@ class Interpreter {
     private fun evaluateAssignmentExpression(expr: AssignmentExpression): RuntimeValue {
         val value = evaluate(expr.value)
         assignTo(expr.target, value)
-        return value            // el valor de `x = 5` es 5
+        return value // el valor de `x = 5` es 5
     }
 
     // Cuerpo de BLOQUE y no `= when (...)`: como expresion, cada rama tendria que
@@ -386,12 +389,12 @@ class Interpreter {
             }
 
             is PropertyAccess -> {
-                val instance = evaluate(target.target) as ObjectValue
+                val instance = asObject(evaluate(target.target), target.location)
                 instance.fields[target.propertyName] = value
             }
 
             is IndexAccess -> {
-                val array = evaluate(target.target) as ArrayValue
+                val array = asArray(evaluate(target.target), target.location)
                 array.elements[boundsCheckedIndex(array, target)] = value
             }
 
@@ -475,7 +478,7 @@ class Interpreter {
     }
 
     private fun executeForEach(stmt: ForEach) {
-        val iterable = evaluate(stmt.iterable) as ArrayValue
+        val iterable = asArray(evaluate(stmt.iterable), stmt.location)
 
         iterable.elements.toList().forEach { element ->
             val iterationEnvironment = environment.child()
@@ -545,12 +548,12 @@ class Interpreter {
 
     // Un valor plegado por la Fase 4 (o el `value` de un Literal) a RuntimeValue.
     private fun toRuntimeValue(constant: Any?): RuntimeValue = when (constant) {
-        null       -> NullValue
-        is Long    -> IntValue(constant)
-        is Double  -> FloatValue(constant)
-        is String  -> StringValue(constant)
+        null -> NullValue
+        is Long -> IntValue(constant)
+        is Double -> FloatValue(constant)
+        is String -> StringValue(constant)
         is Boolean -> BoolValue(constant)
-        else       -> error("Constante de tipo inesperado: $constant")
+        else -> error("Constante de tipo inesperado: $constant")
     }
 
     private fun asBoolean(value: RuntimeValue): Boolean =
@@ -561,9 +564,26 @@ class Interpreter {
 
     private fun asDouble(value: RuntimeValue): Double = when (value) {
         is FloatValue -> value.value
-        is IntValue   -> value.value.toDouble()      // ensanchamiento: 1 + 2.5
-        else          -> error("Se esperaba un número, no $value")
+        is IntValue -> value.value.toDouble() // ensanchamiento: 1 + 2.5
+        else -> error("Se esperaba un número, no $value")
     }
+
+    // Las tres de abajo NO son conversiones: son chequeos dinamicos.
+    //
+    // El TypeChecker garantiza el TIPO, no que la referencia tenga algo adentro:
+    // `let a: integer[] = null;` es legal. Sin esto, indexar ese nulo lanzaria una
+    // ClassCastException, que ni el try/catch del usuario ni run() atrapan.
+    private fun asArray(value: RuntimeValue, location: LexemeLocation): ArrayValue =
+        value as? ArrayValue
+            ?: throw RuntimeError(location, "Se esperaba una lista, no '${value.display()}'")
+
+    private fun asObject(value: RuntimeValue, location: LexemeLocation): ObjectValue =
+        value as? ObjectValue
+            ?: throw RuntimeError(location, "Se esperaba un objeto, no '${value.display()}'")
+
+    private fun asFunction(value: RuntimeValue, location: LexemeLocation): FunctionValue =
+        value as? FunctionValue
+            ?: throw RuntimeError(location, "Se esperaba una función, no '${value.display()}'")
 
     private fun asString(value: RuntimeValue): String =
         (value as? StringValue)?.value ?: error("Se esperaba un string, no $value")

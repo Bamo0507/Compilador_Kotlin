@@ -1,7 +1,7 @@
 package org.compiler.interpreter
 
-// Señales de control de flujo. 
-// Heredan de RuntimeException pero sin stack trace 
+// Señales de control de flujo.
+// Heredan de RuntimeException pero sin stack trace: no son errores, son saltos.
 sealed class ControlFlowSignal : RuntimeException(null, null, false, false)
 
 class BreakSignal : ControlFlowSignal()

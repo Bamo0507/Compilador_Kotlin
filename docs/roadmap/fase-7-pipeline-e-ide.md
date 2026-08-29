@@ -13,14 +13,22 @@ decir: esta fase expone 40 de los 100 puntos. No es el adorno del final.
 
 ## Ticket 7.1 — `CompilerPipeline` y `CompilationResult`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.2
 
 **Archivos:**
 
 - `runtime/CompilerPipeline.kt` (NUEVO)
 - `runtime/models/CompilationResult.kt` (NUEVO)
+- `frontend/ast/models/TreeNodeView.kt` (NUEVO — adelantado del 7.3)
+- `frontend/syntax/ParseTreeView.kt` (NUEVO — adelantado del 7.3)
 - `app/src/test/kotlin/org/compiler/CompilerPipelineTest.kt` (NUEVO)
+
+`TreeNodeView` y la conversión del árbol de ANTLR estaban descritas en el ticket
+7.3, pero el pipeline las necesita: sin ellas el `ProgramContext` saldría de esta
+función y el criterio de la frontera no se podría cumplir. `Program.toTreeView()`
+—la conversión del AST— sí se queda en el 7.3, porque `CompilationResult` guarda el
+`Program` directo.
 
 **Qué es esto, en simple:** una sola función que recibe el texto del programa y
 devuelve **todo**: el árbol, la tabla de símbolos, los errores y la salida de
@@ -65,7 +73,7 @@ object CompilerPipeline {
 
         // ── Etapa E: flujo y vivacidad ────────────────────────────────
         FlowAnalyzer(diagnostics).analyze(ast)
-        val gcReport = LivenessReportBuilder().build(collector.globalScope)
+        val garbageCollectorReport = LivenessReportBuilder().build(collector.globalScope)
 
         // ── Etapa F: ejecución ────────────────────────────────────────
         // SOLO si no hay ningún error. Ejecutar código mal tipado da basura.
@@ -78,7 +86,7 @@ object CompilerPipeline {
             parseTreeView = parseTreeView,
             ast = ast,
             globalScope = collector.globalScope,
-            gcReport = gcReport,
+            garbageCollectorReport = garbageCollectorReport,
             errors = diagnostics.all(),
             execution = execution
         )
@@ -110,7 +118,7 @@ data class CompilationResult(
     val parseTreeView: TreeNodeView?,   // el árbol de ANTLR, ya neutralizado
     val ast: Program?,                  // el árbol propio, decorado
     val globalScope: Scope?,
-    val gcReport: GarbageCollectorReport?,
+    val garbageCollectorReport: GarbageCollectorReport?,
     val errors: List<CompilerError>,
     val execution: ExecutionResult?
 ) {
@@ -126,7 +134,7 @@ data class CompilationResult(
         fun failed(diagnostics: Diagnostics, source: String) = CompilationResult(
             source = source,
             parseTreeView = null, ast = null, globalScope = null,
-            gcReport = null,
+            garbageCollectorReport = null,
             errors = diagnostics.all(), execution = null
         )
     }
@@ -369,8 +377,7 @@ data class TreeNodeView(
 Y **dos conversiones, en dos paquetes distintos**:
 
 ```kotlin
-// frontend/syntax/ParseTreeView.kt  -- el unico archivo de la GUI en adelante que
-// toca ANTLR, y no esta en la GUI. Lo llama el pipeline (ticket 7.1).
+// frontend/syntax/ParseTreeView.kt  -- hecho en el 7.1, que es quien lo llama.
 fun CompiscriptParser.ProgramContext.toTreeView(): TreeNodeView = ...
 
 // frontend/ast/AstView.kt  -- el AST propio, con su decoracion

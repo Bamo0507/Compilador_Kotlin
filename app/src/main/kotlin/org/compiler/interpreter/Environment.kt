@@ -22,8 +22,8 @@ class Environment(private val parent: Environment? = null) {
     // Asigna a la variable EXISTENTE, buscando hacia arriba.
     fun assign(name: String, value: RuntimeValue): Boolean = when {
         values.containsKey(name) -> { values[name] = value; true }
-        parent != null           -> parent.assign(name, value)
-        else                     -> false
+        parent != null -> parent.assign(name, value)
+        else -> false
     }
 
     fun child(): Environment = Environment(parent = this)
