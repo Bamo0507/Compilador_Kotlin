@@ -110,7 +110,7 @@ data class CompilationResult(
     val parseTreeView: TreeNodeView?,   // el árbol de ANTLR, ya neutralizado
     val ast: Program?,                  // el árbol propio, decorado
     val globalScope: Scope?,
-    val gcReport: GcReport?,
+    val gcReport: GarbageCollectorReport?,
     val errors: List<CompilerError>,
     val execution: ExecutionResult?
 ) {
@@ -415,7 +415,7 @@ mismo componente.
 
 - `gui/screens/SymbolTableScreen.kt` (NUEVO)
 - `gui/components/ScopeTreeView.kt` (NUEVO)
-- `gui/components/GcReportView.kt` (NUEVO)
+- `gui/components/GarbageCollectorReportView.kt` (NUEVO)
 
 **Cuánto vale:** el enunciado pide como salida *"estado de la tabla de símbolos por
 cada entorno (global, función, clase, bloque)"*, y la componente vale **25 puntos**.

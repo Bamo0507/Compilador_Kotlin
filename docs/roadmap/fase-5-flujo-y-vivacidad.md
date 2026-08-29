@@ -21,7 +21,7 @@ haría que `TypeChecker` llevara dos contadores más y sería más difícil de l
 
 ## Ticket 5.1 — `FlowAnalyzer`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.4
 
 **Archivos:**
@@ -403,13 +403,13 @@ respecto al tipo declarado"*.
 
 ## Ticket 5.2 — `LivenessReportBuilder`: el reporte para el recolector de basura
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.4
 
 **Archivos:**
 
 - `frontend/semantic/LivenessReportBuilder.kt` (NUEVO)
-- `frontend/semantic/models/GcReport.kt` (NUEVO)
+- `frontend/semantic/models/GarbageCollectorReport.kt` (NUEVO)
 - `app/src/test/kotlin/org/compiler/LivenessReportTest.kt` (NUEVO)
 
 ### Qué se está pidiendo realmente
@@ -533,8 +533,8 @@ Las dos condiciones son las mismas de antes:
 // cada Symbol. Aquí solo se leen y se agrupan para la GUI.
 class LivenessReportBuilder {
 
-    fun build(globalScope: Scope): GcReport =
-        GcReport(entriesByScope = collectScope(globalScope, mutableMapOf()))
+    fun build(globalScope: Scope): GarbageCollectorReport =
+        GarbageCollectorReport(entriesByScope = collectScope(globalScope, mutableMapOf()))
 
     private fun collectScope(
         scope: Scope,
@@ -582,7 +582,7 @@ data class SymbolLiveness(
 }
 
 // El reporte completo, agrupado por ámbito. Lo muestra la GUI.
-data class GcReport(
+data class GarbageCollectorReport(
     val entriesByScope: Map<String, List<SymbolLiveness>>
 ) {
     val neverUsed: List<SymbolLiveness>
