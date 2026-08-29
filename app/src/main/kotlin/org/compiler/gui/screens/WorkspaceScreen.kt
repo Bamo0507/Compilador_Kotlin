@@ -25,6 +25,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import org.compiler.gui.components.CodeEditor
 import org.compiler.gui.components.ErrorList
+import org.compiler.gui.components.OutputConsole
 import org.compiler.gui.components.PlayButton
 import org.compiler.gui.state.AppState
 
@@ -45,6 +46,8 @@ fun WorkspaceScreen(
         WorkspaceToolbar(state = state)
         state.errorMessage?.let { message -> ErrorBanner(message) }
 
+        val result = state.result
+
         Row(
             modifier = Modifier.fillMaxSize(),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -58,26 +61,52 @@ fun WorkspaceScreen(
                 CodeEditor(
                     value = state.sourceContent,
                     onValueChange = { state.sourceContent = it },
+                    highlightedLine = state.highlightedLine,
                     modifier = Modifier.fillMaxSize()
                 )
             }
 
-            WorkspacePanel(
-                title = "Errores",
+            Column(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight()
+                    .fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Siempre vacia hasta la Fase 7: el pipeline todavia no existe, asi
-                // que no hay de donde sacar errores.
-                ErrorList(
-                    errors = emptyList(),
-                    hasRun = false,
-                    modifier = Modifier.fillMaxSize()
-                )
+                WorkspacePanel(
+                    title = errorPanelTitle(result?.errors?.size),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    ErrorList(
+                        errors = result?.errors ?: emptyList(),
+                        hasRun = result != null,
+                        onErrorClick = { line -> state.highlightedLine = line },
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
+
+                WorkspacePanel(
+                    title = "Salida",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) {
+                    OutputConsole(
+                        execution = result?.execution,
+                        hasErrors = result?.hasErrors == true,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                }
             }
         }
     }
+}
+
+private fun errorPanelTitle(count: Int?): String = when {
+    count == null || count == 0 -> "Errores"
+    count == 1 -> "Errores (1)"
+    else -> "Errores ($count)"
 }
 
 @Composable

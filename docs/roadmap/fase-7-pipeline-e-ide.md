@@ -164,7 +164,7 @@ reventar, y los tipos nullables la obligan a manejarlo.
 
 ## Ticket 7.2 — GUI: `AppState`, editor, errores y consola
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.1
 
 **Archivos:**
@@ -172,9 +172,16 @@ reventar, y los tipos nullables la obligan a manejarlo.
 - `gui/state/AppState.kt` (ampliar el de 0.3)
 - `gui/components/ErrorList.kt` (adaptar)
 - `gui/components/OutputConsole.kt` (NUEVO)
+- `gui/components/CodeEditor.kt` (adaptar: línea resaltada)
 - `gui/screens/WorkspaceScreen.kt` (ampliar)
 - `gui/components/FileMenu.kt` (adaptar: extensión `.cps`)
 - `app/src/test/kotlin/org/compiler/AppStateTest.kt` (ampliar)
+
+**Cómo se resolvió el salto al error.** Mover el cursor exige un `TextFieldValue`,
+y eso obligaría a cambiar `AppState.sourceContent`, el `FileMenu` y los tests. En su
+lugar `AppState` lleva un `highlightedLine: Int?`, y el `CodeEditor` resalta ese
+número en el margen y hace scroll hasta él. El texto sigue siendo un `String` y no
+hay dos fuentes de verdad.
 
 ### `AppState`
 

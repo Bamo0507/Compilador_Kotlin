@@ -92,20 +92,27 @@ private fun saveAs(state: AppState) {
     runCatching {
         val file = chooseFile("Guardar programa Compiscript", FileDialog.SAVE) ?: return
 
-        file.writeText(state.sourceContent)
-        state.sourceFilePath = file.absolutePath
+        val target = withCompiscriptExtension(file)
+        target.writeText(state.sourceContent)
+        state.sourceFilePath = target.absolutePath
         state.errorMessage = null
     }.onFailure {
         state.errorMessage = "No se pudo guardar el archivo: ${it.message}"
     }
 }
 
+// El dialogo de AWT no agrega la extension: un nombre sin punto se guarda sin ella.
+private fun withCompiscriptExtension(file: File): File =
+    if (file.name.contains('.')) file else File(file.parentFile, "${file.name}$EXTENSION")
+
 private fun chooseFile(title: String, mode: Int): File? {
     val dialog = FileDialog(null as Frame?, title, mode)
-    dialog.file = "*.cps"
+    dialog.file = "*$EXTENSION"
     dialog.isVisible = true
 
     val directory = dialog.directory ?: return null
     val name = dialog.file ?: return null
     return File(directory, name)
 }
+
+private const val EXTENSION = ".cps"
