@@ -1,4 +1,3 @@
-
 package org.compiler
 
 import org.compiler.frontend.ast.models.BinaryOperator
@@ -19,9 +18,21 @@ import kotlin.test.assertFalse
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
+/**
+ * Tests del ticket 4.1: la tabla de verdad del lenguaje.
+ *
+ * Se prueban con tipos puros, sin construir AST ni ambitos: es lo que compra que
+ * TypeRules no conozca ni uno ni otro.
+ *
+ * Cada seccion lleva el codigo de la regla que cubre —A1, C1, L1...—, y esos codigos
+ * son los mismos de docs/reglas-de-tipos.md, para poder ir de la regla al test.
+ */
 class TypeRulesTest {
 
     // La jerarquia falsa: Perro y Gato heredan de Animal, nada mas existe.
+    //
+    // Va como lambda porque ClassHierarchy es una `fun interface`. Sin eso haria falta
+    // un `object : ClassHierarchy { override fun ... }` de cuatro lineas.
     private val rules = TypeRules {
         when (it) {
             "Perro", "Gato" -> "Animal"

@@ -263,7 +263,7 @@ Enunciado, *"Sistema de Tipos"*. Dragon Book §6.3.1 (expresiones de tipo) y §6
 
 ## Ticket 1.2 — `Symbol` y `DeclarationKind`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -472,7 +472,7 @@ posición de memoria, número de línea y posición… offsets, pointers"*.
 
 ## Ticket 1.3 — `Scope` y `ScopeKind`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2
 
 **Archivos:**
@@ -807,7 +807,7 @@ tablas"*.
 
 ## Ticket 1.4 — AST: expresiones y operadores
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -1073,7 +1073,7 @@ Book §2.5.1 y §5.3.1.
 
 ## Ticket 1.5 — AST: sentencias, declaraciones y `TypeReference`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.4
 
 **Archivos:**

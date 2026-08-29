@@ -1,4 +1,4 @@
-# Fase 4 — Pasada 2: verificación de tipos
+oko# Fase 4 — Pasada 2: verificación de tipos
 
 **Objetivo de la fase:** recorrer el AST una segunda vez, ahora **entrando a los
 cuerpos**, verificando que cada operación tenga sentido y **decorando** cada
@@ -117,7 +117,7 @@ data class TypedValue(
 
 ## Ticket 4.1 — `TypeRules` y el documento de reglas de inferencia
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -423,7 +423,7 @@ derivaciones. Notas de clase sobre reglas de inferencia.
 
 ## Ticket 4.2 — `TypeChecker`: literales, nombres y operadores
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.2, 4.1
 
 **Archivos:**
@@ -902,7 +902,7 @@ Dragon Book §6.5.1 y §6.5.2. Enunciado, *"Sistema de Tipos"*.
 
 ## Ticket 4.3 — `TypeChecker`: llamadas, clases, `this` y arreglos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.2
 
 **Archivos:**
@@ -1225,7 +1225,7 @@ Estructuras de Datos"*. Dragon Book §6.5.
 
 ## Ticket 4.4 — `TypeChecker`: sentencias y ámbitos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.3
 
 **Archivos:**
@@ -1770,7 +1770,7 @@ lo que permite validar `break` y `continue` en la Fase 5.
 | `let x: integer = 1.5;` | **error**: no hay estrechamiento |
 | `let x = 5;` | válido, tipo inferido `integer` |
 | `let x;` | **error**: necesita tipo o valor inicial |
-| `const PI: integer;` | **error**: la constante debe inicializarse |
+| `const PI: integer;` | **error sintáctico**, no semántico: la gramática dice `'=' expression` sin `?`, así que no parsea. La rama `isConstant && initializer == null` de `checkVariableDeclaration` queda como defensa, pero es inalcanzable desde un parseo válido |
 | `const PI = 314; PI = 3;` | **error**: no se puede reasignar una constante |
 | `5 = x;` | **error**: el lado izquierdo no es asignable |
 | `if (true) {}` | válido |

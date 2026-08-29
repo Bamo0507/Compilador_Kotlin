@@ -24,7 +24,7 @@ casos, no por dificultad.
 
 ## Ticket 2.1 — `SyntaxAnalyzer` y captura de errores de ANTLR
 
-- **Estado**: terminado 
+- **Estado**: completado
 - **Depende de**: 0.6, 1.5
 
 **Archivos:**
@@ -163,7 +163,7 @@ sintáctico"*. Requisito de reportar los tres niveles de error en el IDE.
 
 ## Ticket 2.2 — `AstBuilder`: expresiones y el plegado a la izquierda
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.4, 2.1
 
 **Archivos:**
@@ -804,7 +804,7 @@ Dragon Book §5.3.1 (Ejemplo 5.11: construcción de un árbol sintáctico abstra
 
 ## Ticket 2.3 — `AstBuilder`: sentencias y declaraciones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.5, 2.2
 
 **Archivos:**
