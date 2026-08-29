@@ -14,13 +14,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
-// Las vistas del IDE.
-//
-// Por ahora solo hay una. Las de arboles y tabla de simbolos llegan en la Fase 7,
-// cuando exista algo que mostrar. El menu se conserva —en vez de borrarlo y volver a
-// escribirlo— porque agregar una vista es agregar una entrada al enum.
+// Las vistas del IDE. Agregar una es agregar una entrada al enum y una rama en App.
 enum class AppView {
-    WORKSPACE
+    WORKSPACE,
+    TREES
 }
 
 @Composable
@@ -64,4 +61,5 @@ fun ViewMenu(
 
 fun AppView.displayName(): String = when (this) {
     AppView.WORKSPACE -> "Editor"
+    AppView.TREES -> "Árboles"
 }

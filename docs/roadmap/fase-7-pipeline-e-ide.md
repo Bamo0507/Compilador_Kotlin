@@ -349,14 +349,25 @@ un solo error**: es la demostración del día de la presentación.
 
 ## Ticket 7.3 — GUI: árbol sintáctico y AST
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.2
 
 **Archivos:**
 
-- `gui/components/TreeCanvas.kt` (NUEVO — reusa la lógica de layout del proyecto anterior)
+- `frontend/ast/AstView.kt` (NUEVO — `Program.toTreeView()`, con la decoración)
+- `gui/components/TreeLayout.kt` (NUEVO — el cálculo de posiciones, sin Compose)
+- `gui/components/TreeCanvas.kt` (NUEVO — el dibujo)
 - `gui/screens/TreesScreen.kt` (NUEVO)
-- `gui/components/TreeNodeAdapter.kt` (NUEVO)
+- `gui/components/ViewMenu.kt` y `gui/App.kt` (adaptar: la vista nueva)
+- `app/src/test/kotlin/org/compiler/TreeViewTest.kt` (NUEVO)
+
+No se hizo `TreeNodeAdapter.kt`: las dos conversiones viven en `frontend/`
+(`ParseTreeView.kt` desde el 7.1 y `AstView.kt` aquí), que es lo que sostiene la
+frontera con ANTLR. Un adaptador en `gui/` no tendría qué adaptar.
+
+El layout se separó del canvas para poder probarlo sin Compose: `layoutTree`
+devuelve posiciones en columnas y niveles, y el canvas decide cuánto mide una
+columna.
 
 **Qué es esto, en simple:** dibujar los dos árboles, lado a lado o con un
 interruptor. **La representación visual del árbol sintáctico es un requisito

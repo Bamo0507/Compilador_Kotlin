@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import org.compiler.gui.components.AppView
 import org.compiler.gui.components.FileMenu
 import org.compiler.gui.components.ViewMenu
+import org.compiler.gui.screens.TreesScreen
 import org.compiler.gui.screens.WorkspaceScreen
 import org.compiler.gui.state.AppState
 
@@ -42,10 +43,13 @@ fun App() {
                 }
                 HorizontalDivider()
 
-                // Una sola vista por ahora. El `when` se conserva para que agregar
-                // las pantallas de la Fase 7 sea agregar ramas, no reestructurar.
                 when (selectedView) {
                     AppView.WORKSPACE -> WorkspaceScreen(
+                        state = appState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    AppView.TREES -> TreesScreen(
                         state = appState,
                         modifier = Modifier.fillMaxSize()
                     )
