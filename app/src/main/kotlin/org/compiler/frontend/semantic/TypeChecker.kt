@@ -700,6 +700,31 @@ class TypeChecker(
             checkOverride(decl, currentScope)
         }
 
+        // Una funcion ANIDADA no paso por la Pasada 1: esa pasada no entra a los
+        // cuerpos, asi que su firma no esta en ningun ambito. Se registra aqui, en el
+        // ambito que la contiene, ANTES de entrar a su cuerpo — antes, para que su
+        // propia recursion se resuelva.
+        //
+        // El lookupLocal la distingue de una funcion del nivel superior o de un
+        // metodo: esas ya las declaro la Pasada 1, y volver a declararlas reportaria
+        // un duplicado inexistente.
+        //
+        // Queda declarada al LLEGAR a ella, no antes: dentro de un cuerpo hay que
+        // declarar una funcion anidada antes de usarla. Es la misma regla que sigue
+        // el interprete, que la vuelve un valor cuando ejecuta su declaracion.
+        if (currentScope.lookupLocal(decl.name) == null) {
+            declare(
+                name = decl.name,
+                kind = DeclarationKind.FUNCTION,
+                type = FunctionType(
+                    decl.parameters.map { typeResolver.resolve(it.declaredType) ?: ErrorType },
+                    typeResolver.resolve(decl.returnType) ?: VoidType
+                ),
+                location = decl.location,
+                initialized = true
+            )
+        }
+
         val functionType = currentScope.lookup(decl.name)?.type as? FunctionType
 
         val previousScope = currentScope
