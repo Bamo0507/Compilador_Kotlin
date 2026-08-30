@@ -17,7 +17,8 @@ import androidx.compose.ui.Modifier
 // Las vistas del IDE. Agregar una es agregar una entrada al enum y una rama en App.
 enum class AppView {
     WORKSPACE,
-    TREES
+    TREES,
+    SYMBOLS
 }
 
 @Composable
@@ -62,4 +63,5 @@ fun ViewMenu(
 fun AppView.displayName(): String = when (this) {
     AppView.WORKSPACE -> "Editor"
     AppView.TREES -> "Árboles"
+    AppView.SYMBOLS -> "Tabla de símbolos"
 }

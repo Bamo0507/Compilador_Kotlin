@@ -82,6 +82,10 @@ class TypeChecker(
     // El cursor del recorrido, igual que en la Pasada 1.
     private var currentScope: Scope = globalScope
 
+    // Prendido solo mientras se verifica el Identifier que es DESTINO de una
+    // asignacion. Ver checkAssignmentRules.
+    private var checkingAssignmentTarget = false
+
     // El tipo de retorno de la funcion en la que estoy.
     //
     // Va en un campo porque el Scope no lo guarda: ese dato vive en el Symbol de la
@@ -221,7 +225,9 @@ class TypeChecker(
             symbol.usedInNestedFunction = true
         }
 
-        if (!symbol.initialized && symbol.kind != DeclarationKind.FUNCTION) {
+        if (!symbol.initialized && symbol.kind != DeclarationKind.FUNCTION &&
+            !checkingAssignmentTarget
+        ) {
             report(expr, "La variable '${expr.name}' se usa antes de tener un valor")
         }
 
@@ -646,7 +652,22 @@ class TypeChecker(
     //
     // Devuelve el tipo del DESTINO: el valor de `x = 5` es 5, y su tipo es el de x.
     private fun checkAssignmentRules(node: Node, target: Expression, value: Expression): TypedValue {
-        val targetValue = checkExpression(target)
+        // Un Identifier como DESTINO no es una lectura: `let n: string; n = "x";` es
+        // como se inicializa una variable declarada sin valor, y exigirle que ya
+        // tenga uno seria imposible de cumplir.
+        //
+        // Se suprime SOLO para el destino directo. En `lista[i] = 5` el destino es un
+        // IndexAccess y ahi la lista si se lee, asi que el chequeo debe aplicar.
+        val targetValue = if (target is Identifier) {
+            checkingAssignmentTarget = true
+            try {
+                checkExpression(target)
+            } finally {
+                checkingAssignmentTarget = false
+            }
+        } else {
+            checkExpression(target)
+        }
         val valueValue = checkExpression(value)
 
         if (!isLValue(target)) {
