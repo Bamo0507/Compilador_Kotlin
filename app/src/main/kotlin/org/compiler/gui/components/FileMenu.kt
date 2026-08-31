@@ -61,10 +61,9 @@ private fun open(state: AppState) {
     runCatching {
         val file = chooseFile("Abrir programa Compiscript", FileDialog.LOAD) ?: return
 
-        // Los dos campos se escriben juntos porque el archivo abierto cambia los dos.
-        state.sourceContent = file.readText()
-        state.sourceFilePath = file.absolutePath
-        state.errorMessage = null
+        // Un solo llamado porque abrir un archivo cambia varias cosas a la vez: el
+        // texto, la ruta, y deja de haber un ejemplo seleccionado.
+        state.loadFromFile(file.readText(), file.absolutePath)
     }.onFailure {
         state.errorMessage = "No se pudo abrir el archivo: ${it.message}"
     }

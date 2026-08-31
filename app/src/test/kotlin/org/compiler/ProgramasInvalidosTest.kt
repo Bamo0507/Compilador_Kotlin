@@ -9,9 +9,10 @@
 package org.compiler
 
 import org.compiler.runtime.CompilerPipeline
+import org.compiler.samples.SampleGroup
+import org.compiler.samples.SampleProgram
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
-import java.io.File
 import kotlin.test.assertTrue
 
 class ProgramasInvalidosTest {
@@ -23,14 +24,14 @@ class ProgramasInvalidosTest {
 
     @TestFactory
     fun `cada programa invalido produce el error esperado`(): List<DynamicTest> =
-        ProgramasValidosTest.programasEn("programas/invalidos").map { archivo ->
-            DynamicTest.dynamicTest(archivo.nameWithoutExtension) {
-                val esperado = leerAnotacionEsperada(archivo)
-                val resultado = CompilerPipeline.compile(archivo.readText())
+        ProgramasValidosTest.programasDe(SampleGroup.INVALID).map { programa ->
+            DynamicTest.dynamicTest(programa.name) {
+                val esperado = leerAnotacionEsperada(programa)
+                val resultado = CompilerPipeline.compile(programa.source)
 
                 assertTrue(
                     resultado.hasErrors,
-                    "Se esperaba al menos un error en ${archivo.name}, y compiló limpio."
+                    "Se esperaba al menos un error en ${programa.id}, y compiló limpio."
                 )
 
                 val coincide = resultado.errors.any { error ->
@@ -42,7 +43,7 @@ class ProgramasInvalidosTest {
                 // test falla, se ve de inmediato que paso sin correr el programa a mano.
                 assertTrue(
                     coincide,
-                    "En ${archivo.name} se esperaba en la línea ${esperado.linea} " +
+                    "En ${programa.id} se esperaba en la línea ${esperado.linea} " +
                         "un error con '${esperado.fragmento}'.\n" +
                         "Errores obtenidos:\n" +
                         resultado.errors.joinToString("\n") {
@@ -56,26 +57,26 @@ class ProgramasInvalidosTest {
     // aqui todos tienen. Ejecutar codigo mal tipado da basura en vez de un mensaje.
     @TestFactory
     fun `ningun programa invalido llega a ejecutarse`(): List<DynamicTest> =
-        ProgramasValidosTest.programasEn("programas/invalidos").map { archivo ->
-            DynamicTest.dynamicTest(archivo.nameWithoutExtension) {
-                val resultado = CompilerPipeline.compile(archivo.readText())
+        ProgramasValidosTest.programasDe(SampleGroup.INVALID).map { programa ->
+            DynamicTest.dynamicTest(programa.name) {
+                val resultado = CompilerPipeline.compile(programa.source)
 
                 assertTrue(
                     resultado.execution == null,
-                    "${archivo.name} tiene errores y aun asi se ejecutó."
+                    "${programa.id} tiene errores y aun asi se ejecutó."
                 )
             }
         }
 
-    private fun leerAnotacionEsperada(archivo: File): ErrorEsperado {
-        val anotacion = archivo.readLines().firstOrNull { it.startsWith("// ESPERADO:") }
+    private fun leerAnotacionEsperada(programa: SampleProgram): ErrorEsperado {
+        val anotacion = programa.source.lineSequence().firstOrNull { it.startsWith("// ESPERADO:") }
             ?: error(
-                "${archivo.name} no tiene su anotación. La primera línea debe ser:\n" +
+                "${programa.id} no tiene su anotación. Debe llevar la línea:\n" +
                     "  // ESPERADO: linea <n>, \"<fragmento del mensaje>\""
             )
 
         val coincidencia = ANOTACION.find(anotacion)
-            ?: error("La anotación de ${archivo.name} no tiene el formato esperado: $anotacion")
+            ?: error("La anotación de ${programa.id} no tiene el formato esperado: $anotacion")
 
         return ErrorEsperado(
             linea = coincidencia.groupValues[1].toInt(),

@@ -9,9 +9,11 @@ package org.compiler
 
 import org.compiler.gui.state.AppState
 import org.compiler.runtime.CompilerPipeline
+import org.compiler.samples.SampleGroup
+import org.compiler.samples.SampleProgram
+import org.compiler.samples.SamplePrograms
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -22,13 +24,13 @@ class ProgramasValidosTest {
 
     @TestFactory
     fun `cada programa valido compila sin errores`(): List<DynamicTest> =
-        programasEn("programas/validos").map { archivo ->
-            DynamicTest.dynamicTest(archivo.nameWithoutExtension) {
-                val resultado = CompilerPipeline.compile(archivo.readText())
+        programasDe(SampleGroup.VALID).map { programa ->
+            DynamicTest.dynamicTest(programa.name) {
+                val resultado = CompilerPipeline.compile(programa.source)
 
                 assertTrue(
                     resultado.errors.isEmpty(),
-                    "${archivo.name} debería compilar sin errores, pero produjo:\n" +
+                    "${programa.id} debería compilar sin errores, pero produjo:\n" +
                         resultado.errors.joinToString("\n") {
                             "  línea ${it.location.line}: ${it.message}"
                         }
@@ -41,17 +43,17 @@ class ProgramasValidosTest {
     // exactamente eso, en ese orden.
     @TestFactory
     fun `cada programa valido imprime su salida anotada`(): List<DynamicTest> =
-        programasEn("programas/validos")
+        programasDe(SampleGroup.VALID)
             .filter { salidaEsperadaDe(it).isNotEmpty() }
-            .map { archivo ->
-                DynamicTest.dynamicTest(archivo.nameWithoutExtension) {
-                    val esperada = salidaEsperadaDe(archivo)
-                    val resultado = CompilerPipeline.compile(archivo.readText())
+            .map { programa ->
+                DynamicTest.dynamicTest(programa.name) {
+                    val esperada = salidaEsperadaDe(programa)
+                    val resultado = CompilerPipeline.compile(programa.source)
 
                     val ejecucion = resultado.execution
                     assertNotNull(
                         ejecucion,
-                        "${archivo.name} no se ejecutó. Errores:\n" +
+                        "${programa.id} no se ejecutó. Errores:\n" +
                             resultado.errors.joinToString("\n") {
                                 "  línea ${it.location.line}: ${it.message}"
                             }
@@ -59,12 +61,12 @@ class ProgramasValidosTest {
 
                     assertNull(
                         ejecucion.runtimeError,
-                        "${archivo.name} falló en ejecución: ${ejecucion.runtimeError?.message}"
+                        "${programa.id} falló en ejecución: ${ejecucion.runtimeError?.message}"
                     )
 
                     assertEquals(
                         esperada, ejecucion.output,
-                        "La salida de ${archivo.name} no coincide con sus anotaciones // SALIDA:"
+                        "La salida de ${programa.id} no coincide con sus anotaciones // SALIDA:"
                     )
                 }
             }
@@ -73,44 +75,31 @@ class ProgramasValidosTest {
     // defecto del IDE. Si alguien cambia uno de los dos y no el otro, la demo de la
     // presentacion deja de estar cubierta por la bateria y nadie se entera.
     @Test
-    fun `demo_completa es el programa por defecto del IDE`() {
-        val archivo = programasEn("programas/validos").single { it.name == "demo_completa.cps" }
-
-        val programaDelArchivo = archivo.readText()
-            .lines()
-            .dropWhile { it.startsWith("// SALIDA:") || it.isBlank() }
-            .joinToString("\n")
-            .trim()
-
+    fun `el programa por defecto del IDE sale de la bateria`() {
         assertEquals(
-            AppState().sourceContent.trim(), programaDelArchivo,
-            "demo_completa.cps y el programa por defecto del IDE se desincronizaron"
+            SamplePrograms.default.source, AppState().sourceContent,
+            "el editor debería arrancar con el programa de demostración de la batería"
         )
     }
 
     companion object {
 
-        // Los .cps viven en src/test/resources, asi que el classpath los encuentra
-        // sin rutas absolutas ni suposiciones sobre el directorio de trabajo.
-        fun programasEn(carpeta: String): List<File> {
-            val url = ProgramasValidosTest::class.java.classLoader.getResource(carpeta)
-                ?: error("No se encontró la carpeta de programas '$carpeta'")
-
-            val archivos = File(url.toURI())
-                .listFiles { archivo -> archivo.extension == "cps" }
-                ?.sortedBy { it.name }
-                ?: emptyList()
+        // Los programas los enumera el mismo cargador que usa el selector del IDE,
+        // asi que la bateria y el menu nunca se pueden desincronizar.
+        fun programasDe(grupo: SampleGroup): List<SampleProgram> {
+            val programas = SamplePrograms.all.filter { it.group == grupo }
 
             // Sin esto, borrar la carpeta por accidente dejaria la bateria en cero
             // tests y en verde, que es la peor forma de fallar.
-            assertTrue(archivos.isNotEmpty(), "La carpeta '$carpeta' no tiene programas .cps")
+            assertTrue(programas.isNotEmpty(), "No hay programas .cps del grupo $grupo")
 
-            return archivos
+            return programas
         }
 
-        fun salidaEsperadaDe(archivo: File): List<String> =
-            archivo.readLines()
+        fun salidaEsperadaDe(programa: SampleProgram): List<String> =
+            programa.source.lineSequence()
                 .filter { it.startsWith("// SALIDA:") }
                 .map { it.removePrefix("// SALIDA:").trim() }
+                .toList()
     }
 }

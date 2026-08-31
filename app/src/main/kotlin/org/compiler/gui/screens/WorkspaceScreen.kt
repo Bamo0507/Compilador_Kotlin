@@ -27,6 +27,7 @@ import org.compiler.gui.components.CodeEditor
 import org.compiler.gui.components.ErrorList
 import org.compiler.gui.components.OutputConsole
 import org.compiler.gui.components.PlayButton
+import org.compiler.gui.components.ProgramSelector
 import org.compiler.gui.state.AppState
 
 @Composable
@@ -58,9 +59,14 @@ fun WorkspaceScreen(
                     .weight(1.55f)
                     .fillMaxHeight()
             ) {
+                ProgramSelector(
+                    selected = state.selectedSample,
+                    onSelect = { state.loadSample(it) },
+                    modifier = Modifier.padding(bottom = 8.dp)
+                )
                 CodeEditor(
                     value = state.sourceContent,
-                    onValueChange = { state.sourceContent = it },
+                    onValueChange = { state.onSourceChanged(it) },
                     highlightedLine = state.highlightedLine,
                     modifier = Modifier.fillMaxSize()
                 )

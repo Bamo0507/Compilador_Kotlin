@@ -25,7 +25,7 @@ class AppStateTest {
     fun `el editor escribe el contenido sin tocar la ruta`() {
         val state = AppState()
 
-        state.sourceContent = "print(1);"
+        state.onSourceChanged("print(1);")
 
         assertEquals("print(1);", state.sourceContent)
         assertNull(state.sourceFilePath)
@@ -58,7 +58,7 @@ class AppStateTest {
         val primera = AppState()
         val segunda = AppState()
 
-        primera.sourceContent = "print(1);"
+        primera.onSourceChanged("print(1);")
 
         assertTrue(segunda.sourceContent.contains("Compiscript"))
     }
@@ -89,7 +89,7 @@ class AppStateTest {
     @Test
     fun `onCompile guarda los errores del programa del usuario`() {
         val state = AppState()
-        state.sourceContent = "let x: integer = \"texto\";"
+        state.onSourceChanged("let x: integer = \"texto\";")
 
         state.onCompile()
 
@@ -105,7 +105,7 @@ class AppStateTest {
     @Test
     fun `un programa que no ejecuta deja execution en null`() {
         val state = AppState()
-        state.sourceContent = "let x: integer = true;"
+        state.onSourceChanged("let x: integer = true;")
 
         state.onCompile()
 
@@ -117,7 +117,7 @@ class AppStateTest {
     @Test
     fun `una recursion infinita no tumba la aplicacion`() {
         val state = AppState()
-        state.sourceContent = "function f(): integer { return f(); }\nprint(f());"
+        state.onSourceChanged("function f(): integer { return f(); }\nprint(f());")
 
         state.onCompile()
 
