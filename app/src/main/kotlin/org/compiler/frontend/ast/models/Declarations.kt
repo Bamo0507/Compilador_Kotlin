@@ -2,7 +2,7 @@ package org.compiler.frontend.ast.models
 
 import org.compiler.models.LexemeLocation
 
-// let x: integer = 5;   var y;   const PI: integer = 314;
+// let x: integer = 5;   var y: string;   const PI: integer = 314;
 data class VariableDeclaration(
     val name: String,
 

@@ -71,9 +71,13 @@ data class TryCatch(
     override val location: LexemeLocation
 ) : Statement
 
-data class Break(override val location: LexemeLocation) : Statement
+data class Break(
+    override val location: LexemeLocation
+) : Statement
 
-data class Continue(override val location: LexemeLocation) : Statement
+data class Continue(
+    override val location: LexemeLocation
+) : Statement
 
 data class Return(
     val value: Expression?,
