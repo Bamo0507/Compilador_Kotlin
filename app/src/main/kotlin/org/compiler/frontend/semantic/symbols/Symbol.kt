@@ -1,6 +1,7 @@
 package org.compiler.frontend.semantic.symbols
 
 import org.compiler.models.LexemeLocation
+import org.compiler.types.Type
 
 // La gramatica no tiene sintaxis de constructor: una clase lo declara como una funcion
 // que se LLAMA asi. Este es el unico lugar donde ese nombre esta escrito.

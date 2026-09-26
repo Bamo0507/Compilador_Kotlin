@@ -159,8 +159,12 @@ data class FloatValue(val value: Double) : Value {
     override fun display() = value.toString()
 }
 
-data class DecimalValue(val value: BigDecimal) : Value {
+// NO es data class: ver la decision de abajo.
+class DecimalValue(val value: BigDecimal) : Value {
     override fun display() = value.toPlainString()
+    override fun equals(other: Any?) =
+        other is DecimalValue && value.compareTo(other.value) == 0
+    override fun hashCode() = value.stripTrailingZeros().hashCode()
 }
 
 // Sirve a CHAR, VARCHAR y TEXT: lo que los diferencia es la regla al escribir.
@@ -197,15 +201,33 @@ guarda el texto.
 | `0.1 + 0.2` | `0.30000000000000004` | `0.30` |
 | Para qué | medidas, promedios | dinero |
 
-Usar `Double` para ambos haría que `DECIMAL` mintiera sobre lo que promete. El
-costo es que `BigDecimal` se compara con `compareTo` y no con `equals`, porque
-`BigDecimal("1.0").equals(BigDecimal("1.00"))` da `false` aunque sean el mismo
-número. Eso se maneja en `TypeRules` y hay que cubrirlo con test.
+Usar `Double` para ambos haría que `DECIMAL` mintiera sobre lo que promete.
+
+### Decisión · `DecimalValue` no es `data class`
+
+`BigDecimal("1.0").equals(BigDecimal("1.00"))` da `false`, porque mira la escala.
+En SQL son el mismo número. Si `DecimalValue` fuera `data class`, heredaría esa
+igualdad y con ella tres errores silenciosos:
+
+- `DISTINCT` devolvería `1.0` y `1.00` como dos filas
+- `GROUP BY` sobre un `DECIMAL` abriría dos grupos para el mismo valor
+- una **clave primaria `DECIMAL` aceptaría un duplicado**, porque la revisión de
+  unicidad usa un conjunto
+
+Así que define `equals` con `compareTo` y `hashCode` sobre
+`value.stripTrailingZeros()`, que es la forma canónica de los que `compareTo`
+considera iguales. Sin lo segundo, lo primero no sirve: un `HashSet` se guía por
+el hash antes que por la igualdad.
 
 **Aceptación:**
 
-- `DecimalValue(BigDecimal("0.1")).value + BigDecimal("0.2")` da exactamente `0.3`
+- `BigDecimal("0.1") + BigDecimal("0.2")` da exactamente `0.3`, y `0.1 + 0.2` en
+  `Double` no
+- `DecimalValue(1.0) == DecimalValue(1.00)`, **y sus hash coinciden**
+- `setOf(DecimalValue(1.0), DecimalValue(1.00))` tiene un solo elemento
+- `DecimalValue(BigDecimal("1000.00")).display()` da `"1000.00"` y no `1E+3`
 - `DateValue(LocalDate.of(2026, 9, 23)).display()` da `"2026-09-23"`
+- ordenar fechas ISO-8601 como texto da el orden cronológico
 - un `when` sobre `Value` sin `else` compila
 
 ---
