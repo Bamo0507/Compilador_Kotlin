@@ -12,7 +12,7 @@ Compiscript sirve casi completa.
 | Lista de errores | igual, sin tocar |
 | Salida de texto | se vuelve una **rejilla de resultados** |
 | Tabla de símbolos | se vuelve **vista del catálogo** |
-| Árbol sintáctico y AST | vuelven, ahora del query |
+| Árbol sintáctico y AST | vuelven, ahora del script |
 | Reporte de vivacidad | eliminado, no tiene análogo |
 
 **Estimación:** dos o tres sesiones.
@@ -38,10 +38,10 @@ cada una con su número de sentencia y su conteo de filas.
 Para las sentencias que no consultan, una línea de resumen:
 
 ```
-INSERT INTO users        2 filas insertadas
-UPDATE users             5 filas modificadas
-DELETE FROM posts        0 filas borradas
-CREATE TABLE eventos     tabla creada
+INSERT INTO users        2 rows insertadas
+UPDATE users             5 rows modificadas
+DELETE FROM posts        0 rows borradas
+CREATE TABLE eventos     table creada
 ```
 
 ### Detalles que importan
@@ -82,12 +82,12 @@ CREATE TABLE eventos     tabla creada
 recuperarlo del historial de `main`.
 
 ```
-datos/
-├── users                    3 columnas · 12 filas
+data/
+├── users                    3 columns · 12 rows
 │   ├── id       INT          PRIMARY KEY, AUTOINCREMENT
 │   ├── name     VARCHAR(80)  NOT NULL
 │   └── edad     INT
-└── posts                    3 columnas · 40 filas
+└── posts                    3 columns · 40 rows
     ├── id       INT          PRIMARY KEY
     ├── uid      INT          NOT NULL, -> users.id
     └── titulo   TEXT
@@ -111,7 +111,7 @@ demuestra que las restricciones se guardan de verdad.
 
 ---
 
-## Ticket 8.3 · Árboles del query
+## Ticket 8.3 · Árboles del script
 
 - **Estado**: pendiente
 - **Depende de**: 8.1
@@ -204,9 +204,9 @@ dos o tres scripts de juguete y muestra solo Default y En blanco. No bloquea.
 `AppState` gana lo del catálogo y pierde lo de Compiscript:
 
 ```kotlin
-var catalogo by mutableStateOf<Catalog?>(null)
+var catalog by mutableStateOf<Catalog?>(null)
     private set
-var resultados by mutableStateOf<List<ResultSet>>(emptyList())
+var results by mutableStateOf<List<ResultSet>>(emptyList())
     private set
 ```
 
@@ -224,8 +224,8 @@ sea evidente.
 
 ```
 Se escribieron 2 archivos
-  datos/users.csv      2 filas agregadas
-  datos/eventos.json   tabla creada
+  data/users.csv      2 rows agregadas
+  data/eventos.json   table creada
 ```
 
 **Si algo falló:**
@@ -233,8 +233,8 @@ Se escribieron 2 archivos
 ```
 No se escribio nada
   la sentencia 4 fallo: ya existe una fila con id = 1
-  las 3 sentencias anteriores se descartaron
-  datos/ quedo sin cambios
+  las 3 statements anteriores se descartaron
+  data/ quedo sin cambios
 ```
 
 Ese segundo mensaje es el que importa. Sin él, el usuario ve un error y no sabe si

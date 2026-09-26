@@ -17,13 +17,13 @@ FROM      abre el ambito con los alias
   |
 JOIN      combina y evalua el ON
   |
-WHERE     filtra filas
+WHERE     filtra rows
   |
 GROUP BY  agrupa
   |
 HAVING    filtra grupos
   |
-SELECT    proyecta columnas y calcula alias
+SELECT    proyecta columns y calcula alias
   |
 DISTINCT  quita repetidos
   |
@@ -53,20 +53,20 @@ preguntándole a `TypeRules` si lo que se hace tiene sentido, y dejar el tipo
 pegado en el nodo.
 
 ```kotlin
-private fun tipar(expresion: Expresion): Type {
-    val tipo = when (expresion) {
-        is Literal -> expresion.tipoLiteral
-        is ReferenciaColumna -> expresion.simbolo?.tipo ?: ErrorType
-        is Binaria -> {
-            val izq = tipar(expresion.izquierda)
-            val der = tipar(expresion.derecha)
-            TypeRules.tipoDeBinaria(expresion.operador, izq, der)
-                ?: reportar(expresion, "no se puede aplicar ...")
+private fun tipar(expression: Expression): Type {
+    val type = when (expression) {
+        is Literal -> expression.tipoLiteral
+        is ColumnReference -> expression.symbol?.type ?: ErrorType
+        is Binary -> {
+            val izq = tipar(expression.izquierda)
+            val der = tipar(expression.derecha)
+            TypeRules.binaryResultType(expression.operator, izq, der)
+                ?: reportar(expression, "no se puede aplicar ...")
         }
         // ...
     }
-    expresion.tipo = tipo
-    return tipo
+    expression.type = type
+    return type
 }
 ```
 
@@ -79,7 +79,7 @@ sin reportar de nuevo, así que `(1 + 'a') * 2` reporta **un** error.
 
 **Aceptación:**
 
-- cada nodo de expresión queda con `tipo` distinto de `ErrorType` en SQL válido
+- cada nodo de expresión queda con `type` distinto de `ErrorType` en SQL válido
 - `1 + 'a'` reporta exactamente un error, no dos
 - `WHERE fecha > TIME '10:00:00'` reporta incompatibilidad de familias
 
@@ -107,12 +107,12 @@ sin reportar de nuevo, así que `(1 + 'a') * 2` reporta **un** error.
 | alias de salida repetidos | `hay dos columnas llamadas 'total' en el resultado` |
 | `= NULL` en vez de `IS NULL` | advertencia: `= NULL nunca es verdadero, se esperaba IS NULL` |
 
-**Las dos reglas de alias las hace cumplir `esquemaDe`**, del ticket 4.5: él es
+**Las dos reglas de alias las hace cumplir `schemaOf`**, del ticket 4.5: él es
 quien sabe qué nombres produce el `SELECT` y qué cláusulas pueden verlos.
 
 ### Las advertencias no detienen el script
 
-Tres reglas de esta fase y la siguiente reportan con severidad `ADVERTENCIA`, que
+Tres reglas de esta fase y la siguiente reportan con severidad `WARNING`, que
 el ticket 0.6 agregó a `CompilerError`: `= NULL`, `LIMIT` sin `ORDER BY`, y
 `UPDATE` o `DELETE` sin `WHERE`.
 

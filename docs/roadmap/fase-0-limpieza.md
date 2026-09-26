@@ -11,10 +11,10 @@ hace de una vez y se sigue.
 
 **Estimación:** una sesión.
 
-**Regla de la fase:** al terminar, `grep -ri compiscript app/src` no devuelve nada
-y `./gradlew build` pasa.
+**Regla de la fase:** al terminar, `grep -ri compiscript app/src/main` no devuelve
+nada y `./gradlew build` pasa.
 
-**El build queda en rojo entre el ticket 0.2 y el 0.7, y es normal.** Borrar el
+**El build queda en rojo entre el ticket 0.2 y el 0.7, y es normal.** Delete el
 AST rompe el `TypeChecker`, que rompe el pipeline, que rompe la GUI. Los tickets
 intermedios no prometen compilación; el que la cierra es el 0.7. Por eso esto es
 una fase y no un paso previo: si se hace a medias, el proyecto queda sin compilar
@@ -22,7 +22,7 @@ varios días.
 
 ---
 
-## Ticket 0.1 · Borrar la gramática y el frontend sintáctico
+## Ticket 0.1 · Delete la gramática y el frontend sintáctico
 
 - **Estado**: pendiente
 - **Depende de**: nada
@@ -51,7 +51,7 @@ simplemente no genera nada.
 
 ---
 
-## Ticket 0.2 · Borrar el análisis semántico
+## Ticket 0.2 · Delete el análisis semántico
 
 - **Estado**: pendiente
 - **Depende de**: 0.1
@@ -86,7 +86,7 @@ externa, y resolver un nombre de afuera es subir por la cadena de padres, que es
 
 ---
 
-## Ticket 0.3 · Borrar el intérprete y los programas de ejemplo
+## Ticket 0.3 · Delete el intérprete y los programas de ejemplo
 
 - **Estado**: pendiente
 - **Depende de**: 0.2
@@ -104,7 +104,7 @@ externa, y resolver un nombre de afuera es subir por la cadena de padres, que es
 
 **Archivos (MODIFICA):**
 
-- `interpreter/RuntimeValue.kt` se mueve a `types/Valor.kt` y se recorta.
+- `interpreter/RuntimeValue.kt` se mueve a `types/Value.kt` y se recorta.
 
 **Qué se hace con `RuntimeValue`:** se conservan `IntValue`, `FloatValue`,
 `StringValue`, `BoolValue` y `NullValue`, que son exactamente lo que es una celda.
@@ -121,7 +121,7 @@ una subconsulta escalar que devuelve dos filas) pasan a ser una variante más de
 `Diagnostics` que todo lo demás y la lista de errores del IDE los muestra sin
 saber de dónde vienen.
 
-**Aceptación:** el paquete `interpreter/` ya no existe, y `types/Valor.kt` tiene
+**Aceptación:** el paquete `interpreter/` ya no existe, y `types/Value.kt` tiene
 cinco variantes.
 
 ---
@@ -153,6 +153,7 @@ cinco variantes.
 **Archivos (CONSERVA):**
 
 - `gui/components/CodeEditor.kt`, con su medianil de números ya resuelto
+- `gui/components/FileMenu.kt`, que cambia su extensión de `.cps` a `.sql`
 - `gui/components/ErrorList.kt`, que trabaja sobre `CompilerError` y no sabe de
   qué lenguaje viene
 - `gui/components/PlayButton.kt`, `FileMenu.kt`, `ViewMenu.kt`
@@ -180,7 +181,7 @@ pendiente de compilar en `gui/` es la llamada al pipeline.
 
 - `app/src/main/antlr/Sql.g4`, mínimo: solo `script: EOF;` más `WS -> skip`
 - `storage/DataDirectory.kt`
-- `datos/.gitkeep`
+- `data/.gitkeep`
 
 **Archivos (MODIFICA):**
 
@@ -213,16 +214,16 @@ un error al arrancar.
 
 ```kotlin
 // CLASE y no object: los tests necesitan apuntarla a un directorio temporal.
-class DataDirectory(private val raiz: File) {
+class DataDirectory(private val root: File) {
 
-    fun raiz(): File = raiz.apply { if (!exists()) mkdirs() }
+    fun root(): File = root.apply { if (!exists()) mkdirs() }
 
-    fun csv(tabla: String) = File(raiz(), "$tabla.csv")
-    fun json(tabla: String) = File(raiz(), "$tabla.json")
+    fun csv(table: String) = File(root(), "$tabla.csv")
+    fun json(table: String) = File(root(), "$tabla.json")
 
     // La existencia de la tabla la da el CSV, no el JSON. Decision 2.
-    fun tablas(): List<String> =
-        raiz().listFiles().orEmpty()
+    fun tables(): List<String> =
+        root().listFiles().orEmpty()
             .filter { it.isFile && it.extension == "csv" }
             .map { it.nameWithoutExtension }
             .sorted()
@@ -230,7 +231,7 @@ class DataDirectory(private val raiz: File) {
     companion object {
         // La de produccion: relativa a la raiz del repo y no al home,
         // porque el punto de usar CSV es poder verlos al lado del codigo.
-        val POR_OMISION = DataDirectory(File("datos"))
+        val DEFAULT = DataDirectory(File("data"))
     }
 }
 ```
@@ -238,21 +239,21 @@ class DataDirectory(private val raiz: File) {
 ### Decisión · clase con raíz inyectable, no `object` con ruta fija
 
 Un `object` con la ruta escrita adentro es imposible de probar: toda la batería de
-las fases 2, 6, 7 y 9 escribiría sobre el `datos/` real, y el orden en que corran
+las fases 2, 6, 7 y 9 escribiría sobre el `data/` real, y el orden en que corran
 los tests cambiaría sus resultados.
 
 Con la raíz inyectada, cada test usa `@TempDir` de JUnit y se lleva su propio
-directorio. `POR_OMISION` es la única que apunta al de verdad, y la usa el
+directorio. `DEFAULT` es la única que apunta al de verdad, y la usa el
 pipeline. Todo lo que toca disco (`CatalogLoader`, `CatalogWriter`, `scan`,
 `flush`) recibe un `DataDirectory` en el constructor.
 
 Es también el principio 7 del README: nada de `object` con estado.
 
-**Por qué `tablas()` filtra por `.csv` y no por `.json`:** es la decisión 2. La
+**Por qué `tables()` filtra por `.csv` y no por `.json`:** es la decisión 2. La
 tabla existe porque hay datos, no porque haya esquema. Un `.json` huérfano es un
 error que el catálogo reporta; un `.csv` huérfano también, pero por el otro lado.
 
-**Sobre `.gitignore`:** `datos/` se versiona con un `.gitkeep` y los `.csv`
+**Sobre `.gitignore`:** `data/` se versiona con un `.gitkeep` y los `.csv`
 generados se ignoran, para que la batería de pruebas no ensucie el repo. La fase 9
 define si algún juego de datos de ejemplo sí se versiona.
 
@@ -292,12 +293,12 @@ llena y lo mueve a `types/Type.kt`.
 - `diagnostics/CompilerError.kt` gana una cuarta variante y una severidad:
 
 ```kotlin
-enum class Severidad { ERROR, ADVERTENCIA }
+enum class Severity { ERROR, WARNING }
 
 sealed class CompilerError {
     abstract val location: LexemeLocation
     abstract val message: String
-    open val severidad: Severidad = Severidad.ERROR
+    open val severity: Severity = Severity.ERROR
 
     class LexerError(...) : CompilerError()
     class ParserError(...) : CompilerError()
@@ -305,7 +306,7 @@ sealed class CompilerError {
     class SemanticError(
         override val location: LexemeLocation,
         override val message: String,
-        override val severidad: Severidad = Severidad.ERROR
+        override val severity: Severity = Severity.ERROR
     ) : CompilerError()
 
     // Solo se detecta ejecutando: PK repetida, FK rota, una subconsulta
@@ -356,8 +357,12 @@ funcional y toca 56 archivos más el `mainClass` de Compose y el `-package` de
 ANTLR. **Recomendación: no renombrar**, y dejarlo anotado en el README para que
 en la defensa no parezca un descuido.
 
-**Aceptación:** `grep -ri compiscript app/src docs` no devuelve nada, y
+**Aceptación:** `grep -ri compiscript app/src/main` no devuelve nada, y
 `docs/roadmap/README.md` es el de este proyecto. El build lo cierra el 0.7.
+
+El criterio NO incluye `docs/`: el roadmap menciona Compiscript a proposito, para
+explicar de donde viene cada decision. Tampoco `app/src/test`, porque el ultimo
+rastro vive en `CompilerPipelineTest`, que se reescribe en el 0.7.
 
 ---
 
@@ -384,18 +389,18 @@ la fase promete evitar.
 // Todos los campos nulables a proposito: un fuente que no parsea no tiene AST,
 // pero si tiene errores, y la GUI debe mostrar resultados parciales.
 class CompilationResult(
-    val fuente: String,
+    val source: String,
     val parseTreeView: TreeNodeView? = null,   // fase 3
     val ast: Script? = null,                   // fase 3
-    val catalogo: Catalog? = null,             // fase 2
-    val errores: List<CompilerError> = emptyList(),
-    val ejecucion: ExecutionResult? = null     // fase 6
+    val catalog: Catalog? = null,             // fase 2
+    val errors: List<CompilerError> = emptyList(),
+    val execution: ExecutionResult? = null     // fase 6
 ) {
-    val hasErrors get() = errores.any { it.severidad == Severidad.ERROR }
+    val hasErrors get() = errors.any { it.severity == Severity.ERROR }
 
     companion object {
-        fun fallida(diagnostics: Diagnostics, fuente: String) =
-            CompilationResult(fuente, errores = diagnostics.all())
+        fun failed(diagnostics: Diagnostics, source: String) =
+            CompilationResult(source, errors = diagnostics.all())
     }
 }
 ```
@@ -408,8 +413,8 @@ que los crea. El ticket 3.6 conecta las etapas A y B, el 7.5 las demás.
 ```kotlin
 object DbmsPipeline {
     // Por ahora solo colecta: no hay gramatica hasta la fase 3.
-    fun ejecutar(fuente: String, escribir: Boolean = true): CompilationResult =
-        CompilationResult(fuente)
+    fun run(source: String, write: Boolean = true): CompilationResult =
+        CompilationResult(source)
 }
 ```
 
@@ -421,4 +426,4 @@ funciona y no hace nada, que es lo correcto en este punto.
 - `./gradlew build` pasa
 - `./gradlew run` abre la ventana, se escribe texto, se presiona correr y no pasa
   nada ni truena
-- `grep -ri compiscript app/src docs` no devuelve nada
+- `grep -ri compiscript app/src/main` no devuelve nada

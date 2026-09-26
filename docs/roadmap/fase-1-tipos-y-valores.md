@@ -6,7 +6,7 @@ puras.
 
 **Por qué va primero y sola:** todo lo demás lee estas estructuras. El catálogo
 guarda `Type`, la gramática nombra los tipos, el semántico los compara, el motor
-opera con `Valor` y el almacenamiento los convierte a texto. Si cambian a mitad de
+opera con `Value` y el almacenamiento los convierte a texto. Si cambian a mitad de
 camino, hay que rehacer trabajo en cuatro frentes al mismo tiempo.
 
 **Lo que hace única a esta fase:** cero ANTLR, cero archivos, cero interfaz. Se
@@ -128,14 +128,14 @@ es justo lo contrario de lo que dice el estándar.
 
 ---
 
-## Ticket 1.2 · `Valor`
+## Ticket 1.2 · `Value`
 
 - **Estado**: pendiente
 - **Depende de**: 1.1
 
 **Archivos:**
 
-- `types/Valor.kt` (MODIFICA el `RuntimeValue.kt` recortado en 0.3)
+- `types/Value.kt` (MODIFICA el `RuntimeValue.kt` recortado en 0.3)
 - `app/src/test/.../ValorTest.kt` (NUEVO)
 
 ### Diseño
@@ -146,41 +146,41 @@ import java.time.LocalDate
 import java.time.LocalTime
 
 // Un valor concreto en una celda.
-sealed interface Valor {
+sealed interface Value {
     // Como se muestra en la rejilla de resultados.
     fun display(): String
 }
 
-data class IntValue(val value: Long) : Valor {
+data class IntValue(val value: Long) : Value {
     override fun display() = value.toString()
 }
 
-data class FloatValue(val value: Double) : Valor {
+data class FloatValue(val value: Double) : Value {
     override fun display() = value.toString()
 }
 
-data class DecimalValue(val value: BigDecimal) : Valor {
+data class DecimalValue(val value: BigDecimal) : Value {
     override fun display() = value.toPlainString()
 }
 
 // Sirve a CHAR, VARCHAR y TEXT: lo que los diferencia es la regla al escribir.
-data class StringValue(val value: String) : Valor {
+data class StringValue(val value: String) : Value {
     override fun display() = value
 }
 
-data class DateValue(val value: LocalDate) : Valor {
+data class DateValue(val value: LocalDate) : Value {
     override fun display() = value.toString()
 }
 
-data class TimeValue(val value: LocalTime) : Valor {
+data class TimeValue(val value: LocalTime) : Value {
     override fun display() = value.toString()
 }
 
-data class BoolValue(val value: Boolean) : Valor {
+data class BoolValue(val value: Boolean) : Value {
     override fun display() = if (value) "true" else "false"
 }
 
-data object NullValue : Valor {
+data object NullValue : Value {
     override fun display() = "NULL"
 }
 ```
@@ -206,7 +206,7 @@ número. Eso se maneja en `TypeRules` y hay que cubrirlo con test.
 
 - `DecimalValue(BigDecimal("0.1")).value + BigDecimal("0.2")` da exactamente `0.3`
 - `DateValue(LocalDate.of(2026, 9, 23)).display()` da `"2026-09-23"`
-- un `when` sobre `Valor` sin `else` compila
+- un `when` sobre `Value` sin `else` compila
 
 ---
 
@@ -217,7 +217,7 @@ número. Eso se maneja en `TypeRules` y hay que cubrirlo con test.
 
 **Archivos:**
 
-- `types/ValorCodec.kt` (NUEVO)
+- `types/ValueCodec.kt` (NUEVO)
 - `app/src/test/.../ValorCodecTest.kt` (NUEVO)
 
 **Qué es esto, en simple:** el CSV guarda texto. Cuando el motor lee `1250.00` de
@@ -228,22 +228,22 @@ traducción en los dos sentidos.
 ### Diseño
 
 ```kotlin
-object ValorCodec {
+object ValueCodec {
 
-    // Texto del CSV -> Valor, guiado por el tipo de la columna.
+    // Texto del CSV -> Value, guiado por el tipo de la columna.
     // Devuelve null si el texto no es valido para ese tipo.
-    fun decodificar(texto: String?, tipo: Type): Valor? = when {
-        texto == null -> NullValue
-        else -> when (tipo) {
-            IntType -> texto.toLongOrNull()?.let { IntValue(it) }
-            FloatType -> texto.toDoubleOrNull()?.let { FloatValue(it) }
-            is DecimalType -> decimal(texto, tipo)
-            is CharType -> StringValue(texto.padEnd(tipo.length))
-            is VarcharType -> if (texto.length <= tipo.maxLength) StringValue(texto) else null
-            TextType -> StringValue(texto)
-            DateType -> runCatching { DateValue(LocalDate.parse(texto)) }.getOrNull()
-            TimeType -> runCatching { TimeValue(LocalTime.parse(texto)) }.getOrNull()
-            BooleanType -> when (texto) {
+    fun decode(text: String?, type: Type): Value? = when {
+        text == null -> NullValue
+        else -> when (type) {
+            IntType -> text.toLongOrNull()?.let { IntValue(it) }
+            FloatType -> text.toDoubleOrNull()?.let { FloatValue(it) }
+            is DecimalType -> decimal(text, type)
+            is CharType -> StringValue(text.padEnd(type.length))
+            is VarcharType -> if (text.length <= type.maxLength) StringValue(text) else null
+            TextType -> StringValue(text)
+            DateType -> runCatching { DateValue(LocalDate.parse(text)) }.getOrNull()
+            TimeType -> runCatching { TimeValue(LocalTime.parse(text)) }.getOrNull()
+            BooleanType -> when (text) {
                 "true" -> BoolValue(true)
                 "false" -> BoolValue(false)
                 else -> null
@@ -252,12 +252,12 @@ object ValorCodec {
         }
     }
 
-    // Valor -> texto del CSV. NULL sale como null, que el escritor deja vacio.
-    fun codificar(valor: Valor, tipo: Type): String? = when (valor) {
+    // Value -> texto del CSV. NULL sale como null, que el escritor deja vacio.
+    fun encode(value: Value, type: Type): String? = when (value) {
         NullValue -> null
         // CHAR se guarda SIN relleno: el largo lo dice el JSON. Decision 9.
-        is StringValue -> if (tipo is CharType) valor.value.trimEnd() else valor.value
-        else -> valor.display()
+        is StringValue -> if (type is CharType) value.value.trimEnd() else value.value
+        else -> value.display()
     }
 }
 ```
@@ -298,7 +298,7 @@ consulta en la defensa cuando preguntan por qué `DATE > TIME` no compila.
 
 ### Las familias
 
-| Familia | Miembros | Entre sí | Con otra familia |
+| Family | Miembros | Entre sí | Con otra familia |
 |---|---|---|---|
 | numérica | `INT`, `DECIMAL`, `FLOAT` | comparan y operan, ensanchando | no |
 | carácter | `CHAR`, `VARCHAR`, `TEXT` | comparan y concatenan | no |
@@ -323,40 +323,40 @@ El ensanchamiento va en un solo sentido. Un `INT` se usa donde se espera un
 ```kotlin
 object TypeRules {
 
-    enum class Familia { NUMERICA, CARACTER, TEMPORAL, LOGICA, NULA, ERROR }
+    enum class Family { NUMERIC, CHARACTER, TEMPORAL, LOGICAL, NULL, ERROR }
 
-    fun familiaDe(tipo: Type): Familia = when (tipo) {
-        IntType, FloatType, is DecimalType -> Familia.NUMERICA
-        is CharType, is VarcharType, TextType -> Familia.CARACTER
-        DateType, TimeType -> Familia.TEMPORAL
-        BooleanType -> Familia.LOGICA
-        NullType -> Familia.NULA
-        ErrorType -> Familia.ERROR
+    fun familyOf(type: Type): Family = when (type) {
+        IntType, FloatType, is DecimalType -> Family.NUMERIC
+        is CharType, is VarcharType, TextType -> Family.CHARACTER
+        DateType, TimeType -> Family.TEMPORAL
+        BooleanType -> Family.LOGICAL
+        NullType -> Family.NULL
+        ErrorType -> Family.ERROR
     }
 
-    // Se puede guardar un valor de `origen` en una columna de `destino`?
-    fun esAsignable(origen: Type, destino: Type): Boolean = when {
-        origen == ErrorType || destino == ErrorType -> true    // corta cascadas
-        origen == NullType -> true
-        familiaDe(origen) != familiaDe(destino) -> false
-        familiaDe(origen) == Familia.TEMPORAL -> origen == destino
-        familiaDe(origen) == Familia.NUMERICA -> anchoDe(origen) <= anchoDe(destino)
+    // Se puede guardar un valor de `source` en una columna de `target`?
+    fun isAssignable(source: Type, target: Type): Boolean = when {
+        source == ErrorType || target == ErrorType -> true    // corta cascadas
+        source == NullType -> true
+        familyOf(source) != familyOf(target) -> false
+        familyOf(source) == Family.TEMPORAL -> source == target
+        familyOf(source) == Family.NUMERIC -> widthOf(source) <= widthOf(target)
         else -> true    // caracter: el largo se valida aparte, al escribir
     }
 
     // El tipo del resultado de comparar u operar dos tipos.
-    fun unificar(izq: Type, der: Type): Type? = when {
+    fun unify(izq: Type, der: Type): Type? = when {
         izq == ErrorType || der == ErrorType -> ErrorType
         izq == NullType -> der
         der == NullType -> izq
-        familiaDe(izq) != familiaDe(der) -> null
-        familiaDe(izq) == Familia.NUMERICA -> if (anchoDe(izq) >= anchoDe(der)) izq else der
-        familiaDe(izq) == Familia.TEMPORAL -> if (izq == der) izq else null
-        familiaDe(izq) == Familia.CARACTER -> TextType
+        familyOf(izq) != familyOf(der) -> null
+        familyOf(izq) == Family.NUMERIC -> if (widthOf(izq) >= widthOf(der)) izq else der
+        familyOf(izq) == Family.TEMPORAL -> if (izq == der) izq else null
+        familyOf(izq) == Family.CHARACTER -> TextType
         else -> izq
     }
 
-    private fun anchoDe(tipo: Type): Int = when (tipo) {
+    private fun widthOf(type: Type): Int = when (type) {
         IntType -> 0
         is DecimalType -> 1
         FloatType -> 2
@@ -365,11 +365,11 @@ object TypeRules {
 }
 ```
 
-### Decisión · `esAsignable` es direccional, `unificar` es simétrica
+### Decisión · `isAssignable` es direccional, `unificar` es simétrica
 
 Son dos preguntas distintas y confundirlas es el error clásico:
 
-- `esAsignable(IntType, FloatType)` es `true`, al revés es `false`. Es la pregunta
+- `isAssignable(IntType, FloatType)` es `true`, al revés es `false`. Es la pregunta
   del `INSERT`: cabe este valor en esta columna.
 - `unificar(IntType, FloatType)` es `FloatType` en cualquier orden. Es la pregunta
   del operador: de qué tipo es `a + b`.
@@ -387,9 +387,9 @@ notar. Anotarlo en el README como simplificación consciente.
 
 **Aceptación:** un test por celda de la tabla de familias, más
 
-- `esAsignable(IntType, DecimalType(10,2))` es `true`
-- `esAsignable(FloatType, IntType)` es `false`
-- `esAsignable(DateType, TimeType)` es `false`
+- `isAssignable(IntType, DecimalType(10,2))` es `true`
+- `isAssignable(FloatType, IntType)` es `false`
+- `isAssignable(DateType, TimeType)` es `false`
 - `unificar(CharType(5), TextType)` es `TextType`
 - `unificar(DateType, IntType)` es `null`
 - cualquier cosa con `ErrorType` no genera error nuevo
@@ -420,17 +420,17 @@ notar. Anotarlo en el README como simplificación consciente.
 ### Diseño
 
 ```kotlin
-fun tipoDeBinaria(operador: OperadorBinario, izq: Type, der: Type): Type? =
-    when (operador.categoria) {
-        ARITMETICA -> unificar(izq, der)?.takeIf { familiaDe(it) == Familia.NUMERICA }
+fun binaryResultType(operator: BinaryOperator, izq: Type, der: Type): Type? =
+    when (operator.categoria) {
+        ARITMETICA -> unify(izq, der)?.takeIf { familyOf(it) == Family.NUMERIC }
         CONCATENACION -> TextType.takeIf {
-            familiaDe(izq) == Familia.CARACTER && familiaDe(der) == Familia.CARACTER
+            familyOf(izq) == Family.CHARACTER && familyOf(der) == Family.CHARACTER
         }
         ORDEN -> BooleanType.takeIf {
-            unificar(izq, der) != null && familiaDe(izq) != Familia.LOGICA
+            unify(izq, der) != null && familyOf(izq) != Family.LOGICAL
         }
-        IGUALDAD -> BooleanType.takeIf { unificar(izq, der) != null }
-        LOGICA -> BooleanType.takeIf { izq == BooleanType && der == BooleanType }
+        IGUALDAD -> BooleanType.takeIf { unify(izq, der) != null }
+        LOGICAL -> BooleanType.takeIf { izq == BooleanType && der == BooleanType }
     }
 ```
 
@@ -444,7 +444,7 @@ reporta como advertencia en la fase 5.
 
 **Aceptación:**
 
-- `tipoDeBinaria(SUMA, IntType, DecimalType(10,2))` da `DecimalType(10,2)`
-- `tipoDeBinaria(SUMA, DateType, IntType)` da `null`
-- `tipoDeBinaria(MAYOR, BooleanType, BooleanType)` da `null`
-- `tipoDeBinaria(CONCAT, CharType(3), TextType)` da `TextType`
+- `binaryResultType(SUMA, IntType, DecimalType(10,2))` da `DecimalType(10,2)`
+- `binaryResultType(SUMA, DateType, IntType)` da `null`
+- `binaryResultType(MAYOR, BooleanType, BooleanType)` da `null`
+- `binaryResultType(CONCAT, CharType(3), TextType)` da `TextType`

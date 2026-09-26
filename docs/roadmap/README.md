@@ -1,111 +1,271 @@
-# Roadmap — Analizador Semántico de Compiscript
+# Roadmap · DBMS sobre CSV
 
-Plan de desarrollo del Proyecto 2: análisis semántico de Compiscript sobre ANTLR,
-con tabla de símbolos, verificación de tipos, ejecución e IDE.
+Plan de desarrollo del manejador de base de datos: un motor SQL que pasa por las
+mismas etapas de un compilador (léxico, sintáctico, semántico, ejecución) y que
+guarda las tablas como archivos CSV legibles.
 
 ---
 
-## Antes de empezar: qué cambió respecto al proyecto anterior
+## Qué es este proyecto respecto a Compiscript
 
-El proyecto anterior construía a mano un generador de analizadores: expresiones
-regulares a AFD para el léxico, y tablas LL(1)/SLR(1)/LALR(1) para el sintáctico.
-**Todo eso se reemplaza por ANTLR.**
+Esta rama **no es una evolución de Compiscript, es un proyecto hermano**.
+Compiscript queda congelado en `main`. Aquí se reaprovechan los cimientos, no el
+lenguaje.
 
-Esto es importante entenderlo bien porque cambia la percepción del tamaño del
-trabajo. El enunciado dice, literal:
+| Se conserva | Se elimina |
+|---|---|
+| El andamiaje de ANTLR en Gradle, con su `dependsOn` ya resuelto | La gramática `Compiscript.g4` |
+| `LexemeLocation`, `Diagnostics`, `CompilerError` | Clases, herencia, closures |
+| La forma del pipeline: seis etapas, y solo la sintaxis corta | `FlowAnalyzer` y el reporte de vivacidad |
+| `Scope` y `Symbol`, ahora para alias de tablas | El `TypeChecker` y el `Interpreter` |
+| El IDE: editor, lista de errores, vista de árboles | Los 38 programas `.cps` |
 
-> **Analizador Sintáctico:** Basado en la gramática de Compiscript (ANTLR),
-> reutilizando o extendiendo el trabajo de la fase anterior.
+Y aparece una etapa que Compiscript no tenía: **el catálogo**, que se lee del
+disco antes del análisis semántico, porque sin él el semántico no puede saber si
+una tabla existe ni de qué tipo es una columna.
 
-Y en objetivos específicos: *"Implementar el analizador sintáctico de Compiscript
-utilizando ANTLR (u otra herramienta similar)."*
+---
 
-Traducción: **ANTLR genera el lexer y el parser desde el archivo `.g4`.** No se
-reimplementa nada a mano. No hay normalización de regex, ni Shunting Yard, ni
-construcción de AFD, ni tablas de parsing, ni reescritura de gramática por
-precedencia.
+## Alcance
 
-El trabajo real de este proyecto es **semántica, tabla de símbolos e IDE**, y eso
-es exactamente lo que califica la rúbrica:
+| | Incluye |
+|---|---|
+| DDL | `CREATE TABLE`, `ALTER TABLE` (add y drop column), `DROP TABLE` |
+| DML | `INSERT`, `UPDATE`, `DELETE` |
+| Query | `SELECT`, `FROM`, alias, `JOIN ... ON`, `WHERE`, `ORDER BY`, `DISTINCT`, `LIMIT` |
+| Agregación | `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP BY`, `HAVING` |
+| Subconsultas | escalares, `IN`, `EXISTS`, correlacionadas, y en el `FROM` |
+| Tipos | `INT`, `FLOAT`, `DECIMAL`/`NUMERIC`, `CHAR`, `VARCHAR`, `TEXT`, `DATE`, `TIME`, `BOOLEAN`, `NULL` |
+| Restricciones | `PRIMARY KEY`, `NOT NULL`, `NULL`, `UNIQUE`, `FOREIGN KEY`, `AUTOINCREMENT`, `DEFAULT` |
 
-| Componente | Puntos | Qué es realmente |
-|---|---|---|
-| IDE | 15 | Adaptar la GUI Compose que ya existe |
-| Analizador Sintáctico y Semántico | 60 | ANTLR (casi gratis) + **el verificador de tipos** (todo el trabajo) |
-| Tabla de Símbolos | 25 | Árbol de ámbitos con entornos anidados |
-| **Total** | **100** | **85 puntos son semántica y tabla de símbolos** |
+Queda fuera, y es deliberado: índices, transacciones explícitas, vistas,
+disparadores, `LEFT`/`RIGHT JOIN`, `UNION`, `CHECK` y usuarios.
 
 ---
 
 ## Mapa de fases
 
-| Fase | Qué se logra al terminarla | Tickets |
+| Fase | Qué se logra al terminarla | Tickets | Peso |
+|---|---|---|---|
+| [**0 · Limpieza**](./fase-0-limpieza.md) | Repo sin rastro de Compiscript, compilando y abriendo ventana | 7 | bajo |
+| [**1 · Tipos y valores**](./fase-1-tipos-y-valores.md) | Los 11 tipos, los 8 valores y las reglas de compatibilidad | 5 | medio |
+| [**2 · Catálogo y almacenamiento**](./fase-2-catalogo-y-almacenamiento.md) | El directorio `data/` se lee y se escribe sin perder nada | 6 | medio |
+| [**3 · Gramática y AST**](./fase-3-gramatica-y-ast.md) | Todo el SQL del alcance parsea y produce un AST limpio | 6 | **alto** |
+| [**4 · Semántico I, nombres**](./fase-4-semantico-nombres.md) | Tablas, alias y columnas resueltos, con nivel e índice | 5 | medio |
+| [**5 · Semántico II, tipos y reglas**](./fase-5-semantico-tipos-y-reglas.md) | Cada expresión tipada y cada regla de SQL verificada | 5 | **alto** |
+| [**6 · Motor I, consultas**](./fase-6-motor-consultas.md) | Un `SELECT` del alcance devuelve el `ResultSet` correcto | 7 | **alto** |
+| [**7 · Motor II, escritura**](./fase-7-motor-escritura.md) | Se escribe a disco, o no se escribe nada | 5 | medio |
+| [**8 · Interfaz**](./fase-8-interfaz.md) | Todo el alcance se hace sin salir de la ventana | 5 | medio |
+| [**9 · Batería y documentación**](./fase-9-bateria-y-docs.md) | Casos válidos e inválidos, README y diagrama | 3 | medio |
+| | | **54** | |
+
+**Estimación total: 24 sesiones de trabajo.**
+
+### Orden y paralelismo
+
+```
+Fase 0  limpieza
+   |
+Fase 1  types y values
+   |
+   +---------------------+
+   |                     |
+Fase 2  catalog      Fase 3  gramatica y AST
+   |                     |
+   +----------+----------+
+              |
+        Fase 4  nombres
+              |
+        Fase 5  types y constraints
+              |
+        Fase 6  motor consultas
+              |
+        Fase 7  motor escritura
+              |
+        Fase 8  interfaz
+              |
+        Fase 9  bateria y docs
+```
+
+**La fase 1 es un cuello de botella deliberado.** Todo lo demás lee `Type` y
+`Value`. Si cambian a mitad de camino, hay que rehacer trabajo en varios frentes
+al mismo tiempo.
+
+**Las fases 2 y 3 son el único tramo paralelizable**, y es el más grande del
+proyecto. La fase 2 no toca ANTLR y la fase 3 no toca el disco, así que no se
+pisan. Si son dos personas, ahí se parte.
+
+**El pipeline se arma en la fase 3 en su versión mínima** y cada fase posterior le
+conecta su etapa. No hay una fase de integración al final, porque integrar al
+final es donde aparecen los problemas caros.
+
+**La fase 0 deja el build rojo entre sus tickets 0.2 y 0.7, y es normal.** Delete
+el AST rompe el `TypeChecker`, que rompe el pipeline, que rompe la GUI. El ticket
+0.7 reconstruye el runtime y cierra el build.
+
+---
+
+## Las nueve decisiones de diseño
+
+Estas ya están cerradas. Si alguna se reabre, hay que revisar las fases que
+dependen de ella.
+
+**1. Proyecto hermano, no evolución.** Compiscript queda congelado en `main`. En
+esta rama se reemplaza en sitio, con una fase dedicada a la limpieza.
+
+**2. El directorio es el catálogo.** Si existe `users.csv`, existe la tabla
+`users`. No hay archivo global de catálogo, porque sería información derivada de
+algo que el sistema de archivos ya sabe, y toda copia se puede quedar vieja.
+SQLite necesita `sqlite_master` porque toda la base es un archivo y no tiene
+directorio al cual preguntarle. Aquí sí lo hay.
+
+**3. Dos archivos por tabla.** `users.csv` guarda el header y las filas;
+`users.json` guarda tipo y restricciones por columna. El CSV no puede cargar
+tipos, y el JSON no debería cargar datos.
+
+**4. El DBMS es el único que escribe.** El CSV se eligió por ser legible, no por
+ser editable. El chequeo de que el header cuadra con el JSON existe como guarda de
+cordura, con un mensaje que dice que alguien tocó el archivo por fuera, no como
+mecanismo de reconciliación. Lo que se valida de verdad es lo que **entra**.
+
+**5. Se escribe al final, con vuelta atrás implícita.** Las sentencias se aplican
+en memoria y el volcado ocurre una sola vez al terminar. Si cualquier sentencia
+falla, no se escribe nada y el directorio queda intacto. Es atomicidad por script
+sin agregar `BEGIN` ni `COMMIT` a la gramática.
+
+**6. Las restricciones son una jerarquía sellada, no un enum.** Los estados
+imposibles no compilan, y `FOREIGN_KEY` y `DEFAULT` pueden cargar datos mientras
+las otras cinco no.
+
+**7. El JSON es uniforme.** Cada regla es un objeto con discriminador `constraint`. Es
+lo que `kotlinx.serialization` produce sin serializador a mano.
+
+**8. El semántico decora, el motor no vuelve a preguntar.** Cada referencia a
+columna queda con su `level` y su `index` resueltos en el análisis. El motor
+indexa un arreglo, no busca un nombre por fila.
+
+**9. `CHAR` se guarda sin relleno.** El largo lo dice el JSON, así que el relleno
+se aplica al leer. El CSV no lleva espacios invisibles y sigue siendo legible, que
+era la razón de elegirlo.
+
+**10. Una `Session` por corrida es la dueña del estado.** El caché de lectura y el
+almacén de escritura son **el mismo mapa**, así que un `SELECT` después de un
+`INSERT` ve la fila nueva. Es también quien recorre las sentencias del script y
+quien le dice a `flush` qué cambió. Nada de `object` con estado.
+
+**11. Las advertencias son una severidad, no un colector aparte.** `= NULL`,
+`LIMIT` sin `ORDER BY` y `UPDATE` sin `WHERE` reportan con severidad
+`WARNING`, y `hasErrors` cuenta solo los `ERROR`, así que el script se ejecuta
+igual. Los errores de ejecución son una cuarta variante de `CompilerError`, no una
+excepción, para que el motor pueda seguir reportando y la lista del IDE los
+muestre sin saber de dónde vienen.
+
+---
+
+## El pipeline completo, en orden
+
+```
+source SQL
+   |
+   v  ANTLR Lexer + Parser  (+ DiagnosticsErrorListener)
+parse tree  ------------------------> errores lexicos y sintacticos
+   |                                  vista visual del arbol
+   |        UNICA ETAPA QUE CORTA
+   v  SqlAstBuilder
+AST propio
+   |
+   v  CatalogLoader        lee data/*.json, NO los .csv
+Catalog  ---------------------------> el esquema completo de la base
+   |
+   v  SqlChecker           nombres, niveles, types, constraints
+AST decorado  ----------------------> errores y ADVERTENCIAS, todos juntos
+   |                                  las advertencias no detienen nada
+   v  Session.run       recorre las sentencias del script
+   |  Engine  -> consultas   lee data/*.csv solo de lo que se toca
+   |  Writer  -> escrituras  modifica rows EN MEMORIA
+ResultSet + changes pendientes  ----> errores de ejecucion, CORTAN
+   |
+   v  Flush.flush         solo si nada fallo
+data/ actualizado  ----------------> rejilla de resultados en el IDE
+```
+
+**Esquema ansioso, datos perezosos.** En la etapa del catálogo se leen todos los
+`.json`, porque para decir que una tabla no existe hay que saber qué existe, y
+pesan nada. Los `.csv` se abren en la ejecución y solo los de las tablas que el
+script menciona.
+
+### Dónde cae cada error
+
+| Error | Etapa | Mensaje |
 |---|---|---|
-| [**0 — Limpieza y base**](./fase-0-limpieza-y-base.md) | Repo limpio, compilando, con ANTLR generando lexer y parser | 6 |
-| [**1 — Modelos congelados**](./fase-1-modelos.md) | Las 4 estructuras que los 3 integrantes deben acordar antes de escribir lógica | 5 |
-| [**2 — Del árbol de ANTLR al AST propio**](./fase-2-ast.md) | Un árbol limpio, con la torre de precedencia colapsada | 3 |
-| [**3 — Pasada 1: declaraciones**](./fase-3-declaraciones.md) | El árbol de ámbitos poblado con todas las declaraciones | 2 |
-| [**4 — Pasada 2: tipos**](./fase-4-tipos.md) | Cada expresión con su tipo verificado y su valor plegado | 4 |
-| [**5 — Flujo y vivacidad**](./fase-5-flujo-y-vivacidad.md) | `return`/`break`/`continue`, código muerto, metadatos para el GC | 2 |
-| [**6 — Ejecución**](./fase-6-ejecucion.md) | El programa corre y `print(3+5)` imprime `8` | 2 |
-| [**7 — Pipeline e IDE**](./fase-7-pipeline-e-ide.md) | Todo orquestado y visible en la GUI | 4 |
-| [**8 — Pruebas y documentación**](./fase-8-pruebas-y-docs.md) | Casos exitosos y fallidos por regla, más los entregables de docs | 3 |
-| | | **31** |
+| Sintaxis | sintáctica | `se esperaba FROM` |
+| Tabla inexistente | semántica | `la tabla 'usuarios' no existe` |
+| Columna inexistente | semántica | `'users' no tiene columna 'email'` |
+| Alias ambiguo | semántica | `'name' existe en 'users' y en 'posts'` |
+| Tipo incompatible | semántica | `WHERE espera BOOLEAN, recibio INT` |
+| Header descuadrado | semántica | `users.csv fue editado fuera del DBMS` |
+| `= NULL` en vez de `IS NULL` | semántica | **advertencia**, no detiene |
+| `UPDATE` sin `WHERE` | semántica | **advertencia**, no detiene |
+| PK repetida | ejecución | `ya existe una fila con id = 1` |
+| NOT NULL violado | ejecución | `la columna 'name' no acepta nulos` |
+| FK rota | ejecución | `posts.uid = 7 no existe en users.id` |
 
-### Dos notas sobre el orden
-
-**La Fase 1 es un cuello de botella deliberado.** Nadie escribe lógica de
-análisis hasta que los cuatro modelos estén acordados por los tres y mergeados.
-Es lo que permite que desde la Fase 2 trabajen en paralelo sin pisarse, y el
-enunciado exige commits individuales por integrante.
-
-**La Fase 6 (ejecución) va después de la 5**, aunque el catedrático la pidió.
-El intérprete corre sobre el AST **ya validado**: si ejecutas antes de verificar,
-ejecutas código con errores de tipo y obtienes basura en vez de un error. Además,
-buena parte de la demo (`print(3+5)` → `8`) ya sale de la Fase 4 con plegado de
-constantes, sin intérprete.
+Las semánticas salen **todas juntas**: un error no corta el análisis. Las de
+ejecución sí cortan, y por la decisión 5 eso significa que el disco no se toca.
 
 ---
 
 ## Formato de cada ticket
 
-Cada ticket lleva:
-
-- **Estado** — `pendiente` | `en progreso` | `completado`. Se actualiza a mano.
-- **Depende de** — tickets previos requeridos.
-- **Archivos** — qué crea, modifica o elimina.
-- **Qué es esto, en simple** — explicación en lenguaje llano, cuando el concepto
-  lo necesita.
-- **Qué se hace** — el diseño concreto, con código.
-- **Por qué** — la razón de la decisión. Presente siempre que la decisión no sea
-  obvia, porque son las que se preguntan en la defensa.
-- **Aceptación** — cuándo se considera terminado, en criterios verificables.
-- **Respaldo** — la sección del enunciado, del libro o de las notas de clase que
-  lo justifica.
+- **Estado**: `pendiente` | `en progreso` | `completado`. Se actualiza a mano.
+- **Depende de**: tickets previos requeridos.
+- **Archivos**: qué crea, modifica o elimina.
+- **Qué es esto, en simple**: explicación llana, cuando el concepto la necesita.
+- **Qué se hace**: el diseño concreto, con código.
+- **Por qué**: la razón de la decisión, cuando no es obvia. Son las que se
+  preguntan en la defensa.
+- **Aceptación**: cuándo se considera terminado, en criterios verificables.
 
 ---
 
-## Principios de código para todo el proyecto
-
-Estos aplican a cada ticket sin repetirlos:
+## Principios de código
 
 1. **Simple antes que ingenioso.** Si una solución necesita un comentario para
    entenderse a nivel de mecánica, probablemente hay una más simple. Los
-   comentarios son para el *por qué*, no para el *qué*.
-2. **Nombres completos.** `currentScope`, no `cs`. `declaredType`, no `dt`.
-3. **`sealed interface` / `sealed class` para jerarquías cerradas.** Da `when`
-   exhaustivo: si agregas un caso y olvidas manejarlo, Kotlin no compila.
-4. **`data object` para constantes únicas**, `data class` para lo que lleva datos.
-5. **`enum` en vez de `String`** para conjuntos cerrados (operadores, categorías).
-   Misma razón que el punto 3.
-6. **Nada de `object` con estado mutable.** Una instancia por compilación. Fue un
-   problema real en el proyecto anterior: obligaba a acordarse de limpiar el
-   estado global antes de cada corrida.
-7. **Los modelos son datos; las reglas son funciones aparte.** `Type.kt` no sabe
+   comentarios son para el porqué, no para el qué.
+2. **Comentarios breves y directos.** Una línea por variable como máximo, y si es
+   sencillo, sin comentario.
+3. **Nombres completos.** `currentScope`, no `cs`.
+4. **Imports al inicio**, nunca en línea.
+5. **`sealed interface` para jerarquías cerradas.** Da `when` exhaustivo: si
+   agregas un caso y olvidas manejarlo, Kotlin no compila.
+6. **`data object` para constantes únicas**, `data class` para lo que lleva datos.
+7. **Nada de `object` con estado mutable.** Una instancia por corrida.
+8. **Los modelos son datos, las reglas son funciones aparte.** `Type.kt` no sabe
    qué se puede sumar con qué; eso vive en `TypeRules.kt`.
-8. **Una función por construcción del lenguaje.** Es la forma que impone el
-   patrón visitor y es lo que pide el catedrático: al ámbito en el que estoy le
-   corresponde una función que procesa toda su información.
+9. **Preferir `?.` y `?: return` sobre `!!`** cuando haya ambigüedad.
+10. **El código va en inglés, los comentarios en español.** Clases, funciones,
+    parámetros, campos, valores de enum, reglas de la gramática y claves del JSON
+    se escriben en inglés. Los comentarios, los mensajes de error que ve el
+    usuario y esta documentación van en español.
+
+### Nombres que ya están fijados
+
+Para que dos personas no inventen dos nombres para lo mismo:
+
+| Concepto | Nombre |
+|---|---|
+| raíz del AST | `Script`, con `statements` |
+| una sentencia | `Statement`; una consulta es `Query` y además es `Expression` |
+| origen de un `FROM` | `FromSource`, con `TableSource` y `DerivedSource` |
+| una restricción | `Constraint`, jerarquía sellada |
+| un valor de celda | `Value` |
+| estado de una corrida | `Session`, con `rowsOf`, `markModified`, `applyCatalog`, `changes` |
+| correr el script | `Session.run(script)` |
+| correr una consulta | `Engine.execute(query)` |
+| aplicar una escritura | `Writer.execute(statement)`, nunca `apply`, que choca con Kotlin |
+| volcar a disco | `Flush.flush(changes, directory)` |
+| esquema de salida | `OutputSchema.schemaOf(query)` |
 
 ---
 
@@ -114,138 +274,68 @@ Estos aplican a cada ticket sin repetirlos:
 ```
 app/src/main/
 ├── antlr/
-│   └── Compiscript.g4                    la gramática: fuente de verdad del sintáctico
+│   └── Sql.g4                          la gramatica: source de verdad del sintactico
+│
+├── resources/scripts/                  la bateria de pruebas .sql
 │
 └── kotlin/org/compiler/
-    ├── models/
-    │   └── LexemeLocation.kt              línea + columna (sobrevive del proyecto anterior)
+    ├── models/LexemeLocation.kt         linea y column
     │
-    ├── diagnostics/
-    │   ├── CompilerError.kt               sealed: LexerError | ParserError | SemanticError
-    │   └── Diagnostics.kt                 colector de errores, una instancia por compilación
+    ├── diagnostics/                     CompilerError, Diagnostics
+    │
+    ├── types/
+    │   ├── Type.kt                      los 11 types, tres con parametros
+    │   ├── Value.kt                     los 8 values en execution
+    │   ├── TypeRules.kt                 torre numerica, familias, operadores
+    │   └── ValueCodec.kt                texto del CSV <-> Value
+    │
+    ├── catalog/
+    │   ├── Constraint.kt               jerarquia sellada de las 7 constraints
+    │   ├── Catalog.kt                   Catalog, Table, Column
+    │   ├── CatalogLoader.kt             recorre data/, lee los .json
+    │   ├── CatalogWriter.kt             escribe los .json
+    │   └── CatalogExtensions.kt         addConstraint y companiia
+    │
+    ├── storage/
+    │   ├── CsvReader.kt                 RFC 4180, nulos y comillas
+    │   ├── CsvWriter.kt
+    │   └── DataDirectory.kt             la raiz data/, inyectable para tests
     │
     ├── frontend/
-    │   ├── syntax/
-    │   │   ├── DiagnosticsErrorListener.kt errores de ANTLR -> Diagnostics
-    │   │   └── SyntaxAnalyzer.kt           .cps -> parse tree de ANTLR
-    │   │
-    │   ├── ast/
-    │   │   ├── models/                     Node, Expression, Statement, TypeReference, operadores
-    │   │   └── AstBuilder.kt               Visitor de ANTLR: parse tree -> AST propio
-    │   │
+    │   ├── syntax/                      SqlSyntaxAnalyzer, ParseTreeView
+    │   ├── ast/                          nodos SQL, SqlAstBuilder, AstView
     │   └── semantic/
-    │       ├── symbols/
-    │       │   ├── Type.kt                 jerarquía sellada de tipos
-    │       │   ├── Symbol.kt / DeclarationKind.kt
-    │       │   └── Scope.kt / ScopeKind.kt  árbol de ámbitos
-    │       ├── ScopeDeclaration.kt          declareOrReport: lo usan las dos pasadas
-    │       ├── TypeResolver.kt              TypeReference escrito -> Type resuelto
-    │       ├── DeclarationCollector.kt      PASADA 1: declaraciones
-    │       ├── TypeRules.kt                 las reglas de inferencia, una función por regla
-    │       ├── TypeChecker.kt               PASADA 2: verificación y plegado
-    │       ├── FlowAnalyzer.kt              return/break/continue, código muerto
-    │       └── LivenessReportBuilder.kt     reporte de vivacidad para el GC
+    │       ├── symbols/Scope.kt         arbol de ambitos, ahora de consultas
+    │       ├── NameResolver.kt          tables, alias, columns, level e index
+    │       ├── OutputSchema.kt         que columnas devuelve un SELECT
+    │       └── SqlChecker.kt            types y constraints de SQL
     │
-    ├── interpreter/
-    │   ├── RuntimeValue.kt                  los valores en ejecución
-    │   ├── Environment.kt                    ámbitos con valores
-    │   └── Interpreter.kt                    ejecuta el AST validado
+    ├── engine/
+    │   ├── Session.kt                   EL estado de una corrida, y el bucle
+    │   ├── ResultSet.kt                 columns y rows
+    │   ├── RowContext.kt                la pila de filas para el anidamiento
+    │   ├── Evaluator.kt                 expresiones sobre una fila
+    │   ├── Operators.kt                 scan, filter, project, join, sort, ...
+    │   ├── Aggregator.kt                GROUP BY y las cinco funciones
+    │   ├── Writer.kt                    INSERT, UPDATE, DELETE y el DDL
+    │   └── Flush.kt                     escribe solo lo que cambio
     │
     ├── runtime/
-    │   ├── CompilerPipeline.kt               orquestador: una llamada, un resultado
+    │   ├── DbmsPipeline.kt              orquestador: una llamada, un resultado
     │   └── models/CompilationResult.kt
     │
-    └── gui/
-        ├── state/AppState.kt
-        ├── screens/                          Workspace, Trees, Symbols
-        └── components/                       CodeEditor, ErrorList, TreeCanvas, Console, ...
+    └── gui/                             estado, pantallas y componentes
 ```
 
 ---
 
-## El pipeline completo, en orden
+## Reparto sugerido
 
-```
-archivo .cps
-     │
-     ▼  ANTLR Lexer + Parser  (+ DiagnosticsErrorListener)
-parse tree de ANTLR ─────────────────────────► errores léxicos y sintácticos
-     │                                          vista visual del árbol (requisito)
-     ▼  AstBuilder (Visitor de ANTLR)
-AST propio  ── colapsa la torre de 11 niveles de precedencia
-     │
-     ▼  DeclarationCollector          PASADA 1
-árbol de ámbitos completo ─────────────────► errores de declaración
-     │                                          vista de tabla de símbolos (requisito)
-     ▼  TypeChecker                   PASADA 2
-AST decorado (cada Expression con su tipo) ────────► errores de tipo
-     │  + valores plegados (3+5 = 8)
-     ▼  FlowAnalyzer
-     │                              ─────────► errores de flujo y código muerto
-     ▼  LivenessReportBuilder
-     │                              ─────────► reporte de vivacidad para el GC
-     ▼  Interpreter  (solo si no hay errores)
-salida del programa ─────────────────────────► consola del IDE
-```
-
----
-
-## Reparto sugerido entre los 3 integrantes
-
-El enunciado exige *"commits individuales que evidencien claramente la
-contribución de cada integrante"*. Eso condiciona la arquitectura: hay que poder
-partir el trabajo en tres frentes que no se pisen.
-
-| Frente | Fases y tickets | Depende de |
+| Frente | Fases | Depende de |
 |---|---|---|
-| **A — Infra, AST e IDE** | 0.4, 0.5, 1.4, 1.5, 2.x, 7.x | nada |
-| **B — Símbolos y tipos** | 0.6, 1.1, 1.2, 1.3, 3.x | acordar los modelos con A |
-| **C — Verificación y ejecución** | 4.x, 5.x, 6.x | modelos de A y B |
+| Almacenamiento | 1, 2, y el 7.1 al 7.4 | nada, arranca de una |
+| Frontend | 3, 4 | la fase 1 |
+| Semántica y motor | 5, 6 | las fases 3 y 4 |
+| Interfaz | 8 | la fase 6 |
 
-La clave para que no se bloqueen: **congelar los cinco modelos de la Fase 1 el
-primer día**, revisados por los tres, antes de escribir cualquier lógica.
-
-La Fase 0 y la Fase 8 se hacen entre todos.
-
----
-
-## Decisiones ya cerradas
-
-Estas se discutieron y quedaron cerradas antes de escribir los tickets. Cada una
-tiene su razón anotada porque van a ser preguntadas.
-
-| # | Decisión | Elegida | Por qué |
-|---|---|---|---|
-| 1 | `float` en el lenguaje | **Se agrega a la gramática** | El enunciado pide aritmética sobre `integer` o `float`, y la gramática de ejemplo no tenía `float`. Se extiende `baseType` y se agrega `FloatLiteral`. Ver ticket 0.5. |
-| 2 | Modificar `Compiscript.g4` | **Sí, documentando cada cambio en esta tabla** | El enunciado dice *"a partir de la gramática oficial y extenderlo"*. Se descartó un `docs/decisiones-gramatica.md` aparte: con un solo cambio, un tercer documento se desactualiza más rápido de lo que se lee. Cada cambio futuro entra aquí. |
-| 3 | Ejecución de código | **Sí, es requisito** | El catedrático espera las tres cosas: árbol sintáctico, árbol validado semánticamente, y el resultado de ejecutar. No está en la rúbrica escrita, pero sí se pidió. |
-| 4 | Condición del `switch` | **Comparable con sus `case`, no `boolean`** | Toda condición de control de flujo se resuelve como operación booleana: en `switch (x) { case 1: }` lo que ocurre es `x == 1`, una comparación que produce `boolean`. La regla real es que el sujeto y los `case` sean comparables entre sí. |
-| 5 | Fall-through en el `switch` | **No existe** | Se deduce del propio enunciado: `break` solo se permite dentro de bucles, así que no hay forma de expresar caída al siguiente caso. Cada `case` ejecuta su cuerpo y el `switch` termina. |
-| 6 | Sobrecarga de funciones | **No existe** | El enunciado pide *"detección de redeclaración de funciones con el mismo nombre"*: dos funciones con el mismo nombre es error. Un ámbito guarda un símbolo por nombre. Elimina toda la resolución de sobrecarga. |
-| 7 | Ámbitos al cerrarse | **Árbol permanente, no pila que descarta** | Tres razones independientes: el enunciado pide mostrar *"el estado de la tabla de símbolos por cada entorno"* (25 pts); la herencia necesita el ámbito de la superclase ya cerrado; y los closures capturan su ámbito de definición, que no puede morir. |
-| 8 | Equivalencia de tipos | **Nominal para clases, estructural para arreglos** | `class Perro : Animal` te obliga a *declarar* la relación de subtipo, y eso es la marca de un sistema nominal. Los arreglos no tienen nombre, así que se comparan por su tipo de elemento. |
-| 9 | Comparación de tipos | **El `==` de Kotlin, sin canonicalización** | Los `data class` ya generan `equals` estructural, y la profundidad máxima real es 2 (`integer[][]`). Canonicalizar añadiría una caché y un riesgo de desincronización para ahorrar nanosegundos. |
-| 10 | Warnings | **No existen: un solo nivel de severidad** | No se piden. `CompilerError` no lleva `Severity`. El *"código muerto"* que sí pide el enunciado va como **error**. La información de vivacidad para el GC no es un diagnóstico: es otra vista. |
-| 11 | Pasadas semánticas sobre el AST propio, no sobre el parse tree de ANTLR | **AST propio** | Razón técnica decisiva: un Listener de ANTLR recorre **todo** automáticamente y no se le puede impedir entrar a los cuerpos de las funciones. La Pasada 1 necesita justamente *no* entrar (es lo que habilita las referencias adelantadas). Con funciones recursivas sobre el AST simplemente no recurres. Ver ticket 3.2. |
-| 12 | Módulo `%` con `float` | **Solo `integer`** | Es lo más simple y lo más común en lenguajes de este perfil. Queda documentado como regla A3. |
-| 13 | Tabla de tipos numerada | **No existe** | Se evaluó y se descartó. Un id entero solo puede contestar *"¿son iguales?"*; no puede decir si un tipo es numérico, de qué es un arreglo, o cuáles son los parámetros de una función — que es lo que el verificador pregunta casi siempre. Y comparar tipos ya es tan barato como comparar enteros: los primitivos son `data object` (una sola instancia, se comparan por referencia) y los compuestos tienen profundidad máxima 2. `Symbol` guarda `type: Type` directamente, que en Kotlin **es** la "referencia al tipo" que piden las notas de clase. |
-| 14 | Categoría de un símbolo | **`DeclarationKind` (5 valores) + un booleano `isMember`** | Sin `FIELD` ni `METHOD`: eran el producto cruzado de dos ejes independientes (*qué es* × *dónde vive*), y ese cruce dejaba sin categoría clara a un `const` dentro de una clase. Separados, cada regla pregunta una sola cosa: `kind == CONSTANT` para la reasignación, `isMember` para el acceso con `this.`. `Scope.declare` pone `isMember` automáticamente —el ámbito ya sabe si es una clase—, así que no se puede equivocar. No se llama `category` porque ese término ya significa "categoría de lexema", ni `DeclarationType` porque `Type` ya significa "tipo de dato". |
-| 15 | Función sin tipo de retorno anotado | **Es `void`; no se infiere del cuerpo** | La gramática lo permite (`(':' type)?`) y el caso normal es una función que solo imprime. Inferir del primer `return` rompería la Pasada 1, que registra la firma **sin entrar al cuerpo** — y el `return` está justamente ahí. Consecuencias: `function f() { return 1; }` es **error** (*"debe devolver 'void', no 'integer'"*), y `return;` pelado dentro de una función void es **legal** como salida temprana. |
-| 16 | Herencia del constructor | **Se hereda si la subclase no declara uno propio** | Al revés que en Java, y por una razón concreta: Compiscript **no tiene `super`**, así que una subclase sin constructor propio no tendría ninguna forma de inicializar los campos heredados y la herencia quedaría inutilizable. Además el ejemplo de `Especificaciones.md` lo asume: `class Perro : Animal` sin constructor, invocado como `new Perro("Toby")`. Se implementa con `lookupMember` en vez de `lookupLocal` (tickets 4.3 y 6.2). |
-
----
-
-## Las cuatro propiedades del sistema de tipos
-
-El catedrático pidió que se apliquen explícitamente. Cada una tiene una decisión
-concreta señalable en el código:
-
-| Propiedad | Qué exige | Dónde se cumple |
-|---|---|---|
-| **Verificable** | Existe un algoritmo que decide si el programa está bien tipado | `TypeChecker` (Fase 4). Cada regla de la gramática tiene su función y **toda** expresión recibe un tipo, aunque sea `ErrorType`. Ninguna construcción queda sin regla. |
-| **Decidible** | El algoritmo **termina** con verdadero o falso en tiempo finito | El recorrido es sobre un árbol **finito** y sin unificación recursiva. Con anotaciones explícitas más inferencia local (solo del inicializador y del `foreach`), la terminación es inmediata. |
-| **Realizable** | Lo verificable estáticamente se verifica en compilación; **lo que no, dinámicamente en ejecución** | Dos casos con las dos mitades implementadas. **Índices**: `lista[-1]` con literal se rechaza en la Fase 4 gracias al plegado; `lista[i]` con variable va al chequeo dinámico del `Interpreter` (Fase 6). **División entre cero**: `1 / 0` es error de compilación; `1 / x` con `x` variable se verifica en ejecución. De ahí sale el `try/catch` del lenguaje. |
-| **Transparente** | El programador puede **predecir** si pasa la validación y **entender por qué** falló | Los mensajes de error no son cosmética, **son un requisito del sistema de tipos**. Cada error lleva línea, columna, tipo esperado, tipo encontrado y la regla violada. Es lo que justifica invertir en el formato de errores. |
-
-Las reglas de inferencia en notación de Cardelli, con su función y su test, viven
-en [`docs/reglas-de-tipos.md`](../reglas-de-tipos.md) (se crea en el ticket 4.1).
+Las fases 0 y 9 se hacen entre todos.

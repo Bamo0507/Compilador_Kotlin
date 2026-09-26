@@ -26,6 +26,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import org.compiler.diagnostics.CompilerError
+import org.compiler.diagnostics.Severity
 
 /**
  * La lista de errores del programa del usuario.
@@ -66,12 +67,14 @@ fun ErrorList(
     }
 }
 
-// El enunciado exige distinguir los tres niveles. La etiqueta de texto es lo que
-// informa; el color solo acompaña.
+// La etiqueta de texto es lo que informa; el color solo acompaña. Una advertencia
+// se distingue del error semantico aunque comparta variante.
 private fun levelLabelOf(error: CompilerError): String = when (error) {
     is CompilerError.LexerError -> "léxico"
     is CompilerError.ParserError -> "sintáctico"
-    is CompilerError.SemanticError -> "semántico"
+    is CompilerError.SemanticError ->
+        if (error.severity == Severity.WARNING) "advertencia" else "semántico"
+    is CompilerError.ExecutionError -> "ejecución"
 }
 
 @Composable
@@ -80,7 +83,9 @@ private fun levelColorOf(error: CompilerError): Color {
     return when (error) {
         is CompilerError.LexerError -> colors.tertiary
         is CompilerError.ParserError -> colors.secondary
-        is CompilerError.SemanticError -> colors.error
+        is CompilerError.SemanticError ->
+            if (error.severity == Severity.WARNING) colors.tertiary else colors.error
+        is CompilerError.ExecutionError -> colors.error
     }
 }
 

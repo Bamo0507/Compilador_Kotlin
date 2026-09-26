@@ -48,30 +48,30 @@ hay que probar explícitamente, porque es fácil que cada mitad funcione sola.
 ```kotlin
 // Una instancia por corrida. Vive lo que dura un script y se descarta.
 class Session(
-    private val directorio: DataDirectory,
-    catalogoInicial: Catalog,
+    private val directory: DataDirectory,
+    initialCatalog: Catalog,
     private val diagnostics: Diagnostics
 ) {
     // El catalogo MUTA con CREATE, ALTER y DROP. El inicial se guarda
     // para que flush sepa que esquemas cambiaron.
-    private val catalogoOriginal = catalogoInicial
-    var catalogo = catalogoInicial
+    private val originalCatalog = initialCatalog
+    var catalog = initialCatalog
         private set
 
     // Las tablas cargadas. Es a la vez el cache de lectura Y el almacen
     // de escritura: leer y escribir van al mismo mapa, a proposito.
-    private val filas = mutableMapOf<String, MutableList<Row>>()
-    private val modificadas = mutableSetOf<String>()
+    private val rows = mutableMapOf<String, MutableList<Row>>()
+    private val modified = mutableSetOf<String>()
 
     // Lee del disco la primera vez; despues devuelve lo que ya esta,
     // incluidos los cambios de este mismo script.
-    fun filasDe(tabla: String): MutableList<Row>
+    fun rowsOf(table: String): MutableList<Row>
 
-    fun marcarModificada(tabla: String)
-    fun aplicarCatalogo(nuevo: Catalog)     // usa las extensiones del 2.6
+    fun markModified(table: String)
+    fun applyCatalog(updated: Catalog)     // usa las extensiones del 2.6
 
     // Lo que consume flush, en el ticket 7.4.
-    fun cambios(): Cambios
+    fun changes(): Changes
 }
 ```
 
@@ -80,24 +80,24 @@ class Session(
 Vive aquí y no en el pipeline, porque necesita la `Session`:
 
 ```kotlin
-fun correr(script: Script): ExecutionResult {
-    val resultados = mutableListOf<ResultSet>()
+fun run(script: Script): ExecutionResult {
+    val results = mutableListOf<ResultSet>()
 
-    for (sentencia in script.sentencias) {
-        when (sentencia) {
-            is Consulta -> resultados += Engine(this).ejecutar(sentencia)
-            else -> Writer(this).aplicar(sentencia)   // fase 7
+    for (statement in script.statements) {
+        when (statement) {
+            is Query -> results += Engine(this).execute(statement)
+            else -> Writer(this).execute(statement)   // fase 7
         }
         // La decision 5: al primer error se corta, y como nada toco el
         // disco, el directorio queda intacto.
         if (diagnostics.hasErrors) break
     }
-    return ExecutionResult(resultados, this)
+    return ExecutionResult(results, this)
 }
 ```
 
 En esta fase la rama del `Writer` queda sin implementar y el `when` solo atiende
-`Consulta`. El ticket 7.2 la completa.
+`Query`. El ticket 7.2 la completa.
 
 ### Decisión · una `Session` por corrida, no un singleton
 
@@ -110,7 +110,7 @@ proyecto anterior.
 
 - `INSERT` seguido de `SELECT` sobre la misma tabla **ve la fila nueva**
 - la misma tabla leída dos veces abre el archivo una sola vez
-- `filasDe` sobre una tabla que no se tocó no la marca como modificada
+- `rowsOf` sobre una tabla que no se tocó no la marca como modificada
 - dos `Session` sobre el mismo directorio no comparten nada
 - al terminar, `cambios()` lista exactamente las tablas tocadas
 
@@ -129,20 +129,20 @@ proyecto anterior.
 
 ```kotlin
 class ResultSet(
-    val columnas: List<ColumnaResultado>,
-    val filas: List<Row>
+    val columns: List<ResultColumn>,
+    val rows: List<Row>
 )
 
-class Row(val valores: List<Valor>)
+class Row(val values: List<Value>)
 
-class ColumnaResultado(
-    val nombre: String,
-    val origen: String?,    // el alias de la tabla de donde viene, si aplica
-    val tipo: Type
+class ResultColumn(
+    val name: String,
+    val source: String?,    // el alias de la tabla de donde viene, si aplica
+    val type: Type
 )
 ```
 
-**`ColumnaResultado` no lo inventa el motor:** se lo da `esquemaDe`, del ticket
+**`ResultColumn` no lo inventa el motor:** se lo da `schemaOf`, del ticket
 4.5, que ya resolvió la expansión de `*`, los nombres de salida y los tipos. Aquí
 solo se declara la estructura y se copia.
 
@@ -154,11 +154,11 @@ en un `JOIN` puede haber dos columnas llamadas `id`, que en un mapa se pisarían
 ```kotlin
 // Una pila de filas, una por nivel de anidamiento.
 // El nivel 0 es la consulta que se esta evaluando ahora.
-class RowContext(private val pila: List<Row>) {
+class RowContext(private val stack: List<Row>) {
 
-    fun valor(nivel: Int, indice: Int): Valor = pila[nivel].valores[indice]
+    fun value(level: Int, index: Int): Value = stack[level].values[index]
 
-    fun anidar(fila: Row) = RowContext(listOf(fila) + pila)
+    fun nest(row: Row) = RowContext(listOf(row) + stack)
 }
 ```
 
@@ -189,16 +189,16 @@ dejó el número. `valor(nivel, indice)` es dos indexaciones de arreglo.
 
 ```kotlin
 class Evaluator(private val motor: Engine) {
-    fun evaluar(expresion: Expresion, contexto: RowContext): Valor
+    fun evaluate(expression: Expression, context: RowContext): Value
 }
 ```
 
-Un `when` sobre `Expresion`. Los casos interesantes:
+Un `when` sobre `Expression`. Los casos interesantes:
 
 **Referencia a columna:** `contexto.valor(expresion.nivel, expresion.indice)`, y
 ya. Sin buscar nombres.
 
-**Binaria:** el operador se aplica según `expresion.tipo`, que la fase 5 dejó
+**Binary:** el operador se aplica según `expresion.tipo`, que la fase 5 dejó
 pegado. El motor **no decide** si `1 + 2.5` es suma entera o flotante: eso ya está
 resuelto, solo convierte los operandos al tipo del resultado y opera.
 
@@ -266,13 +266,13 @@ son distintos para `equals` y el mismo número para `compareTo`. `distinct` tien
 que normalizar la escala antes de comparar, o `1.0` y `1.00` saldrían como dos
 filas.
 
-**`scan` no lee el disco directamente:** llama a `Session.filasDe(tabla)`, del
+**`scan` no lee el disco directamente:** llama a `Session.rowsOf(tabla)`, del
 ticket 6.0. Eso da dos cosas de una vez: una tabla leída dos veces en el mismo
 script, por ejemplo en un autojoin, abre el archivo **una sola vez**; y un `SELECT`
 después de un `INSERT` ve la fila nueva, porque es el mismo mapa.
 
-La decodificación con `ValorCodec` guiada por el esquema ocurre dentro de
-`filasDe`, la primera vez que la tabla se carga.
+La decodificación con `ValueCodec` guiada por el esquema ocurre dentro de
+`rowsOf`, la primera vez que la tabla se carga.
 
 **Aceptación:**
 
@@ -297,7 +297,7 @@ La decodificación con `ValorCodec` guiada por el esquema ocurre dentro de
 ```kotlin
 // Bucles anidados: por cada fila de la izquierda, se recorre la derecha
 // entera y se conserva el par que cumple la condicion.
-fun join(izquierda: ResultSet, derecha: ResultSet, condicion: Expresion): ResultSet
+fun join(izquierda: ResultSet, derecha: ResultSet, condition: Expression): ResultSet
 ```
 
 La fila resultante es la **concatenación** de las dos, en el orden del `FROM`. Los
@@ -334,7 +334,7 @@ señalen.
 ```kotlin
 // Agrupa las filas por los valores de las expresiones de GROUP BY,
 // y calcula una fila de salida por grupo.
-fun agrupar(entrada: ResultSet, claves: List<Expresion>, seleccion: List<ElementoSeleccion>): ResultSet
+fun aggregate(input: ResultSet, keys: List<Expression>, selection: List<SelectItem>): ResultSet
 ```
 
 **Sin `GROUP BY` pero con agregación**, todo es **un solo grupo**:
@@ -380,7 +380,7 @@ repetidos antes de contar.
 - `engine/Engine.kt` (NUEVO)
 - `app/src/test/.../SubconsultaTest.kt` (NUEVO)
 
-`Engine(session)` es el que arma la cadena de operadores desde una `Consulta` y la
+`Engine(session)` es el que arma la cadena de operadores desde una `Query` y la
 ejecuta. Toda lectura de datos pasa por la `Session`, así que el motor nunca abre
 un archivo por su cuenta.
 
@@ -388,11 +388,11 @@ Es también el que decide cómo tratar cada subconsulta:
 
 ```kotlin
 // La fase 4 ya marco cuales son correlacionadas.
-private fun ejecutarSubconsulta(consulta: Consulta, contexto: RowContext): ResultSet =
-    if (consulta.correlacionada) {
-        ejecutar(consulta, contexto)                      // por fila
+private fun executeSubquery(query: Query, context: RowContext): ResultSet =
+    if (query.correlated) {
+        run(query, context)                      // por fila
     } else {
-        cache.getOrPut(consulta) { ejecutar(consulta, contexto) }   // una vez
+        cache.getOrPut(query) { run(query, context) }   // una vez
     }
 ```
 

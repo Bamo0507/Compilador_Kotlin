@@ -23,7 +23,7 @@ SELECT u.name FROM users u
 ```
 ambito de la consulta externa    { u -> users }
         ^ padre
-ambito de la subconsulta         { p -> posts }
+scope de la subquery         { p -> posts }
 ```
 
 Resolver `u.id` desde adentro es **subir por la cadena de padres**, que es
@@ -62,9 +62,9 @@ class Symbol(
     val name: String,
     val kind: DeclarationKind,
     val declaredAt: LexemeLocation,
-    val tipo: Type,
+    val type: Type,
     val tablaOrigen: String? = null,   // de que tabla real viene
-    val indice: Int = -1               // posicion en la fila de ESTE nivel
+    val index: Int = -1               // posicion en la fila de ESTE nivel
 )
 ```
 
@@ -93,7 +93,7 @@ nuevos de los dos enums.
 |---|---|
 | `FROM users` | busca `users` en el catálogo |
 | `FROM users u` | además declara el alias `u` en el ámbito de la consulta |
-| `FROM (SELECT ...) x` | resuelve la subconsulta primero y declara `x` con las columnas que le devuelve `esquemaDe`, del ticket 4.5 |
+| `FROM (SELECT ...) x` | resuelve la subconsulta primero y declara `x` con las columnas que le devuelve `schemaOf`, del ticket 4.5 |
 | `FROM users, users` | error: alias repetido |
 | `FROM (SELECT ...)` sin alias | error: la tabla derivada necesita nombre |
 
@@ -109,7 +109,7 @@ que no esta en el esquema
 ```
 
 Es la decisión 4: el DBMS es el único que escribe, así que esto no debería pasar
-nunca. Existe para que cuando pase, el mensaje diga qué pasó en vez de dar un
+nunca. Exists para que cuando pase, el mensaje diga qué pasó en vez de dar un
 error confuso tres etapas más adelante.
 
 **Por qué aquí y no en el `CatalogLoader`:** el cargador no abre CSV, por la regla
@@ -117,7 +117,7 @@ de esquema ansioso y datos perezosos. Esta fase ya sabe cuáles tablas se van a
 tocar, así que revisa solo esas.
 
 **El ticket 4.5 se escribe junto con este**, porque una tabla derivada necesita
-saber qué columnas produce su subconsulta, y eso es lo que calcula `esquemaDe`.
+saber qué columnas produce su subconsulta, y eso es lo que calcula `schemaOf`.
 No es un ciclo: la subconsulta se resuelve **entera** primero, y recién entonces
 se le pregunta su esquema. Están en tickets separados porque el esquema de salida
 lo consumen también las fases 5, 6 y 8.
@@ -140,23 +140,23 @@ lo consumen también las fases 5, 6 y 8.
 **Archivos:**
 
 - `frontend/semantic/NameResolver.kt` (MODIFICA)
-- `frontend/ast/models/Expresion.kt` (MODIFICA)
+- `frontend/ast/models/Expression.kt` (MODIFICA)
 - `app/src/test/.../ResolucionColumnasTest.kt` (NUEVO)
 
 ### El resultado que deja pegado
 
 ```kotlin
-class ReferenciaColumna(
-    val calificador: String?,     // el "u" de u.name, o null si venia sin calificar
-    val nombre: String,
+class ColumnReference(
+    val qualifier: String?,     // el "u" de u.name, o null si venia sin calificar
+    val name: String,
     override val location: LexemeLocation
-) : Expresion {
+) : Expression {
     // Los tres los llena ESTA fase.
-    var simbolo: Symbol? = null   // la columna a la que se resolvio
-    var nivel: Int = -1           // 0 = esta consulta, 1 = la de afuera
-    var indice: Int = -1          // posicion dentro de la fila de ESE nivel
+    var symbol: Symbol? = null   // la columna a la que se resolvio
+    var level: Int = -1           // 0 = esta consulta, 1 = la de afuera
+    var index: Int = -1          // posicion dentro de la fila de ESE nivel
 
-    override var tipo: Type = ErrorType   // lo llena la fase 5, desde simbolo
+    override var type: Type = ErrorType   // lo llena la fase 5, desde simbolo
 }
 ```
 
@@ -166,14 +166,14 @@ class ReferenciaColumna(
 SELECT u.name FROM users u
  WHERE EXISTS (SELECT 1 FROM posts p WHERE p.uid = u.id)
                                            ^^^^^  ^^^^
-                                           nivel 0  nivel 1
+                                           level 0  level 1
 ```
 
 Al evaluar `p.uid = u.id`, el motor está parado en una fila de `posts`, pero
 `u.id` se refiere a la fila de `users` del nivel de arriba. Un índice solo no
 distingue las dos.
 
-El `nivel` sale de contar cuántos ámbitos subió el `lookup`. No hay que calcularlo
+El `level` sale de contar cuántos ámbitos subió el `lookup`. No hay que calcularlo
 aparte.
 
 **Por qué se guarda el `Symbol` y no solo el tipo:** el ticket 5.1 lee
@@ -238,7 +238,7 @@ Una subconsulta es correlacionada **si y solo si** alguna de sus referencias que
 con `nivel > 0`.
 
 ```kotlin
-consulta.correlacionada = consulta.referencias().any { it.nivel > 0 }
+query.correlated = query.referencias().any { it.level > 0 }
 ```
 
 **Por qué esto es lo más redondo del proyecto:** es un análisis semántico que no
@@ -268,7 +268,7 @@ marcarse como correlacionadas, porque ninguna de las dos se puede cachear.
 
 **Archivos:**
 
-- `frontend/semantic/EsquemaSalida.kt` (NUEVO)
+- `frontend/semantic/OutputSchema.kt` (NUEVO)
 - `frontend/semantic/NameResolver.kt` (MODIFICA)
 - `app/src/test/.../EsquemaSalidaTest.kt` (NUEVO)
 
@@ -286,17 +286,17 @@ respuesta.
 | ticket 6.1 | llenar `ResultSet.columnas` |
 | ticket 8.1 | los encabezados de la rejilla |
 
-Sin este ticket, `ColumnaResultado` aparecería en la fase 6 como si el motor
+Sin este ticket, `ResultColumn` aparecería en la fase 6 como si el motor
 inventara los nombres, cuando en realidad es información que el semántico ya
 calculó.
 
 ```kotlin
-fun esquemaDe(consulta: Consulta): List<ColumnaResultado>
+fun schemaOf(query: Query): List<ResultColumn>
 ```
 
 ### Las tres cosas que resuelve
 
-**1. Expansión de `*`.** La gramática acepta `seleccionTodo` y `elemTablaTodo`, y
+**1. Expansión de `*`.** La gramática acepta `selectAll` y `itemTableAll`, y
 alguien tiene que convertirlos en la lista real de columnas. Es aquí, porque es el
 único punto que ya tiene el ámbito del `FROM` resuelto.
 

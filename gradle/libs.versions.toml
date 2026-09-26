@@ -6,9 +6,10 @@ kotlin = "2.1.21"
 compose = "1.8.2"
 antlr = "4.13.2"
 junit-jupiter-engine = "5.11.3"
+kotlinx-serialization = "1.8.1"
 
 [libraries]
-# El GENERADOR: lee Compiscript.g4 y escribe las clases Java. Solo en tiempo de build.
+# El GENERADOR: lee Sql.g4 y escribe las clases Java. Solo en tiempo de build.
 antlr = { module = "org.antlr:antlr4", version.ref = "antlr" }
 
 # El RUNTIME: las clases base de las que hereda el codigo generado (Lexer, Parser,
@@ -17,7 +18,14 @@ antlr-runtime = { module = "org.antlr:antlr4-runtime", version.ref = "antlr" }
 
 junit-jupiter-engine = { module = "org.junit.jupiter:junit-jupiter-engine", version.ref = "junit-jupiter-engine" }
 
+# Lee y escribe los .json de esquema. El plugin de abajo genera los serializadores.
+kotlinx-serialization-json = { module = "org.jetbrains.kotlinx:kotlinx-serialization-json", version.ref = "kotlinx-serialization" }
+
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
 kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 compose = { id = "org.jetbrains.compose", version.ref = "compose" }
+
+# Obligatorio: kotlinx.serialization genera los serializadores al compilar. Sin el
+# plugin, la libreria sola falla al arrancar.
+kotlin-serialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }

@@ -20,5 +20,9 @@ local.properties
 # Test-generated rendering artifacts
 extras/*.png
 
+# La base de datos que genera el DBMS. Se versiona la carpeta, no su contenido.
+data/*
+!data/.gitkeep
+
 
 

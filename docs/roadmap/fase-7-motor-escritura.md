@@ -28,7 +28,7 @@ mismo escribió: **valida lo que entra, no lo que ya está guardado**.
 
 ```
 1. tipo            el valor cuadra con la columna
-2. NOT NULL        no llega nulo donde no se permite
+2. NOT NULL        no llega nulo where no se permite
 3. DEFAULT         se rellenan las columnas ausentes
 4. AUTOINCREMENT   se asigna el siguiente
 5. PRIMARY KEY     no hay repetido en la tabla
@@ -84,16 +84,16 @@ simplificación consciente.
 ```kotlin
 // Las tres trabajan sobre las filas de la Session. Nada toca el disco aqui.
 class Writer(private val session: Session) {
-    fun aplicar(sentencia: Sentencia)     // el despachador que el 6.0 dejo pendiente
+    fun execute(statement: Statement)   // el despachador que el 6.0 dejo pendiente
 
-    fun insertar(sentencia: Insertar)
-    fun actualizar(sentencia: Actualizar)
-    fun borrar(sentencia: Borrar)
+    fun insert(statement: Insert)
+    fun update(statement: Update)
+    fun delete(statement: Delete)
 }
 ```
 
 **Este ticket completa el `when` del bucle de `Session.correr`**, que en la fase 6
-solo atendía `Consulta`. Toda modificación va contra `session.filasDe(tabla)` y
+solo atendía `Query`. Toda modificación va contra `session.rowsOf(tabla)` y
 marca la tabla, que es lo que después lee `flush`.
 
 **`UPDATE` valida la fila resultante completa**, no solo las columnas asignadas.
@@ -108,7 +108,7 @@ La comparación es por posición en la tabla, no por valor.
 fila de `posts` la referencia.
 
 ```
-no se puede borrar users.id = 3: lo referencian 4 filas de posts
+no se puede delete users.id = 3: lo referencian 4 rows de posts
 ```
 
 **Aceptación:**
@@ -137,11 +137,11 @@ no se puede borrar users.id = 3: lo referencian 4 filas de posts
 - `app/src/test/.../WriterDdlTest.kt` (NUEVO)
 
 Cada una toca **los dos archivos** de la tabla, en memoria, llamando a
-`session.aplicarCatalogo(...)` con el resultado de las extensiones del ticket 2.6.
+`session.applyCatalog(...)` con el resultado de las extensiones del ticket 2.6.
 El catálogo de la `Session` muta; el original queda guardado para que `flush` sepa
 qué esquemas cambiaron.
 
-| Sentencia | Al `.json` | Al `.csv` |
+| Statement | Al `.json` | Al `.csv` |
 |---|---|---|
 | `CREATE TABLE` | lo crea con el esquema | lo crea con solo el header |
 | `ALTER ADD` | agrega la columna | agrega al header y un campo al final de cada fila |
@@ -180,18 +180,18 @@ motor se quedó con el catálogo viejo.
 ```kotlin
 // Escribe SOLO lo que cambio. Se llama una vez, al final, y solo si
 // no hubo ningun error. Decision 5.
-fun volcar(cambios: Cambios, directorio: DataDirectory)
+fun flush(changes: Changes, directory: DataDirectory)
 
 // Lo que Session.cambios() devuelve, del ticket 6.0.
-class Cambios(
-    val esquemasModificados: List<Table>,
-    val tablasModificadas: Map<String, List<Row>>,
-    val tablasEliminadas: List<String>
+class Changes(
+    val modifiedSchemas: List<Table>,
+    val modifiedTables: Map<String, List<Row>>,
+    val droppedTables: List<String>
 )
 ```
 
 **El `flush` no conoce la `Session`, solo su reporte.** Así se prueba pasándole un
-`Cambios` armado a mano, sin montar una corrida entera.
+`Changes` armado a mano, sin montar una corrida entera.
 
 ### Cómo se ve por dentro
 
@@ -222,13 +222,13 @@ está fuera del alcance a propósito. Se documenta.
 
 **Aceptación:**
 
-- un script cuya cuarta sentencia falla deja `datos/` **idéntico**, comparado byte
+- un script cuya cuarta sentencia falla deja `data/` **idéntico**, comparado byte
   por byte contra una copia tomada antes
 - un script que solo consulta no escribe ningún archivo
 - un script que toca una tabla de tres no reescribe las otras dos, verificable por
   fecha de modificación
 - todos los tests corren sobre un `DataDirectory` de `@TempDir`, nunca sobre
-  `POR_OMISION`
+  `DEFAULT`
 - un `CREATE` seguido de un error deja el directorio sin la tabla nueva
 
 ---
@@ -247,45 +247,45 @@ está fuera del alcance a propósito. Se documenta.
 
 ```kotlin
 object DbmsPipeline {
-    fun ejecutar(
-        fuente: String,
-        directorio: DataDirectory = DataDirectory.POR_OMISION,
-        escribir: Boolean = true
+    fun run(
+        source: String,
+        directory: DataDirectory = DataDirectory.DEFAULT,
+        write: Boolean = true
     ): CompilationResult {
         val diagnostics = Diagnostics()
 
         // Etapa A: sintaxis. La UNICA que corta.
-        val parseTree = SqlSyntaxAnalyzer.parse(fuente, diagnostics)
-            ?: return CompilationResult.fallida(diagnostics, fuente)
+        val parseTree = SqlSyntaxAnalyzer.parse(source, diagnostics)
+            ?: return CompilationResult.failed(diagnostics, source)
         val parseTreeView = parseTree.toTreeView()
 
         // Etapa B: AST propio.
         val ast = SqlAstBuilder().visit(parseTree) as Script
 
         // Etapa C: catalogo. Lee los .json, ningun .csv.
-        val catalogo = CatalogLoader(directorio, diagnostics).cargar()
+        val catalog = CatalogLoader(directory, diagnostics).cargar()
 
         // Etapa D: semantico. Corre AUNQUE C haya reportado, para que el
         // usuario vea todos sus problemas de una vez.
-        SqlChecker(catalogo, diagnostics).revisar(ast)
+        SqlChecker(catalog, diagnostics).revisar(ast)
 
         // Etapa E: ejecucion, solo si no quedo ningun error.
-        // hasErrors ignora las ADVERTENCIA, asi que un script con avisos corre.
-        val session = Session(directorio, catalogo, diagnostics)
-        val ejecucion = if (!diagnostics.hasErrors) session.correr(ast) else null
+        // hasErrors ignora las WARNING, asi que un script con avisos corre.
+        val session = Session(directory, catalog, diagnostics)
+        val execution = if (!diagnostics.hasErrors) session.run(ast) else null
 
         // Etapa F: volcado, solo si E tampoco fallo.
-        if (escribir && ejecucion != null && !diagnostics.hasErrors) {
-            Flush.volcar(session.cambios(), directorio)
+        if (write && execution != null && !diagnostics.hasErrors) {
+            Flush.flush(session.changes(), directory)
         }
 
         return CompilationResult(
-            fuente = fuente,
+            source = source,
             parseTreeView = parseTreeView,
             ast = ast,
-            catalogo = catalogo,
-            errores = diagnostics.all(),
-            ejecucion = ejecucion
+            catalog = catalog,
+            errors = diagnostics.all(),
+            execution = execution
         )
     }
 }
@@ -293,7 +293,7 @@ object DbmsPipeline {
 
 **El `escribir = false` es para los tests** que quieren el resultado sin volcar.
 Los que sí prueban la escritura pasan un `directorio` de `@TempDir`, que es lo que
-evita que la batería toque el `datos/` real.
+evita que la batería toque el `data/` real.
 
 `CompilationResult` tiene todos los campos nulables a propósito, igual que en
 Compiscript: un fuente que no parsea no tiene AST, pero sí tiene errores, y la GUI
@@ -307,4 +307,4 @@ debe poder mostrar resultados parciales.
 - un error semántico devuelve resultado con AST, con catálogo y sin ejecución
 - con `escribir = false`, el directorio nunca cambia
 - un script con solo advertencias se ejecuta y vuelca
-- ninguna prueba del pipeline usa `DataDirectory.POR_OMISION`
+- ninguna prueba del pipeline usa `DataDirectory.DEFAULT`

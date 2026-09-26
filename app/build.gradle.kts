@@ -6,8 +6,9 @@ plugins {
     alias(libs.plugins.kotlin.jvm)
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.compose)
+    alias(libs.plugins.kotlin.serialization)
 
-    // Viene con Gradle, no lleva version. Lee app/src/main/antlr/Compiscript.g4 y
+    // Viene con Gradle, no lleva version. Lee app/src/main/antlr/Sql.g4 y
     // genera el lexer, el parser, el listener y el visitor.
     antlr
 }
@@ -22,6 +23,8 @@ dependencies {
     // plugin registra, y es la que le dice a Gradle con que jar correr el generador.
     antlr(libs.antlr)
     implementation(libs.antlr.runtime)
+
+    implementation(libs.kotlinx.serialization.json)
 
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit5")
     testImplementation(libs.junit.jupiter.engine)
@@ -43,7 +46,7 @@ tasks.generateGrammarSource {
     // argumentos ahi (los directorios de salida), y reemplazarlos rompe la generacion.
     arguments = arguments + listOf(
         // OBLIGATORIOS los dos: por defecto ANTLR genera SOLO el listener, y sin
-        // -visitor no existe CompiscriptBaseVisitor, del que hereda el AstBuilder.
+        // -visitor no existe SqlBaseVisitor, del que hereda el SqlAstBuilder.
         "-visitor",
         "-listener",
 
@@ -60,7 +63,7 @@ tasks.generateGrammarSource {
 
 // El plugin `antlr` es de la era pre-Kotlin: declara la dependencia para compileJava,
 // no para compileKotlin. Sin esto, Gradle compila Kotlin antes de que exista
-// CompiscriptParser.java y falla con `unresolved reference`.
+// SqlParser.java y falla con `unresolved reference`.
 //
 // Son TODAS las AntlrTask y no solo `generateGrammarSource`: el plugin registra una
 // por source set, asi que tambien existe `generateTestGrammarSource`. Apuntando solo
@@ -83,9 +86,9 @@ compose.desktop {
         mainClass = "org.compiler.GuiAppKt"
         nativeDistributions {
             targetFormats(TargetFormat.Dmg, TargetFormat.Msi, TargetFormat.Deb)
-            packageName = "Compiscript"
+            packageName = "SqlDbms"
             packageVersion = "1.0.0"
-            description = "Analizador semantico de Compiscript"
+            description = "Manejador de base de datos sobre CSV"
             vendor = "UVG -- Disenio de Lenguajes"
         }
     }

@@ -59,7 +59,7 @@ fun FileMenu(
 
 private fun open(state: AppState) {
     runCatching {
-        val file = chooseFile("Abrir programa Compiscript", FileDialog.LOAD) ?: return
+        val file = chooseFile("Abrir script SQL", FileDialog.LOAD) ?: return
 
         // Un solo llamado porque abrir un archivo cambia varias cosas a la vez: el
         // texto, la ruta, y deja de haber un ejemplo seleccionado.
@@ -89,9 +89,9 @@ private fun save(state: AppState) {
 // incomodo tener una funcion `updateSource(content, path)` en AppState.
 private fun saveAs(state: AppState) {
     runCatching {
-        val file = chooseFile("Guardar programa Compiscript", FileDialog.SAVE) ?: return
+        val file = chooseFile("Guardar script SQL", FileDialog.SAVE) ?: return
 
-        val target = withCompiscriptExtension(file)
+        val target = withSqlExtension(file)
         target.writeText(state.sourceContent)
         state.sourceFilePath = target.absolutePath
         state.errorMessage = null
@@ -101,7 +101,7 @@ private fun saveAs(state: AppState) {
 }
 
 // El dialogo de AWT no agrega la extension: un nombre sin punto se guarda sin ella.
-private fun withCompiscriptExtension(file: File): File =
+private fun withSqlExtension(file: File): File =
     if (file.name.contains('.')) file else File(file.parentFile, "${file.name}$EXTENSION")
 
 private fun chooseFile(title: String, mode: Int): File? {
@@ -114,4 +114,4 @@ private fun chooseFile(title: String, mode: Int): File? {
     return File(directory, name)
 }
 
-private const val EXTENSION = ".cps"
+private const val EXTENSION = ".sql"

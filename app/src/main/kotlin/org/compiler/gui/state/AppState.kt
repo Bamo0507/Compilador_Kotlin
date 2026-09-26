@@ -3,13 +3,12 @@ package org.compiler.gui.state
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import org.compiler.runtime.CompilerPipeline
+import org.compiler.runtime.DbmsPipeline
 import org.compiler.runtime.models.CompilationResult
 
 class AppState {
 
     // El script que se esta editando. Lo escribe el CodeEditor.
-    // La fase 8 vuelve a poner un selector de ejemplos encima.
     var sourceContent by mutableStateOf("")
         private set
 
@@ -69,13 +68,13 @@ class AppState {
         highlightedLine = null
 
         try {
-            result = CompilerPipeline.compile(sourceContent)
+            result = DbmsPipeline.run(sourceContent)
         } catch (throwable: Throwable) {
-            // Throwable y no Exception: un StackOverflowError de un programa muy
+            // Throwable y no Exception: un StackOverflowError de un script muy
             // anidado debe salir como banner, no matar la ventana.
             //
             // El pipeline nunca lanza por errores del usuario: esos van a la lista
-            // de errores. Si algo llega aqui, es un bug del compilador.
+            // de errores. Si algo llega aqui, es un bug del DBMS.
             result = null
             errorMessage = throwable.message
                 ?: throwable::class.simpleName

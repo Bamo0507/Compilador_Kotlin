@@ -17,8 +17,8 @@ import androidx.compose.ui.unit.dp
 /**
  * La salida de una corrida, en texto plano.
  *
- * La fase 8 lo reemplaza por una rejilla de resultados. Los errores de ejecucion
- * ya no salen aqui: son una variante de CompilerError y los muestra ErrorList.
+ * Los errores de ejecucion NO salen aqui: son una variante de CompilerError y los
+ * muestra ErrorList, junto a los de las demas etapas.
  */
 @Composable
 fun OutputConsole(

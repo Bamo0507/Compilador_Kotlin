@@ -43,7 +43,7 @@ proyecto anterior.
 |---|---|---|
 | DDL | 4 | `CREATE` con las 7 restricciones, los dos `ALTER`, `DROP` |
 | DML | 4 | `INSERT` múltiple, con columnas nombradas, `UPDATE`, `DELETE` |
-| Consulta | 5 | `SELECT *`, alias, `ORDER BY`, `DISTINCT`, `LIMIT` |
+| Query | 5 | `SELECT *`, alias, `ORDER BY`, `DISTINCT`, `LIMIT` |
 | Join | 3 | dos tablas, tres tablas, autojoin |
 | Agregación | 5 | las 5 funciones, `GROUP BY`, `HAVING`, `COUNT(*)` contra `COUNT(col)` |
 | Subconsulta | 5 | escalar, `IN`, `EXISTS`, correlacionada, tabla derivada |
@@ -52,14 +52,14 @@ proyecto anterior.
 
 **Cada test corre sobre su propio `DataDirectory`**, construido con `@TempDir` de
 JUnit, como quedó en el ticket 0.5. Es lo que permite que un script cree tablas y
-las llene sin tocar el `datos/` real ni depender del orden en que corran los
+las llene sin tocar el `data/` real ni depender del orden en que corran los
 tests.
 
 El script se copia al temporal, se ejecuta, y se compara el resultado contra las
-anotaciones. Ninguna prueba usa `DataDirectory.POR_OMISION`.
+anotaciones. Ninguna prueba usa `DataDirectory.DEFAULT`.
 
 **Aceptación:** los 30 corren sin errores, el conteo de filas cuadra con la
-anotación, y el `datos/` del repo queda intacto después de la suite completa.
+anotación, y el `data/` del repo queda intacto después de la suite completa.
 
 ---
 
@@ -91,7 +91,7 @@ error de ejecución de la fase 7.
 | Sintaxis | 3 |
 | Nombres: tabla, columna, alias ambiguo | 5 |
 | Tipos | 5 |
-| Consulta: `WHERE` no lógico, alias en `WHERE` | 4 |
+| Query: `WHERE` no lógico, alias en `WHERE` | 4 |
 | Agregación | 6 |
 | Subconsulta | 5 |
 | DML y DDL | 10 |
@@ -143,7 +143,7 @@ la prueba de la decisión 5 a escala de toda la batería.
 ### El diagrama
 
 Las tres fases en vertical, con el catálogo entrando por un lado y el directorio
-`datos/` por el otro, y los paneles de diagnóstico y de errores de ejecución a un
+`data/` por el otro, y los paneles de diagnóstico y de errores de ejecución a un
 costado. El de Compiscript sirve de plantilla, cambiando las cajas.
 
 **Aceptación:** alguien que no conoce el proyecto lo clona, lee el README, lo

@@ -28,42 +28,42 @@ con la fase 2.**
 ```antlr
 grammar Sql;
 
-script: sentencia* EOF;
+script: statement* EOF;
 
 // Tipos -------------------------------------------------------------------
 
-tipo
-  : ('INT' | 'INTEGER')                          # tipoEntero
-  | 'FLOAT'                                      # tipoFlotante
-  | ('DECIMAL' | 'NUMERIC') '(' EnteroLit ',' EnteroLit ')'  # tipoDecimal
-  | 'CHAR' '(' EnteroLit ')'                     # tipoChar
-  | 'VARCHAR' '(' EnteroLit ')'                  # tipoVarchar
-  | 'TEXT'                                       # tipoTexto
-  | 'DATE'                                       # tipoFecha
-  | 'TIME'                                       # tipoHora
-  | 'BOOLEAN'                                    # tipoLogico
+type
+  : ('INT' | 'INTEGER')                          # intType
+  | 'FLOAT'                                      # floatType
+  | ('DECIMAL' | 'NUMERIC') '(' IntegerLit ',' IntegerLit ')'  # decimalType
+  | 'CHAR' '(' IntegerLit ')'                     # charType
+  | 'VARCHAR' '(' IntegerLit ')'                  # varcharType
+  | 'TEXT'                                       # textType
+  | 'DATE'                                       # dateType
+  | 'TIME'                                       # timeType
+  | 'BOOLEAN'                                    # boolType
   ;
 
 // Literales ---------------------------------------------------------------
 
 literal
-  : EnteroLit          # litEntero
-  | DecimalLit         # litDecimal
-  | TextoLit           # litTexto
-  | 'DATE' TextoLit    # litFecha
-  | 'TIME' TextoLit    # litHora
-  | ('TRUE' | 'FALSE') # litLogico
-  | 'NULL'             # litNulo
+  : IntegerLit          # intLit
+  | DecimalLit         # decimalLit
+  | StringLit           # stringLit
+  | 'DATE' StringLit    # dateLit
+  | 'TIME' StringLit    # timeLit
+  | ('TRUE' | 'FALSE') # boolLit
+  | 'NULL'             # nullLit
   ;
 
-EnteroLit : [0-9]+ ;
+IntegerLit : [0-9]+ ;
 DecimalLit : [0-9]+ '.' [0-9]+ ;
-TextoLit : '\'' ( ~'\'' | '\'\'' )* '\'' ;
-Identificador : [a-zA-Z_][a-zA-Z0-9_]* ;
+StringLit : '\'' ( ~'\'' | '\'\'' )* '\'' ;
+Identifier : [a-zA-Z_][a-zA-Z0-9_]* ;
 
 WS : [ \t\r\n]+ -> skip ;
-COMENTARIO : '--' ~[\r\n]* -> skip ;
-COMENTARIO_BLOQUE : '/*' .*? '*/' -> skip ;
+COMMENT : '--' ~[\r\n]* -> skip ;
+BLOCK_COMMENT : '/*' .*? '*/' -> skip ;
 ```
 
 ### Decisión · palabras clave insensibles a mayúsculas
@@ -108,53 +108,53 @@ más los 7 literales parsean en un test de sintaxis aislado.
 - `app/src/main/antlr/Sql.g4` (MODIFICA)
 
 ```antlr
-sentencia
-  : crearTabla ';'  | alterarTabla ';' | borrarTabla ';'
-  | insertar ';'    | actualizar ';'   | borrar ';'
-  | consulta ';'
+statement
+  : createTable ';'  | alterTable ';' | dropTable ';'
+  | insert ';'    | update ';'   | delete ';'
+  | query ';'
   ;
 
 // DDL ---------------------------------------------------------------------
 
-crearTabla
-  : 'CREATE' 'TABLE' Identificador '(' definicionColumna (',' definicionColumna)* ')'
+createTable
+  : 'CREATE' 'TABLE' Identifier '(' columnDefinition (',' columnDefinition)* ')'
   ;
 
-definicionColumna : Identificador tipo restriccion* ;
+columnDefinition : Identifier type constraint* ;
 
-restriccion
+constraint
   : 'PRIMARY' 'KEY'                                          # rPrimaryKey
   | 'NOT' 'NULL'                                             # rNotNull
   | 'NULL'                                                   # rNull
   | 'UNIQUE'                                                 # rUnique
   | 'AUTOINCREMENT'                                          # rAutoIncrement
   | 'DEFAULT' literal                                        # rDefault
-  | 'REFERENCES' Identificador '(' Identificador ')'         # rForeignKey
+  | 'REFERENCES' Identifier '(' Identifier ')'         # rForeignKey
   ;
 
-alterarTabla
-  : 'ALTER' 'TABLE' Identificador 'ADD' definicionColumna    # alterAdd
-  | 'ALTER' 'TABLE' Identificador 'DROP' 'COLUMN' Identificador  # alterDrop
+alterTable
+  : 'ALTER' 'TABLE' Identifier 'ADD' columnDefinition    # alterAdd
+  | 'ALTER' 'TABLE' Identifier 'DROP' 'COLUMN' Identifier  # alterDrop
   ;
 
-borrarTabla : 'DROP' 'TABLE' Identificador ;
+dropTable : 'DROP' 'TABLE' Identifier ;
 
 // DML ---------------------------------------------------------------------
 
-insertar
-  : 'INSERT' 'INTO' Identificador ('(' listaColumnas ')')? 'VALUES' filaValores (',' filaValores)*
+insert
+  : 'INSERT' 'INTO' Identifier ('(' columnList ')')? 'VALUES' valuesRow (',' valuesRow)*
   ;
 
-filaValores : '(' expresion (',' expresion)* ')' ;
-listaColumnas : Identificador (',' Identificador)* ;
+valuesRow : '(' expression (',' expression)* ')' ;
+columnList : Identifier (',' Identifier)* ;
 
-actualizar
-  : 'UPDATE' Identificador 'SET' asignacion (',' asignacion)* ('WHERE' expresion)?
+update
+  : 'UPDATE' Identifier 'SET' assignment (',' assignment)* ('WHERE' expression)?
   ;
 
-asignacion : Identificador '=' expresion ;
+assignment : Identifier '=' expression ;
 
-borrar : 'DELETE' 'FROM' Identificador ('WHERE' expresion)? ;
+delete : 'DELETE' 'FROM' Identifier ('WHERE' expression)? ;
 ```
 
 **Por qué `INSERT` acepta varias filas:** es gratis en la gramática y evita
@@ -180,78 +180,78 @@ con las siete restricciones en una sola columna.
 - `app/src/main/antlr/Sql.g4` (MODIFICA)
 
 ```antlr
-consulta
-  : 'SELECT' 'DISTINCT'? listaSeleccion
-    'FROM' origen (join)*
-    ('WHERE' expresion)?
-    ('GROUP' 'BY' listaExpresiones)?
-    ('HAVING' expresion)?
-    ('ORDER' 'BY' criterioOrden (',' criterioOrden)*)?
-    ('LIMIT' EnteroLit)?
+query
+  : 'SELECT' 'DISTINCT'? selectList
+    'FROM' source (join)*
+    ('WHERE' expression)?
+    ('GROUP' 'BY' expressionList)?
+    ('HAVING' expression)?
+    ('ORDER' 'BY' orderCriterion (',' orderCriterion)*)?
+    ('LIMIT' IntegerLit)?
   ;
 
-listaSeleccion
-  : '*'                                                # seleccionTodo
-  | elementoSeleccion (',' elementoSeleccion)*         # seleccionLista
+selectList
+  : '*'                                                # selectAll
+  | selectItem (',' selectItem)*         # selectListItems
   ;
 
-elementoSeleccion
-  : Identificador '.' '*'                              # elemTablaTodo
-  | expresion ('AS'? Identificador)?                   # elemExpresion
+selectItem
+  : Identifier '.' '*'                              # itemTableAll
+  | expression ('AS'? Identifier)?                   # itemExpression
   ;
 
-origen
-  : Identificador ('AS'? Identificador)?               # origenTabla
-  | '(' consulta ')' 'AS'? Identificador               # origenDerivado
+source
+  : Identifier ('AS'? Identifier)?               # tableSource
+  | '(' query ')' 'AS'? Identifier               # derivedSource
   ;
 
-join : 'INNER'? 'JOIN' origen 'ON' expresion ;
+join : 'INNER'? 'JOIN' source 'ON' expression ;
 
-criterioOrden : expresion ('ASC' | 'DESC')? ;
-listaExpresiones : expresion (',' expresion)* ;
+orderCriterion : expression ('ASC' | 'DESC')? ;
+expressionList : expression (',' expression)* ;
 ```
 
 ### La torre de precedencia
 
 ```antlr
-expresion      : expresionOr ;
-expresionOr    : expresionAnd ('OR' expresionAnd)* ;
-expresionAnd   : expresionNot ('AND' expresionNot)* ;
-expresionNot   : 'NOT'? expresionComparacion ;
+expression      : orExpression ;
+orExpression    : andExpression ('OR' andExpression)* ;
+andExpression   : notExpression ('AND' notExpression)* ;
+notExpression   : 'NOT'? comparisonExpression ;
 
-expresionComparacion
-  : expresionAditiva (opComparacion expresionAditiva)?       # compBinaria
-  | expresionAditiva 'IS' 'NOT'? 'NULL'                      # compEsNulo
-  | expresionAditiva 'NOT'? 'IN' '(' consulta ')'            # compEnSubconsulta
-  | expresionAditiva 'NOT'? 'IN' '(' listaExpresiones ')'    # compEnLista
-  | 'EXISTS' '(' consulta ')'                                # compExiste
+comparisonExpression
+  : additiveExpression (comparisonOp additiveExpression)?       # cmpBinary
+  | additiveExpression 'IS' 'NOT'? 'NULL'                      # cmpIsNull
+  | additiveExpression 'NOT'? 'IN' '(' query ')'            # cmpInSubquery
+  | additiveExpression 'NOT'? 'IN' '(' expressionList ')'    # cmpInList
+  | 'EXISTS' '(' query ')'                                # cmpExists
   ;
 
-expresionAditiva       : expresionMultiplicativa (('+' | '-' | '||') expresionMultiplicativa)* ;
-expresionMultiplicativa: expresionUnaria (('*' | '/') expresionUnaria)* ;
-expresionUnaria        : '-'? expresionPrimaria ;
+additiveExpression       : multiplicativeExpression (('+' | '-' | '||') multiplicativeExpression)* ;
+multiplicativeExpression: unaryExpression (('*' | '/') unaryExpression)* ;
+unaryExpression        : '-'? primaryExpression ;
 
-expresionPrimaria
+primaryExpression
   : literal                                            # primLiteral
-  | Identificador '.' Identificador                    # primColumnaCalificada
-  | Identificador                                      # primColumna
-  | agregacion                                         # primAgregacion
-  | '(' consulta ')'                                   # primSubconsulta
-  | '(' expresion ')'                                  # primParentesis
+  | Identifier '.' Identifier                    # primQualifiedColumn
+  | Identifier                                      # primColumn
+  | aggregate                                         # primAggregate
+  | '(' query ')'                                   # primSubquery
+  | '(' expression ')'                                  # primParen
   ;
 
-agregacion
-  : 'COUNT' '(' '*' ')'                                # agCountTodo
-  | ('COUNT'|'SUM'|'AVG'|'MIN'|'MAX') '(' 'DISTINCT'? expresion ')'  # agFuncion
+aggregate
+  : 'COUNT' '(' '*' ')'                                # agCountAll
+  | ('COUNT'|'SUM'|'AVG'|'MIN'|'MAX') '(' 'DISTINCT'? expression ')'  # agFunction
   ;
 
-opComparacion : '=' | '<>' | '!=' | '<' | '>' | '<=' | '>=' ;
+comparisonOp : '=' | '<>' | '!=' | '<' | '>' | '<=' | '>=' ;
 ```
 
 ### La recursión que hay que entender
 
-`expresionPrimaria` puede ser `'(' consulta ')'`, y `consulta` contiene
-`expresion`. Ese ciclo es lo que hace posibles las subconsultas anidadas a
+`primaryExpression` puede ser `'(' query ')'`, y `query` contiene
+`expression`. Ese ciclo es lo que hace posibles las subconsultas anidadas a
 cualquier profundidad, y es lo que más complica esta fase.
 
 ANTLR lo maneja sin ayuda porque los paréntesis desambiguan. El punto de cuidado
@@ -283,7 +283,7 @@ un mensaje claro en vez de un error semántico confuso.
 **Archivos:**
 
 - `frontend/syntax/SqlSyntaxAnalyzer.kt` (NUEVO)
-- `frontend/syntax/MayusculasCharStream.kt` (NUEVO)
+- `frontend/syntax/UpperCaseCharStream.kt` (NUEVO)
 - `frontend/ast/models/TreeNodeView.kt` (NUEVO)
 - `frontend/syntax/ParseTreeView.kt` (NUEVO)
 - `app/src/test/.../SqlSyntaxAnalyzerTest.kt` (NUEVO)
@@ -291,14 +291,14 @@ un mensaje claro en vez de un error semántico confuso.
 ```kotlin
 object SqlSyntaxAnalyzer {
     // Devuelve null si hubo error de sintaxis: es la unica etapa que corta.
-    fun parse(fuente: String, diagnostics: Diagnostics): SqlParser.ScriptContext?
+    fun parse(source: String, diagnostics: Diagnostics): SqlParser.ScriptContext?
 }
 ```
 
 Reusa `DiagnosticsErrorListener` tal cual, quitando los listeners por omisión de
 ANTLR, que escriben a la consola.
 
-`MayusculasCharStream` envuelve el `CharStream` y devuelve mayúsculas en `LA()`,
+`UpperCaseCharStream` envuelve el `CharStream` y devuelve mayúsculas en `LA()`,
 que es lo que consume el lexer, pero conserva el texto original en `getText()`,
 que es lo que sale en los mensajes de error. Así `select * from Users` funciona y
 el error sigue diciendo `Users` y no `USERS`.
@@ -314,7 +314,7 @@ otra cosa.
 class TreeNodeView(
     val etiqueta: String,
     val detalle: String? = null,
-    val hijos: List<TreeNodeView> = emptyList()
+    val children: List<TreeNodeView> = emptyList()
 )
 
 // El ProgramContext de ANTLR se convierte AQUI y no en la GUI, para que
@@ -339,42 +339,42 @@ fun ParseTree.toTreeView(): TreeNodeView
 
 **Archivos:**
 
-- `frontend/ast/models/Sentencia.kt`, `Consulta.kt`, `Expresion.kt` (NUEVOS)
+- `frontend/ast/models/Statement.kt`, `Query.kt`, `Expression.kt` (NUEVOS)
 - `app/src/test/.../AstModelsTest.kt` (NUEVO)
 
 ```kotlin
-sealed interface Nodo { val location: LexemeLocation }
+sealed interface Node { val location: LexemeLocation }
 
 // El nodo RAIZ: lo que devuelve el AstBuilder y lo que recorre todo lo demas.
 class Script(
-    val sentencias: List<Sentencia>,
+    val statements: List<Statement>,
     override val location: LexemeLocation
-) : Nodo
+) : Node
 
-sealed interface Sentencia : Nodo
-class CrearTabla(val nombre: String, val columnas: List<DefinicionColumna>, ...) : Sentencia
-class AlterarTablaAgregar(...) : Sentencia
-class AlterarTablaQuitar(...) : Sentencia
-class BorrarTabla(...) : Sentencia
-class Insertar(val tabla: String, val columnas: List<String>?, val filas: List<List<Expresion>>, ...) : Sentencia
-class Actualizar(val tabla: String, val asignaciones: List<Asignacion>, val donde: Expresion?, ...) : Sentencia
-class Borrar(val tabla: String, val donde: Expresion?, ...) : Sentencia
+sealed interface Statement : Node
+class CreateTable(val name: String, val columns: List<ColumnDefinition>, ...) : Statement
+class AlterTableAdd(...) : Statement
+class AlterTableDrop(...) : Statement
+class DropTable(...) : Statement
+class Insert(val table: String, val columns: List<String>?, val rows: List<List<Expression>>, ...) : Statement
+class Update(val table: String, val assignments: List<Assignment>, val where: Expression?, ...) : Statement
+class Delete(val table: String, val where: Expression?, ...) : Statement
 
-class Consulta(
-    val distinto: Boolean,
-    val seleccion: List<ElementoSeleccion>,
-    val origen: Origen,
+class Query(
+    val distinct: Boolean,
+    val selection: List<SelectItem>,
+    val source: FromSource,
     val joins: List<Join>,
-    val donde: Expresion?,
-    val agruparPor: List<Expresion>,
-    val teniendo: Expresion?,
-    val ordenarPor: List<CriterioOrden>,
-    val limite: Int?,
+    val where: Expression?,
+    val groupBy: List<Expression>,
+    val having: Expression?,
+    val orderBy: List<OrderCriterion>,
+    val limit: Int?,
     override val location: LexemeLocation
-) : Sentencia, Expresion {
+) : Statement, Expression {
     // Lo llena la fase 4.
-    var ambito: Scope? = null
-    var correlacionada: Boolean = false
+    var scope: Scope? = null
+    var correlated: Boolean = false
 }
 ```
 
@@ -387,58 +387,58 @@ hay otra fuente que la diga.
 ```kotlin
 // Piezas de las sentencias -----------------------------------------------
 
-class DefinicionColumna(val nombre: String, val tipo: Type,
-                        val restricciones: List<Restriccion>, ...) : Nodo
-class Asignacion(val columna: String, val valor: Expresion, ...) : Nodo
+class ColumnDefinition(val name: String, val type: Type,
+                        val constraints: List<Constraint>, ...) : Node
+class Assignment(val column: String, val value: Expression, ...) : Node
 
 // Piezas de la consulta ---------------------------------------------------
 
-sealed interface Origen : Nodo
-class OrigenTabla(val tabla: String, val alias: String?, ...) : Origen
-class OrigenDerivado(val consulta: Consulta, val alias: String, ...) : Origen
+sealed interface FromSource : Node
+class TableSource(val table: String, val alias: String?, ...) : FromSource
+class DerivedSource(val query: Query, val alias: String, ...) : FromSource
 
-class Join(val origen: Origen, val condicion: Expresion, ...) : Nodo
+class Join(val source: FromSource, val condition: Expression, ...) : Node
 
-sealed interface ElementoSeleccion : Nodo
-data object SeleccionTodo : ElementoSeleccion
-class SeleccionTablaTodo(val alias: String, ...) : ElementoSeleccion
-class SeleccionExpresion(val expresion: Expresion, val alias: String?, ...) : ElementoSeleccion
+sealed interface SelectItem : Node
+data object SelectAll : SelectItem
+class SelectTableAll(val alias: String, ...) : SelectItem
+class SelectExpression(val expression: Expression, val alias: String?, ...) : SelectItem
 
-class CriterioOrden(val expresion: Expresion, val descendente: Boolean, ...) : Nodo
+class OrderCriterion(val expression: Expression, val descending: Boolean, ...) : Node
 
 // Expresiones -------------------------------------------------------------
 
-sealed interface Expresion : Nodo {
+sealed interface Expression : Node {
     // Lo llena la fase 5. Arranca en ErrorType para que un nodo sin tipar
     // no se confunda con uno bien tipado.
-    var tipo: Type
+    var type: Type
 }
 
-class Literal(val valor: Valor, ...) : Expresion
-class ReferenciaColumna(...) : Expresion          // ver ticket 4.3
-class Binaria(val operador: OperadorBinario, val izquierda: Expresion,
-              val derecha: Expresion, ...) : Expresion
-class Unaria(val operador: OperadorUnario, val operando: Expresion, ...) : Expresion
-class EsNulo(val operando: Expresion, val negado: Boolean, ...) : Expresion
-class EnLista(val operando: Expresion, val valores: List<Expresion>,
-              val negado: Boolean, ...) : Expresion
-class EnSubconsulta(val operando: Expresion, val consulta: Consulta,
-                    val negado: Boolean, ...) : Expresion
-class Existe(val consulta: Consulta, ...) : Expresion
-class Agregacion(val funcion: FuncionAgregada, val argumento: Expresion?,
-                 val distinto: Boolean, ...) : Expresion
+class Literal(val value: Value, ...) : Expression
+class ColumnReference(...) : Expression          // ver ticket 4.3
+class Binary(val operator: BinaryOperator, val izquierda: Expression,
+              val derecha: Expression, ...) : Expression
+class Unary(val operator: UnaryOperator, val operand: Expression, ...) : Expression
+class IsNull(val operand: Expression, val negated: Boolean, ...) : Expression
+class InList(val operand: Expression, val values: List<Expression>,
+              val negated: Boolean, ...) : Expression
+class InSubquery(val operand: Expression, val query: Query,
+                    val negated: Boolean, ...) : Expression
+class Exists(val query: Query, ...) : Expression
+class Aggregate(val function: AggregateFunction, val argument: Expression?,
+                 val distinct: Boolean, ...) : Expression
 
-enum class FuncionAgregada { COUNT, COUNT_TODO, SUM, AVG, MIN, MAX }
-enum class OperadorBinario { SUMA, RESTA, MULT, DIV, CONCAT, IGUAL, DISTINTO,
+enum class AggregateFunction { COUNT, COUNT_TODO, SUM, AVG, MIN, MAX }
+enum class BinaryOperator { SUMA, RESTA, MULT, DIV, CONCAT, IGUAL, DISTINTO,
                              MENOR, MAYOR, MENOR_IGUAL, MAYOR_IGUAL, Y, O }
-enum class OperadorUnario { NEGATIVO, NO }
+enum class UnaryOperator { NEGATIVO, NO }
 ```
 
-**`Agregacion.argumento` es nulable** porque `COUNT(*)` no tiene ninguno. Se
+**`Aggregate.argumento` es nulable** porque `COUNT(*)` no tiene ninguno. Se
 distingue de `COUNT(col)` por `funcion`, no por el nulo, para que el `when` de la
 fase 6 sea exhaustivo.
 
-**`DefinicionColumna` guarda un `Type` ya resuelto y no texto**, porque el tipo se
+**`ColumnDefinition` guarda un `Type` ya resuelto y no texto**, porque el tipo se
 escribe completo en el `CREATE` y no hay nada que resolver después. Es la
 diferencia con `TypeReference` de Compiscript, donde un nombre de clase podía
 apuntar a algo declarado más abajo.
@@ -450,16 +450,16 @@ lo que se descubre analizando.
 
 | Campo | Lo llena | Se lee en |
 |---|---|---|
-| `Expresion.tipo` | fase 5 | fase 6 |
-| `ReferenciaColumna.nivel` e `.indice` | fase 4 | fase 6 |
-| `Consulta.ambito` | fase 4 | fases 5 y 6 |
-| `Consulta.correlacionada` | fase 4 | fase 6, para cachear |
+| `Expression.tipo` | fase 5 | fase 6 |
+| `ColumnReference.nivel` e `.indice` | fase 4 | fase 6 |
+| `Query.ambito` | fase 4 | fases 5 y 6 |
+| `Query.correlacionada` | fase 4 | fase 6, para cachear |
 
-**Que `Consulta` sea a la vez `Sentencia` y `Expresion`** es lo que permite que
+**Que `Query` sea a la vez `Statement` y `Expression`** es lo que permite que
 una subconsulta aparezca donde va una expresión sin duplicar el nodo. Es el mismo
 truco que en Compiscript hacía que la asignación fuera expresión.
 
-**Aceptación:** los nodos existen, un `when` sobre `Sentencia` sin `else` compila,
+**Aceptación:** los nodos existen, un `when` sobre `Statement` sin `else` compila,
 y ningún nodo guarda un tipo de ANTLR.
 
 ---
@@ -476,7 +476,7 @@ y ningún nodo guarda un tipo de ANTLR.
 - `runtime/models/CompilationResult.kt` (MODIFICA)
 - `app/src/test/.../SqlAstBuilderTest.kt`, `DbmsPipelineTest.kt` (NUEVOS)
 
-`SqlAstBuilder` hereda de `SqlBaseVisitor<Nodo>` y tiene un método por etiqueta
+`SqlAstBuilder` hereda de `SqlBaseVisitor<Node>` y tiene un método por etiqueta
 `#` de la gramática. El colapso importante es el de la torre de precedencia: siete
 reglas de ANTLR producen un solo tipo de nodo binario, con `foldBinaryLeft`, igual
 que en Compiscript.
@@ -485,18 +485,18 @@ que en Compiscript.
 
 ```kotlin
 object DbmsPipeline {
-    fun ejecutar(fuente: String, escribir: Boolean = true): CompilationResult {
+    fun run(source: String, write: Boolean = true): CompilationResult {
         val diagnostics = Diagnostics()
 
-        val parseTree = SqlSyntaxAnalyzer.parse(fuente, diagnostics)
-            ?: return CompilationResult.fallida(diagnostics, fuente)
+        val parseTree = SqlSyntaxAnalyzer.parse(source, diagnostics)
+            ?: return CompilationResult.failed(diagnostics, source)
         val parseTreeView = parseTree.toTreeView()
 
         val ast = SqlAstBuilder().visit(parseTree) as Script
 
         // Las etapas C a F se conectan en las fases 4, 5, 6 y 7.
 
-        return CompilationResult(fuente, parseTreeView, ast, diagnostics.all(), null, null)
+        return CompilationResult(source, parseTreeView, ast, diagnostics.all(), null, null)
     }
 }
 ```

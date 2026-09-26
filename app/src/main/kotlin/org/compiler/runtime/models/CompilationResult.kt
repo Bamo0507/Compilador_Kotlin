@@ -2,31 +2,21 @@ package org.compiler.runtime.models
 
 import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
-import org.compiler.frontend.ast.models.Program
-import org.compiler.frontend.ast.models.TreeNodeView
-import org.compiler.frontend.semantic.models.GarbageCollectorReport
-import org.compiler.frontend.semantic.symbols.Scope
-import org.compiler.interpreter.ExecutionResult
+import org.compiler.diagnostics.Severity
 
 /**
- * Todo lo que produce una compilacion. La GUI lee de aqui y no llama a nada mas.
+ * Todo lo que produce una corrida. La GUI lee de aqui y no llama a nada mas.
  *
- * Los campos son nullables a proposito: si el fuente no parsea no hay AST, y los
- * tipos obligan a la GUI a mostrar "no disponible" en vez de reventar.
- *
- * Fijate en lo que NO aparece: ningun tipo de org.compiler.parser. El arbol de
- * ANTLR entra como TreeNodeView, ya convertido por el pipeline.
+ * Los campos que las etapas van agregando son nulables a proposito: un script que
+ * no parsea no tiene AST, pero si tiene errores, y la GUI debe poder mostrar
+ * resultados parciales en vez de reventar.
  */
 data class CompilationResult(
     val source: String,
-    val parseTreeView: TreeNodeView?,
-    val ast: Program?,
-    val globalScope: Scope?,
-    val garbageCollectorReport: GarbageCollectorReport?,
-    val errors: List<CompilerError>,
-    val execution: ExecutionResult?
+    val errors: List<CompilerError> = emptyList()
 ) {
-    val hasErrors: Boolean get() = errors.isNotEmpty()
+    // Las ADVERTENCIA no cuentan: un script que solo tiene avisos se ejecuta.
+    val hasErrors: Boolean get() = errors.any { it.severity == Severity.ERROR }
 
     val lexicalErrors: List<CompilerError.LexerError>
         get() = errors.filterIsInstance<CompilerError.LexerError>()
@@ -37,17 +27,16 @@ data class CompilationResult(
     val semanticErrors: List<CompilerError.SemanticError>
         get() = errors.filterIsInstance<CompilerError.SemanticError>()
 
+    val executionErrors: List<CompilerError.ExecutionError>
+        get() = errors.filterIsInstance<CompilerError.ExecutionError>()
+
+    val warnings: List<CompilerError>
+        get() = errors.filter { it.severity == Severity.WARNING }
+
     companion object {
-        // Cuando la sintaxis falla no hay AST ni tabla de simbolos, pero SI hay
-        // errores que mostrar.
-        fun failed(diagnostics: Diagnostics, source: String) = CompilationResult(
-            source = source,
-            parseTreeView = null,
-            ast = null,
-            globalScope = null,
-            garbageCollectorReport = null,
-            errors = diagnostics.all(),
-            execution = null
-        )
+        // Cuando la sintaxis falla no hay arbol ni catalogo, pero SI hay errores
+        // que mostrar.
+        fun failed(diagnostics: Diagnostics, source: String) =
+            CompilationResult(source = source, errors = diagnostics.all())
     }
 }
