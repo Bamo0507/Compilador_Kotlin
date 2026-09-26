@@ -92,8 +92,24 @@ Fase 2  catalog      Fase 3  gramatica y AST
 al mismo tiempo.
 
 **Las fases 2 y 3 son el único tramo paralelizable**, y es el más grande del
-proyecto. La fase 2 no toca ANTLR y la fase 3 no toca el disco, así que no se
-pisan. Si son dos personas, ahí se parte.
+proyecto. La fase 2 vive en `catalog/` y `storage/`, la fase 3 en
+`frontend/syntax/` y `frontend/ast/`. Cero archivos en común.
+
+Con una condición: **el ticket 2.1 se hace primero y se mergea**. Es el más chico
+del proyecto, una jerarquía sellada de siete casos, y el ticket 3.5 lo necesita
+porque `ColumnDefinition` guarda `List<Constraint>`. Es el único enganche entre
+las dos fases.
+
+```
+  2.1  Constraint        <- primero, solo, y se mergea
+   |
+   +--------------------+
+   |                    |
+  2.2 ... 2.6        3.1 ... 3.6
+```
+
+Dentro de la fase 3, los tickets 3.1 a 3.3 escriben **el mismo archivo**, `Sql.g4`,
+en secuencia. No se pueden repartir entre dos personas aunque parezca que sí.
 
 **El pipeline se arma en la fase 3 en su versión mínima** y cada fase posterior le
 conecta su etapa. No hay una fase de integración al final, porque integrar al

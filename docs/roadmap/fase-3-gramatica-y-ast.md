@@ -335,7 +335,11 @@ fun ParseTree.toTreeView(): TreeNodeView
 ## Ticket 3.5 · Los nodos del AST
 
 - **Estado**: pendiente
-- **Depende de**: 3.3, 1.1
+- **Depende de**: 3.3, 1.1, **2.1**
+
+`ColumnDefinition` guarda `List<Constraint>`, y `Constraint` nace en el ticket 2.1.
+Es el **unico** punto donde la fase 3 toca a la fase 2, asi que el 2.1 se hace
+primero y se mergea antes de partir el trabajo.
 
 **Archivos:**
 
