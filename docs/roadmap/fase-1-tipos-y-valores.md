@@ -284,8 +284,8 @@ object ValueCodec {
 }
 ```
 
-**El relleno de `CHAR` va en los dos sentidos:** `decodificar` rellena hasta
-`length`, `codificar` recorta al final. En semántica `CHAR`, un valor y ese mismo
+**El relleno de `CHAR` va en los dos sentidos:** `decode` rellena hasta
+`length`, `encode` recorta al final. En semántica `CHAR`, un valor y ese mismo
 valor con espacios al final son el mismo valor, así que no se pierde información y
 el CSV queda sin espacios invisibles.
 
@@ -387,7 +387,7 @@ object TypeRules {
 }
 ```
 
-### Decisión · `isAssignable` es direccional, `unificar` es simétrica
+### Decisión · `isAssignable` es direccional, `unify` es simétrica
 
 Son dos preguntas distintas y confundirlas es el error clásico:
 
@@ -396,24 +396,70 @@ Son dos preguntas distintas y confundirlas es el error clásico:
 - `unificar(IntType, FloatType)` es `FloatType` en cualquier orden. Es la pregunta
   del operador: de qué tipo es `a + b`.
 
-### Decisión pendiente · la escala de `DECIMAL` al multiplicar
+### Decisión · la aritmética de `DECIMAL` sigue el estándar
 
-El estándar dice que `DECIMAL(10,2) * DECIMAL(10,2)` da `DECIMAL(20,4)`: las
-precisiones se suman y las escalas también. La alternativa simple es quedarse con
-la escala mayor de las dos.
+```kotlin
+// multiplicacion
+DecimalType(p1 + p2 + 1, s1 + s2)
 
-**Recomendación: la escala mayor.** La regla del estándar hace que la precisión
-crezca sola en una cadena de multiplicaciones y obliga a decidir qué pasa al pasar
-del tope, que es una regla más para una ganancia que en este proyecto nadie va a
-notar. Anotarlo en el README como simplificación consciente.
+// suma y resta
+val scale = max(s1, s2)
+DecimalType(max(p1 - s1, p2 - s2) + scale + 1, scale)
+
+// division: el estandar la deja sin definir, ver abajo
+DecimalType(p1 + s2 + 6, max(s1, s2) + 6)
+```
+
+Lo que decide es que la alternativa simple, quedarse con la escala mayor,
+**pierde datos**:
+
+```sql
+SELECT 0.05 * 0.05;
+
+escala mayor:  DECIMAL(10,2)  ->  0.00     <- el dato desaparece
+estandar:      DECIMAL(21,4)  ->  0.0025
+```
+
+Multiplicar dos números de dos decimales necesita cuatro. Redondear en cada paso
+intermedio es el error clásico de contabilidad: lo correcto es arrastrar la
+precisión y redondear una sola vez al final.
+
+El argumento en contra del estándar es que la precisión crece sola en una cadena
+de multiplicaciones. Eso importa en SQL Server o en Oracle, donde el tope son 38
+dígitos y el motor tiene que recortar la escala. **Aquí no hay tope:**
+`BigDecimal` es de precisión arbitraria, y un tipo intermedio como
+`DECIMAL(32,6)` nunca se guarda, solo existe mientras se evalúa la expresión.
+
+El desbordamiento se atrapa al escribir. `precio * cantidad` da `DECIMAL(21,4)` y
+puede terminar en una columna `DECIMAL(10,2)`: a nivel de tipos se permite, y
+`ValueCodec.decode` rechaza el valor concreto si la parte entera no cabe. Es la
+misma regla que `VARCHAR`, un mecanismo menos que explicar.
+
+### Decisión · la división lleva 6 decimales de más
+
+El estándar deja la división sin definir a propósito, porque `1/3` no termina.
+
+```sql
+SELECT 10.00 / 3.00;   -- 3.333333
+```
+
+La escala del resultado es `max(s1, s2) + 6`, con redondeo `HALF_UP`, que es lo
+que hace SQL Server con su escala mínima. Va al README como el único lugar donde
+el estándar no dicta la respuesta.
+
+`AVG` no entra en esto: el ticket 5.3 ya decidió que siempre devuelve `FLOAT`.
 
 **Aceptación:** un test por celda de la tabla de familias, más
 
 - `isAssignable(IntType, DecimalType(10,2))` es `true`
 - `isAssignable(FloatType, IntType)` es `false`
 - `isAssignable(DateType, TimeType)` es `false`
-- `unificar(CharType(5), TextType)` es `TextType`
-- `unificar(DateType, IntType)` es `null`
+- `isAssignable(DecimalType(21,4), DecimalType(10,2))` es `true`, porque la escala
+  se revisa al escribir y no al asignar
+- `unify(CharType(5), TextType)` es `TextType`
+- `unify(DecimalType(10,2), DecimalType(8,4))` es `DecimalType(12,4)`
+- `unify(DateType, IntType)` es `null`
+- `unify` da lo mismo en cualquier orden, e `isAssignable` no
 - cualquier cosa con `ErrorType` no genera error nuevo
 
 ---
@@ -432,7 +478,7 @@ notar. Anotarlo en el README como simplificación consciente.
 
 | Operador | Permitido en | Tipo del resultado |
 |---|---|---|
-| `+` `-` `*` `/` | numéricos | `unificar` de los dos |
+| `+` `-` `*` `/` | numéricos | `unify` de los dos |
 | `\|\|` | carácter | `TEXT` |
 | `<` `>` `<=` `>=` | numéricos, carácter, temporales | `BOOLEAN` |
 | `=` `<>` | misma familia | `BOOLEAN` |
@@ -456,8 +502,19 @@ fun binaryResultType(operator: BinaryOperator, izq: Type, der: Type): Type? =
     }
 ```
 
-**Por qué `ORDEN` excluye `BOOLEAN`:** preguntar si `true > false` no significa
-nada en SQL, y permitirlo solo deja pasar comparaciones escritas por error.
+**Por qué `ORDER` excluye `BOOLEAN`:** preguntar si `true > false` no significa
+nada en SQL, y permitirlo solo deja pasar comparaciones escritas por error. La
+igualdad sí los acepta.
+
+**`FLOAT` contagia.** Cualquier operación donde aparezca da `FLOAT`, porque no se
+puede prometer exactitud sobre un operando que ya la perdió.
+
+**`INT / INT` trunca.** `10 / 3` da `3`, como en PostgreSQL y SQL Server.
+Sorprende, pero desviarse del estándar sorprendería más. Va al README junto a las
+demás simplificaciones.
+
+**Un `INT` entra a la aritmética decimal como `DECIMAL(19,0)`**, que son los
+dígitos que caben en un `Long`. Así `INT + DECIMAL(10,2)` da `DECIMAL(22,2)`.
 
 **Por qué `IS NULL` acepta cualquier tipo:** es la única forma de preguntar por un
 nulo, porque `= NULL` en SQL da `NULL`, no `true`. Esa es la lógica de tres

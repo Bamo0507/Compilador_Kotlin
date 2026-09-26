@@ -428,11 +428,13 @@ class Exists(val query: Query, ...) : Expression
 class Aggregate(val function: AggregateFunction, val argument: Expression?,
                  val distinct: Boolean, ...) : Expression
 
-enum class AggregateFunction { COUNT, COUNT_TODO, SUM, AVG, MIN, MAX }
-enum class BinaryOperator { SUMA, RESTA, MULT, DIV, CONCAT, IGUAL, DISTINTO,
-                             MENOR, MAYOR, MENOR_IGUAL, MAYOR_IGUAL, Y, O }
-enum class UnaryOperator { NEGATIVO, NO }
+enum class AggregateFunction { COUNT, COUNT_ALL, SUM, AVG, MIN, MAX }
 ```
+
+`BinaryOperator` y `UnaryOperator` **no se declaran aqui**: viven en
+`types/Operators.kt` desde la fase 1, porque `TypeRules` los necesita para decidir
+el tipo de una operacion. El AST los usa tal cual, y `BinaryOperator.fromSymbol`
+es lo que convierte el texto del arbol de ANTLR en el valor del enum.
 
 **`Aggregate.argumento` es nulable** porque `COUNT(*)` no tiene ninguno. Se
 distingue de `COUNT(col)` por `funcion`, no por el nulo, para que el `when` de la
