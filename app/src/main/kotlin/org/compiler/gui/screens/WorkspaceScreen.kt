@@ -27,7 +27,6 @@ import org.compiler.gui.components.CodeEditor
 import org.compiler.gui.components.ErrorList
 import org.compiler.gui.components.OutputConsole
 import org.compiler.gui.components.PlayButton
-import org.compiler.gui.components.ProgramSelector
 import org.compiler.gui.state.AppState
 
 @Composable
@@ -59,11 +58,6 @@ fun WorkspaceScreen(
                     .weight(1.55f)
                     .fillMaxHeight()
             ) {
-                ProgramSelector(
-                    selected = state.selectedSample,
-                    onSelect = { state.loadSample(it) },
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
                 CodeEditor(
                     value = state.sourceContent,
                     onValueChange = { state.onSourceChanged(it) },
@@ -99,7 +93,7 @@ fun WorkspaceScreen(
                         .weight(1f)
                 ) {
                     OutputConsole(
-                        execution = result?.execution,
+                        output = emptyList(),
                         hasErrors = result?.hasErrors == true,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -134,13 +128,13 @@ private fun WorkspaceToolbar(
     ) {
         Column(modifier = Modifier.weight(1f)) {
             Text(
-                text = "Compiscript",
+                text = "SQL",
                 style = MaterialTheme.typography.titleMedium,
                 color = MaterialTheme.colorScheme.onSurface,
                 fontWeight = FontWeight.SemiBold
             )
             Text(
-                text = "Analizador semántico",
+                text = "Manejador de base de datos",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

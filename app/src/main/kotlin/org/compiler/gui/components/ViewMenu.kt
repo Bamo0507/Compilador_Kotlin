@@ -15,10 +15,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 
 // Las vistas del IDE. Agregar una es agregar una entrada al enum y una rama en App.
+// La fase 8 suma el catalogo y los arboles del query.
 enum class AppView {
-    WORKSPACE,
-    TREES,
-    SYMBOLS
+    WORKSPACE
 }
 
 @Composable
@@ -62,6 +61,4 @@ fun ViewMenu(
 
 fun AppView.displayName(): String = when (this) {
     AppView.WORKSPACE -> "Editor"
-    AppView.TREES -> "Árboles"
-    AppView.SYMBOLS -> "Tabla de símbolos"
 }

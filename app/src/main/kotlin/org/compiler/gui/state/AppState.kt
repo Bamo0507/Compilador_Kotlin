@@ -5,18 +5,12 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import org.compiler.runtime.CompilerPipeline
 import org.compiler.runtime.models.CompilationResult
-import org.compiler.samples.SampleProgram
-import org.compiler.samples.SamplePrograms
 
 class AppState {
 
-    // El programa que se esta editando. Lo escribe el CodeEditor.
-    var sourceContent by mutableStateOf(SamplePrograms.default.source)
-        private set
-
-    // El ejemplo cargado desde el selector, o null si el texto ya no coincide con
-    // ninguno porque el usuario lo edito.
-    var selectedSample by mutableStateOf<SampleProgram?>(SamplePrograms.default)
+    // El script que se esta editando. Lo escribe el CodeEditor.
+    // La fase 8 vuelve a poner un selector de ejemplos encima.
+    var sourceContent by mutableStateOf("")
         private set
 
     // Ruta del archivo abierto, o null si nunca se abrio ni se guardo uno.
@@ -45,30 +39,15 @@ class AppState {
 
     // ── Edicion ────────────────────────────────────────────────────────────
 
-    // La llama el editor en cada tecla. En cuanto el texto se aparta del ejemplo, el
-    // selector deja de afirmar que ese ejemplo es lo que se esta viendo.
+    // La llama el editor en cada tecla.
     fun onSourceChanged(newSource: String) {
         sourceContent = newSource
-        if (selectedSample?.source != newSource) {
-            selectedSample = null
-        }
     }
 
-    // Carga un ejemplo en el editor. Descarta el resultado anterior a proposito: los
-    // errores y la salida son de OTRO programa, y dejarlos a la vista confunde.
-    fun loadSample(sample: SampleProgram) {
-        sourceContent = sample.source
-        selectedSample = sample
-        result = null
-        errorMessage = null
-        highlightedLine = null
-    }
-
-    // La usa el FileMenu al abrir un archivo: el contenido viene de disco, asi que
-    // no corresponde a ningun ejemplo.
+    // La usa el FileMenu al abrir un archivo. Descarta el resultado anterior a
+    // proposito: los errores y la salida son de OTRO script.
     fun loadFromFile(content: String, path: String) {
         sourceContent = content
-        selectedSample = null
         sourceFilePath = path
         result = null
         errorMessage = null
