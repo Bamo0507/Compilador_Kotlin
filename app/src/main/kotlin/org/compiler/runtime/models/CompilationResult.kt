@@ -3,16 +3,19 @@ package org.compiler.runtime.models
 import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.diagnostics.Severity
+import org.compiler.frontend.ast.models.Script
+import org.compiler.frontend.ast.models.TreeNodeView
 
-/**
- * Todo lo que produce una corrida. La GUI lee de aqui y no llama a nada mas.
- *
- * Los campos que las etapas van agregando son nulables a proposito: un script que
- * no parsea no tiene AST, pero si tiene errores, y la GUI debe poder mostrar
- * resultados parciales en vez de reventar.
- */
+
 data class CompilationResult(
     val source: String,
+
+    // Etapa A: el arbol de ANTLR, listo para dibujar. null si no parseo.
+    val parseTreeView: TreeNodeView? = null,
+
+    // Etapa B: el AST propio. null si no parseo.
+    val ast: Script? = null,
+
     val errors: List<CompilerError> = emptyList()
 ) {
     // Las ADVERTENCIA no cuentan: un script que solo tiene avisos se ejecuta.
