@@ -170,7 +170,7 @@ de colecciones. `./gradlew test` pasa con 154 pruebas, sin fallos ni omitidas.
 
 ## Ticket 2.3 · Serialización del esquema
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.2
 
 **Archivos:**
@@ -228,6 +228,31 @@ inversa de `Type.name`. Así el JSON se lee igual que el SQL que lo creó.
 los tres tipos con parámetros, y el resultado sería `{"type":"DECIMAL","precision":10,"scale":2}`,
 más ruidoso y menos parecido al SQL.
 
+### Implementación
+
+`SchemaJson` reutiliza la configuración `catalogJson` del ticket 2.1:
+
+- `encode(table)` produce texto JSON con saltos de línea y sangría.
+- `decode(source)` devuelve `SchemaDefinition`, con las columnas por nombre.
+- Cada `SchemaColumn` conserva el tipo como texto y sus restricciones.
+- `SchemaColumn.toColumn(name)` convierte la descripción en una `Column`, o
+  devuelve `null` si el tipo no se reconoce.
+
+El texto del tipo se conserva para que `CatalogLoader` pueda reportar el nombre
+de la columna y el tipo desconocido. El JSON mal formado o con una restricción
+desconocida lanza `SerializationException`; el cargador la traducirá a un
+diagnóstico en el ticket 2.5.
+
+`typeFromText` acepta mayúsculas, minúsculas, espacios y los alias `INTEGER` y
+`NUMERIC`. Rechaza parámetros incompletos, longitudes no positivas, números que
+no caben en `Int` y escalas fuera de `0..precision`. También permite la ida y
+vuelta de los tipos internos `NULL` y `<error>`; esto no los habilita como tipos
+de columna en SQL.
+
+La reconstrucción de una `Table` usa el orden del header del CSV para buscar
+cada columna en el mapa del esquema. Este ticket convierte texto y modelos;
+la lectura del directorio y la escritura de archivos quedan para 2.5 y 2.6.
+
 **Aceptación:**
 
 - ida y vuelta de un esquema con los 11 tipos y las 7 restricciones
@@ -235,6 +260,12 @@ más ruidoso y menos parecido al SQL.
 - `typeFromText("VARCHAR(80)")` da `VarcharType(80)`
 - `typeFromText("DECIMAL")` sin paréntesis devuelve `null`, no revienta
 - el archivo escrito tiene saltos de línea y sangría
+
+**Verificación:** nueve pruebas en `catalog/SchemaJsonTest.kt` cubren la ida y
+vuelta de los 11 tipos y las 7 restricciones, el formato JSON, el orden del
+header, tipos desconocidos, parámetros inválidos, esquemas vacíos, textos
+escapados y errores de serialización. `./gradlew test` pasa con 163 pruebas,
+sin fallos ni omitidas.
 
 ---
 
