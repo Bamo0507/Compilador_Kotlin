@@ -107,7 +107,7 @@ qué columna y qué tipo esperaba.
 
 ## Ticket 2.2 · `Catalog`, `Table` y `Column`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.1
 
 **Archivos:**
@@ -129,7 +129,7 @@ class Table(
     fun column(name: String): Column? = columns.firstOrNull { it.name == name }
     fun indexOf(name: String): Int = columns.indexOfFirst { it.name == name }
 
-    val primaryKey: Column? get() = columns.firstOrNull { it.tiene<PrimaryKey>() }
+    val primaryKey: Column? get() = columns.firstOrNull { it.hasConstraint<PrimaryKey>() }
 }
 
 class Column(
@@ -137,10 +137,10 @@ class Column(
     val type: Type,
     val constraints: List<Constraint>
 ) {
-    inline fun <reified R : Constraint> tiene(): Boolean = constraints.any { it is R }
+    inline fun <reified R : Constraint> hasConstraint(): Boolean = constraints.any { it is R }
 
     // NOT NULL explicito, o implicito por ser clave primaria.
-    val nullable: Boolean get() = !tiene<NotNull>() && !tiene<PrimaryKey>()
+    val nullable: Boolean get() = !hasConstraint<NotNull>() && !hasConstraint<PrimaryKey>()
 
     val reference: ForeignKey? get() = constraints.filterIsInstance<ForeignKey>().firstOrNull()
 }
@@ -154,10 +154,17 @@ que no dice en su tipo que el orden es significativo.
 **Por qué `PRIMARY KEY` implica `NOT NULL`:** es la regla de SQL, y ponerla aquí
 evita que cada llamador tenga que acordarse.
 
+La implementación copia las colecciones recibidas en los constructores, para que
+modificar el mapa o las listas originales no cambie los modelos.
+
 **Aceptación:**
 
 - `indexOf` devuelve `-1` para una columna que no existe y no lanza
 - una columna con `PrimaryKey` tiene `nullable == false` sin llevar `NotNull`
+
+**Verificación:** seis pruebas en `catalog/CatalogTest.kt` cubren búsquedas,
+orden e índices, clave primaria, nulabilidad, restricciones, referencias y copias
+de colecciones. `./gradlew test` pasa con 154 pruebas, sin fallos ni omitidas.
 
 ---
 
