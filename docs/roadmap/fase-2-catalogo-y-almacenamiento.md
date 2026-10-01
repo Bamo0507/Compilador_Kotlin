@@ -319,7 +319,10 @@ object CsvReader {
 }
 
 object CsvWriter {
-    fun write(archivo: File, header: List<String>, rows: List<List<String?>>)
+    // Devuelve el desplazamiento en bytes donde quedo cada fila. Los indices de
+    // la fase 8 los necesitan, y salen del mismo recorrido que ya escribe el
+    // archivo: contar bytes mientras se escribe son tres lineas de mas.
+    fun write(archivo: File, header: List<String>, rows: List<List<String?>>): List<Long>
 }
 ```
 

@@ -212,8 +212,13 @@ es lo que pediste: o se aplica todo, o no se aplica nada.
 ```
 1. los .json de las tablas cuyo esquema cambio
 2. los .csv de las tablas cuyas filas cambiaron
-3. borrar los pares de las tablas eliminadas
+3. los .idx de esas mismas tablas, reconstruidos  (ticket 8.6)
+4. borrar los archivos de las tablas eliminadas, incluidos sus .idx
 ```
+
+El paso 3 sale del paso 2 sin recorrido extra: `CsvWriter.write` devuelve los
+desplazamientos nuevos, y con ellos se arma cada indice. Reconstruir en vez de
+parchear es lo que hace que no exista logica incremental de indices.
 
 Cada escritura usa el temporal más renombre del ticket 2.4. El volcado completo
 **no** es atómico entre tablas: si el proceso muere entre la tabla 1 y la 2, la 1

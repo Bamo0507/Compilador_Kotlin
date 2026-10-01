@@ -1,4 +1,4 @@
-# Fase 9 · Batería y documentación
+# Fase 10 · Batería y documentación
 
 **Objetivo:** dejar el proyecto entregable y defendible.
 
@@ -6,10 +6,10 @@
 
 ---
 
-## Ticket 9.1 · Scripts válidos
+## Ticket 10.1 · Scripts válidos
 
 - **Estado**: pendiente
-- **Depende de**: 8.5
+- **Depende de**: 9.6
 
 **Archivos:**
 
@@ -48,7 +48,8 @@ proyecto anterior.
 | Agregación | 5 | las 5 funciones, `GROUP BY`, `HAVING`, `COUNT(*)` contra `COUNT(col)` |
 | Subconsulta | 5 | escalar, `IN`, `EXISTS`, correlacionada, tabla derivada |
 | Tipos | 4 | los 11 tipos, nulos, `DECIMAL` exacto, fechas |
-| **Total** | **30** | |
+| Índices | 4 | `CREATE INDEX`, `DROP INDEX`, `WHERE` con igualdad, `WHERE` con rango |
+| **Total** | **34** | |
 
 **Cada test corre sobre su propio `DataDirectory`**, construido con `@TempDir` de
 JUnit, como quedó en el ticket 0.5. Es lo que permite que un script cree tablas y
@@ -63,10 +64,10 @@ anotación, y el `data/` del repo queda intacto después de la suite completa.
 
 ---
 
-## Ticket 9.2 · Scripts inválidos
+## Ticket 10.2 · Scripts inválidos
 
 - **Estado**: pendiente
-- **Depende de**: 9.1
+- **Depende de**: 10.1
 
 **Archivos:**
 
@@ -95,8 +96,9 @@ error de ejecución de la fase 7.
 | Agregación | 6 |
 | Subconsulta | 5 |
 | DML y DDL | 10 |
+| Índices: inexistente, duplicado, compuesto, nombre reservado | 5 |
 | Ejecución: PK, `NOT NULL`, FK, escalar con dos filas | 5 |
-| **Total** | **43** |
+| **Total** | **48** |
 
 Aparte van tres scripts de **solo advertencias**, con `= NULL`, `LIMIT` sin
 `ORDER BY` y `DELETE` sin `WHERE`. Su anotación es distinta: `ESPERADO: advertencia`
@@ -112,10 +114,10 @@ la prueba de la decisión 5 a escala de toda la batería.
 
 ---
 
-## Ticket 9.3 · README y diagrama
+## Ticket 10.3 · README y diagrama
 
 - **Estado**: pendiente
-- **Depende de**: 9.2
+- **Depende de**: 10.2
 
 **Archivos:**
 

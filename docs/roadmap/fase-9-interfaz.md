@@ -1,4 +1,4 @@
-# Fase 8 · Interfaz
+# Fase 9 · Interfaz
 
 **Objetivo:** que todo el alcance se pueda hacer sin salir de la ventana.
 
@@ -13,13 +13,14 @@ Compiscript sirve casi completa.
 | Salida de texto | se vuelve una **rejilla de resultados** |
 | Tabla de símbolos | se vuelve **vista del catálogo** |
 | Árbol sintáctico y AST | vuelven, ahora del script |
+| **Tokens** | **nueva**, la pide el enunciado |
 | Reporte de vivacidad | eliminado, no tiene análogo |
 
 **Estimación:** dos o tres sesiones.
 
 ---
 
-## Ticket 8.1 · Rejilla de resultados
+## Ticket 9.1 · Rejilla de resultados
 
 - **Estado**: pendiente
 - **Depende de**: 7.5
@@ -65,10 +66,10 @@ CREATE TABLE eventos     table creada
 
 ---
 
-## Ticket 8.2 · Vista del catálogo
+## Ticket 9.2 · Vista del catálogo
 
 - **Estado**: pendiente
-- **Depende de**: 8.1
+- **Depende de**: 9.1
 
 **Archivos:**
 
@@ -111,10 +112,10 @@ demuestra que las restricciones se guardan de verdad.
 
 ---
 
-## Ticket 8.3 · Árboles del script
+## Ticket 9.3 · Árboles del script
 
 - **Estado**: pendiente
-- **Depende de**: 8.1
+- **Depende de**: 9.1
 
 **Archivos:**
 
@@ -150,10 +151,10 @@ nodos de expresión triviales, como un literal solo, en una sola etiqueta.
 
 ---
 
-## Ticket 8.4 · Resaltado y selector de scripts
+## Ticket 9.4 · Resaltado y selector de scripts
 
 - **Estado**: pendiente
-- **Depende de**: 8.1
+- **Depende de**: 9.1
 
 **Archivos:**
 
@@ -189,10 +190,10 @@ dos o tres scripts de juguete y muestra solo Default y En blanco. No bloquea.
 
 ---
 
-## Ticket 8.5 · Estado y panel de cambios
+## Ticket 9.5 · Estado y panel de cambios
 
 - **Estado**: pendiente
-- **Depende de**: 8.1, 8.2
+- **Depende de**: 9.1, 9.2
 
 **Archivos:**
 
@@ -249,3 +250,50 @@ decisión 5 resuelve.
 - un script que falla a la mitad dice que no se escribió nada y por qué
 - correr no congela la ventana, va en `Dispatchers.Default`
 - el botón se deshabilita al primer clic, antes de arrancar el hilo de fondo
+
+---
+
+## Ticket 9.6 · Vista de tokens
+
+- **Estado**: pendiente
+- **Depende de**: 9.1
+
+**Archivos:**
+
+- `gui/screens/TokensScreen.kt` (NUEVO)
+- `frontend/syntax/TokenView.kt` (NUEVO)
+- `runtime/models/CompilationResult.kt` (MODIFICA)
+- `app/src/test/.../TokenViewTest.kt` (NUEVO)
+
+**Por qué existe este ticket:** el enunciado pide seis cosas en la interfaz y
+*visualizar tokens* es una de ellas, aparte del árbol sintáctico y del AST.
+
+No hay que escribir un lexer: el de ANTLR ya produce la lista, solo falta
+convertirla a una forma que la GUI entienda sin importar `org.compiler.parser`.
+
+```kotlin
+class TokenView(
+    val type: String,      // el nombre simbolico, "SELECT" o "Identifier"
+    val lexeme: String,    // el texto tal cual aparece en el script
+    val line: Int,
+    val column: Int
+)
+
+fun tokensOf(source: String): List<TokenView>
+```
+
+La tabla muestra las cuatro columnas, con el lexema en monoespaciada. Los tokens
+que la gramática descarta, espacios y comentarios, **no** salen: el canal oculto
+de ANTLR los separa solo.
+
+Un detalle de `UpperCaseCharStream`: el lexer ve mayúsculas pero el lexema que se
+muestra tiene que ser **el original**. Si no, escribir `select` mostraría `SELECT`
+y la vista estaría mintiendo sobre lo que el usuario tecleó.
+
+**Aceptación:**
+
+- `SELECT * FROM users;` produce los cinco tokens con su línea y columna
+- escribir `select` muestra `select` como lexema y `SELECT` como tipo
+- los comentarios y los espacios no aparecen
+- un script con un error léxico muestra los tokens que sí se reconocieron
+- ningún tipo de `org.compiler.parser` sale de `TokenView`

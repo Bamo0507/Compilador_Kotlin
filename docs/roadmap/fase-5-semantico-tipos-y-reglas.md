@@ -309,5 +309,11 @@ CSV, sin decodificar nada.
 | La tabla existe | |
 | Ninguna otra tabla la referencia | `'users' es referenciada por 'posts.uid'` |
 
+### `CREATE INDEX` y `DROP INDEX`
+
+Sus reglas viven en el **ticket 8.5**, junto al resto de los índices. Dos de ellas
+tocan sentencias de esta fase: `ALTER TABLE ... DROP COLUMN` sobre una columna
+indexada falla, y `DROP TABLE` se lleva los `.idx` de la tabla.
+
 **Aceptación:** una prueba por fila de las cinco tablas. Son alrededor de 35
 casos y es la batería más grande de la fase, pero cada uno es de tres líneas.

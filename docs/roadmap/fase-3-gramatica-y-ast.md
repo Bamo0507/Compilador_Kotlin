@@ -114,6 +114,8 @@ statement
   | query ';'
   ;
 
+// El ticket 8.1 le agrega createIndex y dropIndex.
+
 // DDL ---------------------------------------------------------------------
 
 createTable

@@ -31,6 +31,7 @@ una tabla existe ni de qué tipo es una columna.
 | | Incluye |
 |---|---|
 | DDL | `CREATE TABLE`, `ALTER TABLE` (add y drop column), `DROP TABLE` |
+| Índices | `CREATE INDEX`, `DROP INDEX`, de una sola columna |
 | DML | `INSERT`, `UPDATE`, `DELETE` |
 | Query | `SELECT`, `FROM`, alias, `JOIN ... ON`, `WHERE`, `ORDER BY`, `DISTINCT`, `LIMIT` |
 | Agregación | `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP BY`, `HAVING` |
@@ -38,8 +39,9 @@ una tabla existe ni de qué tipo es una columna.
 | Tipos | `INT`, `FLOAT`, `DECIMAL`/`NUMERIC`, `CHAR`, `VARCHAR`, `TEXT`, `DATE`, `TIME`, `BOOLEAN`, `NULL` |
 | Restricciones | `PRIMARY KEY`, `NOT NULL`, `NULL`, `UNIQUE`, `FOREIGN KEY`, `AUTOINCREMENT`, `DEFAULT` |
 
-Queda fuera, y es deliberado: índices, transacciones explícitas, vistas,
-disparadores, `LEFT`/`RIGHT JOIN`, `UNION`, `CHECK` y usuarios.
+Queda fuera, y es deliberado: transacciones explícitas, vistas, disparadores,
+`LEFT`/`RIGHT JOIN`, `UNION`, `CHECK`, usuarios, índices compuestos y
+planificación por costos.
 
 ---
 
@@ -55,36 +57,39 @@ disparadores, `LEFT`/`RIGHT JOIN`, `UNION`, `CHECK` y usuarios.
 | [**5 · Semántico II, tipos y reglas**](./fase-5-semantico-tipos-y-reglas.md) | Cada expresión tipada y cada regla de SQL verificada | 5 | **alto** |
 | [**6 · Motor I, consultas**](./fase-6-motor-consultas.md) | Un `SELECT` del alcance devuelve el `ResultSet` correcto | 7 | **alto** |
 | [**7 · Motor II, escritura**](./fase-7-motor-escritura.md) | Se escribe a disco, o no se escribe nada | 5 | medio |
-| [**8 · Interfaz**](./fase-8-interfaz.md) | Todo el alcance se hace sin salir de la ventana | 5 | medio |
-| [**9 · Batería y documentación**](./fase-9-bateria-y-docs.md) | Casos válidos e inválidos, README y diagrama | 3 | medio |
-| | | **54** | |
+| [**8 · Índices**](./fase-8-indices.md) | `CREATE INDEX` crea un archivo y el `WHERE` lo usa en vez de recorrer la tabla | 6 | **alto** |
+| [**9 · Interfaz**](./fase-9-interfaz.md) | Todo el alcance se hace sin salir de la ventana | 6 | medio |
+| [**10 · Batería y documentación**](./fase-10-bateria-y-docs.md) | Casos válidos e inválidos, README y diagrama | 3 | medio |
+| | | **61** | |
 
-**Estimación total: 24 sesiones de trabajo.**
+**Estimación total: 27 sesiones de trabajo.**
 
 ### Orden y paralelismo
 
 ```
 Fase 0  limpieza
    |
-Fase 1  types y values
+Fase 1  tipos y valores
    |
    +---------------------+
    |                     |
-Fase 2  catalog      Fase 3  gramatica y AST
+Fase 2  catalogo     Fase 3  gramatica y AST
    |                     |
    +----------+----------+
               |
         Fase 4  nombres
               |
-        Fase 5  types y constraints
+        Fase 5  tipos y reglas
               |
         Fase 6  motor consultas
               |
         Fase 7  motor escritura
               |
-        Fase 8  interfaz
+        Fase 8  indices
               |
-        Fase 9  bateria y docs
+        Fase 9  interfaz
+              |
+        Fase 10 bateria y docs
 ```
 
 **La fase 1 es un cuello de botella deliberado.** Todo lo demás lee `Type` y
@@ -169,7 +174,21 @@ almacén de escritura son **el mismo mapa**, así que un `SELECT` después de un
 `INSERT` ve la fila nueva. Es también quien recorre las sentencias del script y
 quien le dice a `flush` qué cambió. Nada de `object` con estado.
 
-**11. Las advertencias son una severidad, no un colector aparte.** `= NULL`,
+**11. Los índices guardan desplazamientos en bytes, no números de fila.** Es lo
+que permite leer solo las filas que casan en vez de cargar la tabla. Los
+desplazamientos los devuelve `CsvWriter` mientras escribe, y los índices se
+**reconstruyen** en cada volcado en vez de parchearse, lo que elimina toda la
+lógica incremental. En memoria son un `TreeMap` del JDK, que resuelve igualdad y
+rangos; un árbol B+ a mano daría la misma complejidad y es un ejercicio de bases
+de datos, no de compiladores.
+
+**12. `PRIMARY KEY` y `UNIQUE` generan su índice.** Lo que gana no son las
+escrituras sino las consultas: `WHERE id = 7` usa el índice sin que nadie escriba
+un `CREATE INDEX`, y la validación de llave foránea pasa de cargar la tabla
+referida a un salto. Los nombres `pk_<tabla>` y `uq_<tabla>_<columna>` quedan
+reservados.
+
+**13. Las advertencias son una severidad, no un colector aparte.** `= NULL`,
 `LIMIT` sin `ORDER BY` y `UPDATE` sin `WHERE` reportan con severidad
 `WARNING`, y `hasErrors` cuenta solo los `ERROR`, así que el script se ejecuta
 igual. Los errores de ejecución son una cuarta variante de `CompilerError`, no una
@@ -197,12 +216,13 @@ Catalog  ---------------------------> el esquema completo de la base
 AST decorado  ----------------------> errores y ADVERTENCIAS, todos juntos
    |                                  las advertencias no detienen nada
    v  Session.run       recorre las sentencias del script
-   |  Engine  -> consultas   lee data/*.csv solo de lo que se toca
-   |  Writer  -> escrituras  modifica rows EN MEMORIA
-ResultSet + changes pendientes  ----> errores de ejecucion, CORTAN
+   |  Engine  -> consultas   si hay indice usable, lee SOLO las filas que casan;
+   |                         si no, carga la tabla entera
+   |  Writer  -> escrituras  modifica filas EN MEMORIA
+ResultSet + cambios pendientes  ----> errores de ejecucion, CORTAN
    |
    v  Flush.flush         solo si nada fallo
-data/ actualizado  ----------------> rejilla de resultados en el IDE
+data/ y sus .idx  -----------------> rejilla de resultados en el IDE
 ```
 
 **Esquema ansioso, datos perezosos.** En la etapa del catálogo se leen todos los
@@ -220,6 +240,8 @@ script menciona.
 | Alias ambiguo | semántica | `'name' existe en 'users' y en 'posts'` |
 | Tipo incompatible | semántica | `WHERE espera BOOLEAN, recibio INT` |
 | Header descuadrado | semántica | `users.csv fue editado fuera del DBMS` |
+| Índice inexistente | semántica | `no existe un indice llamado 'idx_marca'` |
+| Índice duplicado | semántica | `ya existe un indice llamado 'idx_marca'` |
 | `= NULL` en vez de `IS NULL` | semántica | **advertencia**, no detiene |
 | `UPDATE` sin `WHERE` | semántica | **advertencia**, no detiene |
 | PK repetida | ejecución | `ya existe una fila con id = 1` |
@@ -290,51 +312,55 @@ Para que dos personas no inventen dos nombres para lo mismo:
 ```
 app/src/main/
 ├── antlr/
-│   └── Sql.g4                          la gramatica: source de verdad del sintactico
+│   └── Sql.g4                          la gramatica: fuente de verdad del sintactico
 │
 ├── resources/scripts/                  la bateria de pruebas .sql
 │
 └── kotlin/org/compiler/
-    ├── models/LexemeLocation.kt         linea y column
+    ├── models/LexemeLocation.kt         linea y columna
     │
     ├── diagnostics/                     CompilerError, Diagnostics
     │
     ├── types/
-    │   ├── Type.kt                      los 11 types, tres con parametros
-    │   ├── Value.kt                     los 8 values en execution
+    │   ├── Type.kt                      los 11 tipos, tres con parametros
+    │   ├── Value.kt                     los 8 valores en ejecucion
     │   ├── TypeRules.kt                 torre numerica, familias, operadores
     │   └── ValueCodec.kt                texto del CSV <-> Value
     │
     ├── catalog/
-    │   ├── Constraint.kt               jerarquia sellada de las 7 constraints
+    │   ├── Constraint.kt                jerarquia sellada de las 7 reglas
     │   ├── Catalog.kt                   Catalog, Table, Column
+    │   ├── Index.kt                     nombre, tabla, columna, y si es automatico
     │   ├── CatalogLoader.kt             recorre data/, lee los .json
     │   ├── CatalogWriter.kt             escribe los .json
     │   └── CatalogExtensions.kt         addConstraint y companiia
     │
     ├── storage/
     │   ├── CsvReader.kt                 RFC 4180, nulos y comillas
-    │   ├── CsvWriter.kt
+    │   ├── CsvWriter.kt                 devuelve el desplazamiento de cada fila
+    │   ├── RowReader.kt                 lee UNA fila por salto, decodificando UTF-8
+    │   ├── IndexFile.kt                 el .idx: un CSV de valor y desplazamiento
     │   └── DataDirectory.kt             la raiz data/, inyectable para tests
     │
     ├── frontend/
-    │   ├── syntax/                      SqlSyntaxAnalyzer, ParseTreeView
+    │   ├── syntax/                      SqlSyntaxAnalyzer, ParseTreeView, TokenView
     │   ├── ast/                          nodos SQL, SqlAstBuilder, AstView
     │   └── semantic/
     │       ├── symbols/Scope.kt         arbol de ambitos, ahora de consultas
-    │       ├── NameResolver.kt          tables, alias, columns, level e index
-    │       ├── OutputSchema.kt         que columnas devuelve un SELECT
-    │       └── SqlChecker.kt            types y constraints de SQL
+    │       ├── NameResolver.kt          tablas, alias, columnas, nivel e indice
+    │       ├── OutputSchema.kt          que columnas devuelve un SELECT
+    │       └── SqlChecker.kt            tipos y reglas de SQL
     │
     ├── engine/
     │   ├── Session.kt                   EL estado de una corrida, y el bucle
-    │   ├── ResultSet.kt                 columns y rows
+    │   ├── ResultSet.kt                 columnas y filas
     │   ├── RowContext.kt                la pila de filas para el anidamiento
     │   ├── Evaluator.kt                 expresiones sobre una fila
     │   ├── Operators.kt                 scan, filter, project, join, sort, ...
     │   ├── Aggregator.kt                GROUP BY y las cinco funciones
     │   ├── Writer.kt                    INSERT, UPDATE, DELETE y el DDL
-    │   └── Flush.kt                     escribe solo lo que cambio
+    │   ├── IndexPlanner.kt              elige que indice usar en un WHERE
+    │   └── Flush.kt                     escribe solo lo que cambio, indices incluidos
     │
     ├── runtime/
     │   ├── DbmsPipeline.kt              orquestador: una llamada, un resultado
@@ -352,6 +378,7 @@ app/src/main/
 | Almacenamiento | 1, 2, y el 7.1 al 7.4 | nada, arranca de una |
 | Frontend | 3, 4 | la fase 1 |
 | Semántica y motor | 5, 6 | las fases 3 y 4 |
-| Interfaz | 8 | la fase 6 |
+| Índices | 8 | las fases 6 y 7 |
+| Interfaz | 9 | la fase 6 |
 
-Las fases 0 y 9 se hacen entre todos.
+Las fases 0 y 10 se hacen entre todos.
