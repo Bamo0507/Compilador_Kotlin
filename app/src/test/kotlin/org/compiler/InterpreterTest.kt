@@ -52,12 +52,12 @@ class InterpreterTest {
     // ── Expresiones y variables ────────────────────────────────────────────
 
     @Test
-    fun `la aritmetica constante sale del plegado de la fase 4`() {
+    fun `la aritmetica constante sale del plegado`() {
         assertEquals(listOf("8"), output("print(3 + 5);"))
         assertEquals(listOf("10"), output("print(2 * (4 + 1));"))
     }
 
-    // Verifica el plegado a la izquierda de la Fase 2: (10-3)-2 = 5, no 10-(3-2) = 9.
+    // Verifica el plegado a la izquierda del AstBuilder: (10-3)-2 = 5, no 10-(3-2) = 9.
     @Test
     fun `la resta asocia a la izquierda tambien al ejecutar`() {
         assertEquals(listOf("5"), output("print(10 - 3 - 2);"))
@@ -242,7 +242,7 @@ class InterpreterTest {
     // ── Clases ─────────────────────────────────────────────────────────────
 
     // El Animal/Perro de Especificaciones.md, compartido por varios tests.
-    private val jerarquia = """
+    private val hierarchy = """
         class Animal {
           let nombre: string;
           function constructor(nombre: string) { this.nombre = nombre; }
@@ -257,7 +257,7 @@ class InterpreterTest {
     fun `un objeto guarda sus campos y los usa en sus metodos`() {
         assertEquals(
             listOf("Rex hace ruido."),
-            output("$jerarquia\nlet a: Animal = new Animal(\"Rex\");\nprint(a.hablar());")
+            output("$hierarchy\nlet a: Animal = new Animal(\"Rex\");\nprint(a.hablar());")
         )
     }
 
@@ -265,7 +265,7 @@ class InterpreterTest {
     fun `una subclase sobrescribe el metodo del padre`() {
         assertEquals(
             listOf("Toby ladra."),
-            output("$jerarquia\nlet p: Perro = new Perro(\"Toby\");\nprint(p.hablar());")
+            output("$hierarchy\nlet p: Perro = new Perro(\"Toby\");\nprint(p.hablar());")
         )
     }
 
@@ -274,7 +274,7 @@ class InterpreterTest {
     fun `el despacho usa la clase real del objeto, no el tipo declarado`() {
         assertEquals(
             listOf("Toby ladra."),
-            output("$jerarquia\nlet a: Animal = new Perro(\"Toby\");\nprint(a.hablar());")
+            output("$hierarchy\nlet a: Animal = new Perro(\"Toby\");\nprint(a.hablar());")
         )
     }
 
@@ -304,7 +304,7 @@ class InterpreterTest {
     fun `dos objetos nuevos nunca son iguales`() {
         assertEquals(
             listOf("false"),
-            output("$jerarquia\nprint(new Perro(\"Toby\") == new Perro(\"Toby\"));")
+            output("$hierarchy\nprint(new Perro(\"Toby\") == new Perro(\"Toby\"));")
         )
         assertEquals(listOf("false"), output("print([1, 2] == [1, 2]);"))
     }
@@ -320,7 +320,7 @@ class InterpreterTest {
         assertEquals(2, result.runtimeError.location.line)
     }
 
-    // El divisor es una VARIABLE: la Fase 4 no pudo decidir, se decide aqui.
+    // El divisor es una VARIABLE: el TypeChecker no pudo decidir, se decide aqui.
     // (1 / 0 literal ni llega: lo rechaza el TypeChecker en compilacion.)
     @Test
     fun `la division entre cero dinamica produce RuntimeError`() {
@@ -343,7 +343,7 @@ class InterpreterTest {
     // El try/catch de Especificaciones.md: el error se atrapa, el programa sigue.
     @Test
     fun `try catch atrapa el error de ejecucion y no aborta`() {
-        val salida = output(
+        val printed = output(
             """
             let lista: integer[] = [1, 2, 3];
             try {
@@ -355,10 +355,10 @@ class InterpreterTest {
             """.trimIndent()
         )
 
-        assertEquals(2, salida.size)
-        assertTrue(salida[0].startsWith("Error atrapado: "))
-        assertTrue(salida[0].contains("fuera de rango"))
-        assertEquals("sigo vivo", salida[1])
+        assertEquals(2, printed.size)
+        assertTrue(printed[0].startsWith("Error atrapado: "))
+        assertTrue(printed[0].contains("fuera de rango"))
+        assertEquals("sigo vivo", printed[1])
     }
 
     // Un return dentro de un try NO lo captura el catch: ControlFlowSignal no es un

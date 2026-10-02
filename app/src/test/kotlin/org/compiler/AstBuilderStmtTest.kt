@@ -1,4 +1,4 @@
-// Tests del Ticket 2.3: la mitad de sentencias y declaraciones del AstBuilder.
+// Tests de la mitad de sentencias y declaraciones del AstBuilder.
 //
 // El punto de entrada es parser.program(), el mismo que usa el compilador real.
 // Casi todos los tests parsean UNA sentencia y la sacan con stmt().
@@ -99,7 +99,7 @@ class AstBuilderStmtTest {
     }
 
     // La normalizacion es SOLO a nivel de sentencia: anidada, la asignacion sigue
-    // siendo AssignmentExpression. La Fase 4 valida las dos por separado.
+    // siendo AssignmentExpression. El TypeChecker valida las dos por separado.
     @Test
     fun `una asignacion anidada sigue siendo AssignmentExpression`() {
         val decl = assertIs<VariableDeclaration>(stmt("let y = (x = 5);"))
@@ -109,9 +109,9 @@ class AstBuilderStmtTest {
 
     @Test
     fun `una expresion que no asigna produce ExpressionStatement`() {
-        val es = assertIs<ExpressionStatement>(stmt("f();"))
+        val expressionStatement = assertIs<ExpressionStatement>(stmt("f();"))
 
-        assertIs<FunctionCall>(es.expr)
+        assertIs<FunctionCall>(expressionStatement.expr)
     }
 
     // ── Declaraciones ──────────────────────────────────────────────────────
@@ -148,15 +148,15 @@ class AstBuilderStmtTest {
     // cantidad de pares de corchetes.
     @Test
     fun `el tipo arreglo cuenta sus dimensiones`() {
-        val matriz = assertIs<VariableDeclaration>(stmt("let m: integer[][];"))
-        assertEquals("integer", matriz.declaredType?.baseName)
-        assertEquals(2, matriz.declaredType?.arrayDimensions)
-        assertEquals("integer[][]", matriz.declaredType?.name)
+        val matrix = assertIs<VariableDeclaration>(stmt("let m: integer[][];"))
+        assertEquals("integer", matrix.declaredType?.baseName)
+        assertEquals(2, matrix.declaredType?.arrayDimensions)
+        assertEquals("integer[][]", matrix.declaredType?.name)
 
-        // Una clase aun no declarada es valida aqui: la resuelve la Fase 3.
-        val perro = assertIs<VariableDeclaration>(stmt("let p: Perro;"))
-        assertEquals("Perro", perro.declaredType?.baseName)
-        assertEquals(0, perro.declaredType?.arrayDimensions)
+        // Una clase aun no declarada es valida aqui: la resuelve la Pasada 1.
+        val dog = assertIs<VariableDeclaration>(stmt("let p: Perro;"))
+        assertEquals("Perro", dog.declaredType?.baseName)
+        assertEquals(0, dog.declaredType?.arrayDimensions)
     }
 
     @Test
@@ -170,7 +170,7 @@ class AstBuilderStmtTest {
         assertEquals("a", fn.parameters[0].name)
         assertEquals("integer", fn.parameters[0].declaredType?.baseName)
         assertEquals("b", fn.parameters[1].name)
-        assertNull(fn.parameters[1].declaredType)      // sin anotar: lo infiere la Fase 4
+        assertNull(fn.parameters[1].declaredType)      // sin anotar: lo infiere el TypeChecker
         assertEquals("string", fn.returnType?.baseName)
         assertEquals(1, fn.body.statements.size)
     }
@@ -273,11 +273,11 @@ class AstBuilderStmtTest {
 
     @Test
     fun `if con y sin else`() {
-        val conElse = assertIs<If>(stmt("if (x) { } else { print(1); }"))
-        assertEquals(1, conElse.elseBranch?.statements?.size)
+        val withElse = assertIs<If>(stmt("if (x) { } else { print(1); }"))
+        assertEquals(1, withElse.elseBranch?.statements?.size)
 
-        val sinElse = assertIs<If>(stmt("if (x) { }"))
-        assertNull(sinElse.elseBranch)
+        val withoutElse = assertIs<If>(stmt("if (x) { }"))
+        assertNull(withoutElse.elseBranch)
     }
 
     @Test
@@ -323,14 +323,14 @@ class AstBuilderStmtTest {
         assertTrue(sw.cases[1].body.isEmpty())
     }
 
-    // La Fase 5 usa esta diferencia para decidir si un switch garantiza retorno:
+    // El FlowAnalyzer usa esta diferencia para decidir si un switch garantiza retorno:
     // sin default un valor no cubierto pasa de largo.
     @Test
     fun `sin default es null, default vacio es lista vacia`() {
         assertNull(assertIs<Switch>(stmt("switch (x) { }")).defaultBody)
 
-        val conDefault = assertIs<Switch>(stmt("switch (x) { default: }"))
-        assertEquals(emptyList(), conDefault.defaultBody)
+        val withDefault = assertIs<Switch>(stmt("switch (x) { default: }"))
+        assertEquals(emptyList(), withDefault.defaultBody)
     }
 
     @Test

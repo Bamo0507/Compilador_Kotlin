@@ -11,7 +11,7 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * Tests del ticket 7.3.
+ * Tests de la vista de arboles.
  *
  * Cubren las dos partes que no son dibujo: la conversion del AST a la vista neutral,
  * y el calculo de posiciones. Lo que el canvas pinta con eso no se prueba aqui.
@@ -33,23 +33,23 @@ class TreeViewTest {
         if (label.startsWith(prefix)) this
         else children.firstNotNullOfOrNull { it.find(prefix) }
 
-    // ── El AST lleva la decoracion de la Fase 4 ────────────────────────────
+    // ── El AST lleva la decoracion del TypeChecker ─────────────────────────
 
-    // Es el ejemplo del ticket: la pantalla como evidencia visible del plegado.
+    // La pantalla como evidencia visible del plegado.
     @Test
     fun `una suma constante muestra su tipo y su valor`() {
-        val suma = astView("print(3 + 5);").find("BinaryOperation +")
+        val sum = astView("print(3 + 5);").find("BinaryOperation +")
 
-        assertNotNull(suma)
-        assertEquals("integer = 8", suma.detail)
+        assertNotNull(sum)
+        assertEquals("integer = 8", sum.detail)
     }
 
     @Test
     fun `una expresion no constante muestra solo el tipo`() {
-        val suma = astView("let x: integer = 1;\nprint(x + 1);").find("BinaryOperation +")
+        val sum = astView("let x: integer = 1;\nprint(x + 1);").find("BinaryOperation +")
 
-        assertNotNull(suma)
-        assertEquals("integer", suma.detail)
+        assertNotNull(sum)
+        assertEquals("integer", sum.detail)
     }
 
     @Test
@@ -62,26 +62,26 @@ class TreeViewTest {
 
     @Test
     fun `una declaracion muestra el tipo que se escribio`() {
-        val declaracion = astView("let notas: integer[] = [1, 2];").find("let notas")
+        val declarationNode = astView("let notas: integer[] = [1, 2];").find("let notas")
 
-        assertNotNull(declaracion)
-        assertEquals("integer[]", declaracion.detail)
+        assertNotNull(declarationNode)
+        assertEquals("integer[]", declarationNode.detail)
     }
 
-    // Sin tipo de retorno la funcion es void (decision 15), y eso se ve.
+    // Sin tipo de retorno la funcion es void, y eso se ve.
     @Test
     fun `una funcion sin tipo de retorno se marca void`() {
-        val funcion = astView("function saludar() { print(1); }").find("function saludar")
+        val functionNode = astView("function saludar() { print(1); }").find("function saludar")
 
-        assertNotNull(funcion)
-        assertEquals("void", funcion.detail)
+        assertNotNull(functionNode)
+        assertEquals("void", functionNode.detail)
     }
 
     @Test
     fun `una clase muestra su superclase`() {
-        val vista = astView("class Animal { }\nclass Perro : Animal { }")
+        val treeView = astView("class Animal { }\nclass Perro : Animal { }")
 
-        assertNotNull(vista.find("class Perro : Animal"))
+        assertNotNull(treeView.find("class Perro : Animal"))
     }
 
     // ── El punto didactico de la pantalla ──────────────────────────────────
@@ -89,14 +89,14 @@ class TreeViewTest {
     // La torre de precedencia de la gramatica contra el nodo unico del AST.
     @Test
     fun `el AST de un identificador es un solo nodo y el de ANTLR es una torre`() {
-        val fuente = "let x: integer = 1;\nprint(x);"
+        val source = "let x: integer = 1;\nprint(x);"
 
-        val identificador = astView(fuente).find("Identifier x")
-        assertNotNull(identificador)
-        assertTrue(identificador.children.isEmpty())
+        val identifierNode = astView(source).find("Identifier x")
+        assertNotNull(identifierNode)
+        assertTrue(identifierNode.children.isEmpty())
 
         assertTrue(
-            parseView(fuente).count() > astView(fuente).count() * 2,
+            parseView(source).count() > astView(source).count() * 2,
             "el árbol de ANTLR debería ser mucho más grande"
         )
     }
@@ -104,24 +104,24 @@ class TreeViewTest {
     @Test
     fun `la precedencia ya esta en la forma del AST`() {
         // 3 + 5 * 2 se pliega entero, asi que se usan variables para conservar la forma.
-        val raiz = astView(
+        val root = astView(
             "let a: integer = 1;\nlet b: integer = 2;\nlet c: integer = 3;\nprint(a + b * c);"
         ).find("BinaryOperation +")
 
-        assertNotNull(raiz)
+        assertNotNull(root)
 
         // El * cuelga del +, no al reves: la multiplicacion amarra mas fuerte.
-        assertEquals("Identifier a", raiz.children[0].label)
-        assertEquals("BinaryOperation *", raiz.children[1].label)
+        assertEquals("Identifier a", root.children[0].label)
+        assertEquals("BinaryOperation *", root.children[1].label)
     }
 
     // ── El layout ──────────────────────────────────────────────────────────
 
-    private fun hoja(label: String) = TreeNodeView(label, null, emptyList())
+    private fun leafNode(label: String) = TreeNodeView(label, null, emptyList())
 
     @Test
     fun `una sola hoja ocupa una columna`() {
-        val layout = layoutTree(hoja("raiz"))
+        val layout = layoutTree(leafNode("raiz"))
 
         assertEquals(1, layout.nodes.size)
         assertEquals(1f, layout.columns)
@@ -132,11 +132,11 @@ class TreeViewTest {
     @Test
     fun `las hojas ocupan columnas consecutivas`() {
         val layout = layoutTree(
-            TreeNodeView("raiz", null, listOf(hoja("a"), hoja("b"), hoja("c")))
+            TreeNodeView("raiz", null, listOf(leafNode("a"), leafNode("b"), leafNode("c")))
         )
 
-        val columnas = layout.nodes.filter { it.depth == 1 }.map { it.column }
-        assertEquals(listOf(0f, 1f, 2f), columnas.sorted())
+        val columns = layout.nodes.filter { it.depth == 1 }.map { it.column }
+        assertEquals(listOf(0f, 1f, 2f), columns.sorted())
         assertEquals(3f, layout.columns)
     }
 
@@ -144,7 +144,7 @@ class TreeViewTest {
     @Test
     fun `un padre queda centrado sobre sus hijos`() {
         val layout = layoutTree(
-            TreeNodeView("raiz", null, listOf(hoja("a"), hoja("b"), hoja("c")))
+            TreeNodeView("raiz", null, listOf(leafNode("a"), leafNode("b"), leafNode("c")))
         )
 
         assertEquals(1f, layout.nodes.single { it.depth == 0 }.column)
@@ -161,10 +161,10 @@ class TreeViewTest {
     // Un arbol de ANTLR de verdad: hondo, con muchos nodos de un solo hijo.
     @Test
     fun `el arbol de ANTLR se posiciona completo`() {
-        val vista = parseView("print(3 + 5);")
-        val layout = layoutTree(vista)
+        val treeView = parseView("print(3 + 5);")
+        val layout = layoutTree(treeView)
 
-        assertEquals(vista.count(), layout.nodes.size)
+        assertEquals(treeView.count(), layout.nodes.size)
         assertTrue(layout.levels > 8, "niveles: ${layout.levels}")
     }
 }

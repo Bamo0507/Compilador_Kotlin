@@ -42,7 +42,7 @@ class TypeResolver(
         val baseType = resolveBaseName(typeRef)
 
         // Si el nombre base ya fallo, no envolverlo: ArrayType(ErrorType) no es
-        // ErrorType, y la Fase 4 no lo reconoceria como "error ya reportado".
+        // ErrorType, y el TypeChecker no lo reconoceria como "error ya reportado".
         if (baseType == ErrorType) return ErrorType
 
         var result = baseType

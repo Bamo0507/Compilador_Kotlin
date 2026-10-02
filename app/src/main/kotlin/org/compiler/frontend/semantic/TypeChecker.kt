@@ -149,7 +149,8 @@ class TypeChecker(
     private inline fun withScope(kind: ScopeKind, name: String, body: () -> Unit) {
         currentScope = currentScope.openChild(kind, name)
         body()
-        currentScope = currentScope.parent!!
+        // Nunca es nulo: el ambito se acaba de abrir como hijo del actual.
+        currentScope = checkNotNull(currentScope.parent)
     }
 
     // La usan if, while, do-while y for. Es lo que hace que `if (x = 1)` sea error:
@@ -225,7 +226,7 @@ class TypeChecker(
         expr.resolvedSymbol = symbol
 
         // Los contadores de vivacidad se llevan aqui y solo
-        // aqui: la Fase 5 ya no recorre el AST.
+        // aqui: el reporte de vivacidad no recorre el AST.
         //
         // Una escritura no es un uso: una variable que solo se escribe nunca
         // necesito su memoria. El maxOf es porque los cuerpos del nivel superior se
@@ -441,13 +442,13 @@ class TypeChecker(
         return decorate(expr, TypedValue(member.type))
     }
 
-    // El salto que obliga la decision 2: ClassType guarda solo
+    // El salto obligado porque ClassType guarda solo
     // el nombre para no crear un ciclo Type -> Scope -> Symbol,
     // asi que llegar a los miembros pasa por el Symbol.
     private fun classScopeOf(className: String): Scope? =
         globalScope.lookupLocal(className)?.memberScope
 
-    // Se invoca desde checkFunctionDeclaration en el ticket 4.4, cuando se entra al
+    // Se invoca desde checkFunctionDeclaration, cuando se entra al
     // ámbito de una clase y las firmas de todos los métodos ya están disponibles.
     private fun checkOverride(declaration: FunctionDeclaration, classScope: Scope) {
         // El constructor no se invoca a traves de una referencia a la superclase:
@@ -474,7 +475,8 @@ class TypeChecker(
         }
 
         // lookupMember y no lookupLocal: el constructor se hereda si la clase no
-        // declara uno propio (decision 16).
+        // declara uno propio: sin `super`, la subclase no tendria otra forma de
+        // inicializar los campos heredados.
         val constructor = classSymbol.memberScope?.lookupMember(CONSTRUCTOR_NAME)
         val expectedParameters = (constructor?.type as? FunctionType)?.parameters ?: emptyList()
         checkArguments(expr, expectedParameters, expr.arguments)
@@ -806,7 +808,7 @@ class TypeChecker(
         currentReturnType = previousReturnType
     }
 
-    // Solo el TIPO. La ubicacion —dentro o fuera de una funcion— la valida la Fase 5.
+    // Solo el TIPO. La ubicacion —dentro o fuera de una funcion— la valida el FlowAnalyzer.
     private fun checkReturn(stmt: Return) {
         val expected = currentReturnType ?: return
         val actual = stmt.value?.let { checkExpression(it).type } ?: VoidType

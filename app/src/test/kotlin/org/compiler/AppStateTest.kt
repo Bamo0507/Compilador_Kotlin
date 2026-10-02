@@ -55,17 +55,17 @@ class AppStateTest {
 
     @Test
     fun `dos instancias no comparten estado`() {
-        val primera = AppState()
-        val segunda = AppState()
+        val first = AppState()
+        val second = AppState()
 
-        primera.onSourceChanged("print(1);")
+        first.onSourceChanged("print(1);")
 
-        assertTrue(segunda.sourceContent.contains("Compiscript"))
+        assertTrue(second.sourceContent.contains("Compiscript"))
     }
 
     // ── El resultado de compilar ───────────────────────────────────────────
 
-    // El criterio del ticket: es la demostracion del dia de la presentacion, asi que
+    // Es la demostracion del dia de la presentacion, asi que
     // no puede tener un solo error.
     @Test
     fun `el programa por defecto compila sin errores y ejecuta`() {
@@ -112,7 +112,7 @@ class AppStateTest {
         assertNull(state.result?.execution)
     }
 
-    // Una recursion infinita se vuelve RuntimeError en la Fase 6, asi que llega como
+    // Una recursion infinita se vuelve RuntimeError en el Interpreter, asi que llega como
     // salida de ejecucion y no mata la ventana.
     @Test
     fun `una recursion infinita no tumba la aplicacion`() {

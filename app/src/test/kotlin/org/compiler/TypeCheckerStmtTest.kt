@@ -18,25 +18,25 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 /**
- * Tests del ticket 4.4: el recorrido de sentencias.
+ * El recorrido de sentencias del TypeChecker.
  *
- * A diferencia de los otros dos tickets del TypeChecker, estos corren el pipeline
+ * A diferencia de los tests de expresiones y llamadas, estos corren el pipeline
  * completo —parser, AST, Pasada 1, Pasada 2— porque la apertura de ambitos y las
  * declaraciones locales solo se pueden observar sobre un programa entero.
  */
 class TypeCheckerStmtTest {
 
-    private class Resultado(val global: Scope, val diagnostics: Diagnostics) {
-        val mensajes: List<String> get() = diagnostics.all().map { it.message }
+    private class CheckResult(val global: Scope, val diagnostics: Diagnostics) {
+        val messages: List<String> get() = diagnostics.all().map { it.message }
     }
 
     // Pasa por SyntaxAnalyzer y no por parser.program() directo, igual que el pipeline
     // real: ANTLR se recupera de un error sintactico y entrega un arbol con huecos, y
     // el AstBuilder revienta con esos. El fail explicito hace visible si un caso de
     // prueba no parsea, en vez de que salga como NullPointerException.
-    private fun verificar(fuente: String): Resultado {
+    private fun checkProgram(source: String): CheckResult {
         val diagnostics = Diagnostics()
-        val tree = SyntaxAnalyzer.parse(fuente, diagnostics)
+        val tree = SyntaxAnalyzer.parse(source, diagnostics)
             ?: fail("el fuente no parsea: ${diagnostics.all().map { it.message }}")
 
         val ast = AstBuilder().visit(tree) as Program
@@ -45,19 +45,19 @@ class TypeCheckerStmtTest {
         collector.collect(ast)
         TypeChecker(collector.globalScope, diagnostics).check(ast)
 
-        return Resultado(collector.globalScope, diagnostics)
+        return CheckResult(collector.globalScope, diagnostics)
     }
 
-    private fun valido(fuente: String) {
-        val r = verificar(fuente)
-        assertTrue(r.mensajes.isEmpty(), "no deberia haber errores: ${r.mensajes}")
+    private fun assertValid(source: String) {
+        val r = checkProgram(source)
+        assertTrue(r.messages.isEmpty(), "no deberia haber errores: ${r.messages}")
     }
 
-    private fun conError(fuente: String, fragmento: String) {
-        val r = verificar(fuente)
+    private fun assertError(source: String, fragment: String) {
+        val r = checkProgram(source)
         assertTrue(
-            r.mensajes.any { it.contains(fragmento) },
-            "se esperaba un error con '$fragmento', se obtuvo: ${r.mensajes}"
+            r.messages.any { it.contains(fragment) },
+            "se esperaba un error con '$fragment', se obtuvo: ${r.messages}"
         )
     }
 
@@ -65,115 +65,115 @@ class TypeCheckerStmtTest {
 
     @Test
     fun `declaraciones validas`() {
-        valido("let x: integer = 1;")
-        valido("let x: float = 1;")          // ensanchamiento
-        valido("let x = 5;")                 // tipo inferido
-        valido("const PI: integer = 314;")
+        assertValid("let x: integer = 1;")
+        assertValid("let x: float = 1;")          // ensanchamiento
+        assertValid("let x = 5;")                 // tipo inferido
+        assertValid("const PI: integer = 314;")
     }
 
     @Test
     fun `declaraciones invalidas`() {
-        conError("let x: integer = \"a\";", "No se puede asignar")
-        conError("let x: integer = 1.5;", "No se puede asignar")   // sin estrechamiento
-        conError("let x;", "necesita un tipo anotado o un valor inicial")
+        assertError("let x: integer = \"a\";", "No se puede asignar")
+        assertError("let x: integer = 1.5;", "No se puede asignar")   // sin estrechamiento
+        assertError("let x;", "necesita un tipo anotado o un valor inicial")
     }
 
     // ── Asignacion ─────────────────────────────────────────────────────────
 
     @Test
     fun `no se puede reasignar una constante`() {
-        conError("const PI: integer = 314; PI = 3;", "No se puede reasignar")
+        assertError("const PI: integer = 314; PI = 3;", "No se puede reasignar")
     }
 
     // Mutar el contenido no es reasignar la constante.
     @Test
     fun `si se puede mutar el contenido de un arreglo constante`() {
-        valido("const lista: integer[] = [1, 2]; lista[0] = 5;")
+        assertValid("const lista: integer[] = [1, 2]; lista[0] = 5;")
     }
 
     @Test
     fun `la asignacion valida el tipo`() {
-        conError("let x: integer = 1; x = \"a\";", "No se puede asignar")
+        assertError("let x: integer = 1; x = \"a\";", "No se puede asignar")
     }
 
     // ── Control de flujo ───────────────────────────────────────────────────
 
     @Test
     fun `condiciones validas`() {
-        valido("if (true) { }")
-        valido("let x: integer = 1; while (x < 3) { x = x + 1; }")
-        valido("do { } while (false);")
-        valido("for (let i: integer = 0; i < 3; i = i + 1) { }")
+        assertValid("if (true) { }")
+        assertValid("let x: integer = 1; while (x < 3) { x = x + 1; }")
+        assertValid("do { } while (false);")
+        assertValid("for (let i: integer = 0; i < 3; i = i + 1) { }")
     }
 
     @Test
     fun `condiciones no booleanas`() {
-        conError("if (1) { }", "debe ser boolean")
-        conError("while (\"a\") { }", "debe ser boolean")
-        conError("do { } while (1);", "debe ser boolean")
+        assertError("if (1) { }", "debe ser boolean")
+        assertError("while (\"a\") { }", "debe ser boolean")
+        assertError("do { } while (1);", "debe ser boolean")
     }
 
     // La asignacion devuelve el tipo de la variable, no boolean.
     @Test
     fun `if con una asignacion adentro es error`() {
-        conError("let x: integer = 1; if (x = 1) { }", "debe ser boolean")
+        assertError("let x: integer = 1; if (x = 1) { }", "debe ser boolean")
     }
 
     @Test
     fun `foreach infiere el tipo del elemento`() {
-        valido("foreach (n in [1, 2, 3]) { let doble: integer = n * 2; }")
-        conError("foreach (n in 5) { }", "solo recorre listas")
+        assertValid("foreach (n in [1, 2, 3]) { let doble: integer = n * 2; }")
+        assertError("foreach (n in 5) { }", "solo recorre listas")
     }
 
     @Test
     fun `switch exige que sujeto y case sean comparables`() {
-        valido("let x: integer = 1; switch (x) { case 1: print(x); }")
-        conError("let x: integer = 1; switch (x) { case \"a\": }", "no se puede comparar")
+        assertValid("let x: integer = 1; switch (x) { case 1: print(x); }")
+        assertError("let x: integer = 1; switch (x) { case \"a\": }", "no se puede comparar")
     }
 
     @Test
     fun `el parametro del catch es string`() {
-        valido("try { } catch (err) { print(\"Error: \" + err); }")
-        conError("try { } catch (err) { let n: integer = err; }", "No se puede asignar")
+        assertValid("try { } catch (err) { print(\"Error: \" + err); }")
+        assertError("try { } catch (err) { let n: integer = err; }", "No se puede asignar")
     }
 
     // ── Funciones ──────────────────────────────────────────────────────────
 
     @Test
     fun `retorno compatible con el declarado`() {
-        valido("function f(): integer { return 1; }")
-        conError("function f(): integer { return \"a\"; }", "debe devolver")
+        assertValid("function f(): integer { return 1; }")
+        assertError("function f(): integer { return \"a\"; }", "debe devolver")
     }
 
     // Decision 15: sin anotar es void, no se infiere del cuerpo.
     @Test
     fun `una funcion sin tipo de retorno es void`() {
-        valido("function f() { print(1); }")
-        valido("function f() { return; }")
-        conError("function f() { return 1; }", "debe devolver")
+        assertValid("function f() { print(1); }")
+        assertValid("function f() { return; }")
+        assertError("function f() { return 1; }", "debe devolver")
     }
 
     // El cuerpo no abre otro ambito: parametro y local del primer nivel chocan.
     @Test
     fun `un parametro y una local con el mismo nombre chocan`() {
-        conError("function f(x: integer) { let x: string = \"a\"; }", "ya fue declarado")
+        assertError("function f(x: integer) { let x: string = \"a\"; }", "ya fue declarado")
     }
 
     @Test
     fun `recursion`() {
-        valido("function fact(n: integer): integer { if (n <= 1) { return 1; } return n * fact(n - 1); }")
+        assertValid("function fact(n: integer): integer { if (n <= 1) { return 1; } return n * fact(n - 1); }")
     }
 
     // ── Clases ─────────────────────────────────────────────────────────────
 
     @Test
     fun `el inicializador de un campo se verifica`() {
-        conError("class A { let x: integer = \"hola\"; }", "al campo")
+        assertError("class A { let x: integer = \"hola\"; }", "al campo")
     }
 
     @Test
     fun `sobrescribir con otra firma es error`() {
-        conError(
+        assertError(
             """
             class Animal { function hablar(): string { return "ruido"; } }
             class Perro : Animal { function hablar(): integer { return 5; } }
@@ -184,7 +184,7 @@ class TypeCheckerStmtTest {
 
     @Test
     fun `sobrescribir con la misma firma es valido`() {
-        valido(
+        assertValid(
             """
             class Animal { function hablar(): string { return "ruido"; } }
             class Perro : Animal { function hablar(): string { return "guau"; } }
@@ -196,7 +196,7 @@ class TypeCheckerStmtTest {
 
     @Test
     fun `cada construccion abre su ambito con su nombre`() {
-        val r = verificar(
+        val r = checkProgram(
             """
             function procesar(): integer {
               for (let i: integer = 0; i < 3; i = i + 1) {
@@ -207,35 +207,35 @@ class TypeCheckerStmtTest {
             """.trimIndent()
         )
 
-        val procesar = r.global.children.single { it.name == "procesar" }
-        assertEquals(ScopeKind.FUNCTION, procesar.kind)
+        val process = r.global.children.single { it.name == "procesar" }
+        assertEquals(ScopeKind.FUNCTION, process.kind)
 
-        val bucle = procesar.children.single()
-        assertEquals(ScopeKind.LOOP, bucle.kind)
-        assertTrue(bucle.name.startsWith("for@"))
+        val loop = process.children.single()
+        assertEquals(ScopeKind.LOOP, loop.kind)
+        assertTrue(loop.name.startsWith("for@"))
 
-        val rama = bucle.children.single()
-        assertEquals(ScopeKind.BLOCK, rama.kind)
-        assertTrue(rama.name.startsWith("if@"))
+        val branch = loop.children.single()
+        assertEquals(ScopeKind.BLOCK, branch.kind)
+        assertTrue(branch.name.startsWith("if@"))
     }
 
     @Test
     fun `los parametros quedan en el ambito de la funcion`() {
-        val r = verificar("function suma(a: integer, b: integer): integer { return a + b; }")
+        val r = checkProgram("function suma(a: integer, b: integer): integer { return a + b; }")
 
-        val suma = r.global.children.single { it.name == "suma" }
-        val a = suma.lookupLocal("a")
+        val sum = r.global.children.single { it.name == "suma" }
+        val a = sum.lookupLocal("a")
         assertNotNull(a)
         assertEquals(DeclarationKind.PARAMETER, a.kind)
         assertEquals(IntegerType, a.type)
         assertEquals(0, a.offset)
-        assertEquals(1, suma.lookupLocal("b")!!.offset)
+        assertEquals(1, sum.lookupLocal("b")!!.offset)
     }
 
     // Una clase produce UN solo Scope: checkClassDeclaration lo recupera, no lo abre.
     @Test
     fun `una clase no duplica su ambito`() {
-        val r = verificar("class Animal { let nombre: string; }")
+        val r = checkProgram("class Animal { let nombre: string; }")
 
         assertEquals(1, r.global.children.count { it.name == "Animal" })
         assertEquals(StringType, r.global.lookupLocal("Animal")!!.memberScope!!.lookupLocal("nombre")!!.type)
@@ -243,15 +243,15 @@ class TypeCheckerStmtTest {
 
     @Test
     fun `el shadowing en un bloque anidado es valido`() {
-        valido("let x: integer = 1; { let x: string = \"a\"; }")
+        assertValid("let x: integer = 1; { let x: string = \"a\"; }")
     }
 
     // ── Estructural ────────────────────────────────────────────────────────
 
     @Test
     fun `una cascada produce un solo error`() {
-        val r = verificar("let x: integer = (1 + \"a\") * 2;")
-        assertEquals(1, r.diagnostics.count, "errores: ${r.mensajes}")
+        val r = checkProgram("let x: integer = (1 + \"a\") * 2;")
+        assertEquals(1, r.diagnostics.count, "errores: ${r.messages}")
     }
 
 
@@ -260,7 +260,7 @@ class TypeCheckerStmtTest {
     // El constructor no participa del subtipado: new nombra la clase exacta.
     @Test
     fun `una subclase puede declarar un constructor con otra firma`() {
-        valido(
+        assertValid(
             """
             class Animal { let nombre: string; function constructor(n: string) { this.nombre = n; } }
             class Perro : Animal {
@@ -274,37 +274,37 @@ class TypeCheckerStmtTest {
 
     @Test
     fun `un miembro sin this no es visible y el error sugiere this`() {
-        conError(
+        assertError(
             "class Contador { let cuenta: integer = 0; function sumar() { cuenta = cuenta + 1; } }",
             "¿Quisiste decir 'this.cuenta'?"
         )
-        conError(
+        assertError(
             "class A { function f(): integer { return 1; } function g(): integer { return f(); } }",
             "¿Quisiste decir 'this.f'?"
         )
-        conError("class A { let x: integer = 1; let y: integer = x; }", "¿Quisiste decir 'this.x'?")
+        assertError("class A { let x: integer = 1; let y: integer = x; }", "¿Quisiste decir 'this.x'?")
     }
 
     @Test
     fun `un miembro con this es valido`() {
-        valido("class Contador { let cuenta: integer = 0; function sumar() { this.cuenta = this.cuenta + 1; } }")
-        valido("class A { let x: integer = 1; let y: integer = this.x + 1; }")
+        assertValid("class Contador { let cuenta: integer = 0; function sumar() { this.cuenta = this.cuenta + 1; } }")
+        assertValid("class A { let x: integer = 1; let y: integer = this.x + 1; }")
     }
 
     // Como en TypeScript: el nombre suelto salta la clase y encuentra la global.
     @Test
     fun `un nombre suelto en un metodo encuentra la global aunque haya un campo igual`() {
-        val r = verificar(
+        val r = checkProgram(
             "let cuenta: string = \"global\"; class A { let cuenta: integer = 0; function f(): string { return cuenta; } }"
         )
-        assertTrue(r.mensajes.isEmpty(), "no deberia haber errores: ${r.mensajes}")
+        assertTrue(r.messages.isEmpty(), "no deberia haber errores: ${r.messages}")
     }
 
     // ── Orden de revision del nivel superior ───────────────────────────────
 
     @Test
     fun `una funcion puede usar una global declarada mas abajo`() {
-        valido("function mostrar() { print(contador); } let contador: integer = 5; mostrar();")
-        valido("class A { function f(): integer { return limite; } } let limite: integer = 3;")
+        assertValid("function mostrar() { print(contador); } let contador: integer = 5; mostrar();")
+        assertValid("class A { function f(): integer { return limite; } } let limite: integer = 3;")
     }
 }

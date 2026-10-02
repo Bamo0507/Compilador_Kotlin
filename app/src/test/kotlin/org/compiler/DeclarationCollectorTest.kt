@@ -23,12 +23,12 @@ import kotlin.test.assertTrue
 
 class DeclarationCollectorTest {
 
-    private class Resultado(val global: Scope, val diagnostics: Diagnostics) {
-        val mensajes: List<String> get() = diagnostics.all().map { it.message }
+    private class CheckResult(val global: Scope, val diagnostics: Diagnostics) {
+        val messages: List<String> get() = diagnostics.all().map { it.message }
     }
 
-    private fun recolectar(fuente: String): Resultado {
-        val lexer = CompiscriptLexer(CharStreams.fromString(fuente))
+    private fun collectDeclarations(source: String): CheckResult {
+        val lexer = CompiscriptLexer(CharStreams.fromString(source))
         val parser = CompiscriptParser(CommonTokenStream(lexer))
         val ast = AstBuilder().visit(parser.program()) as Program
 
@@ -36,7 +36,7 @@ class DeclarationCollectorTest {
         val collector = DeclarationCollector(diagnostics)
         collector.collect(ast)
 
-        return Resultado(collector.globalScope, diagnostics)
+        return CheckResult(collector.globalScope, diagnostics)
     }
 
     //=============================================
@@ -45,7 +45,7 @@ class DeclarationCollectorTest {
 
     @Test
     fun `registra la firma de una funcion sin entrar al cuerpo`() {
-        val r = recolectar(
+        val r = collectDeclarations(
             """
             function suma(a: integer, b: integer): integer {
               let interna: integer = 0;
@@ -54,19 +54,19 @@ class DeclarationCollectorTest {
             """.trimIndent()
         )
 
-        val suma = r.global.lookupLocal("suma")
-        assertNotNull(suma)
-        assertEquals(DeclarationKind.FUNCTION, suma.kind)
-        assertEquals(FunctionType(listOf(IntegerType, IntegerType), IntegerType), suma.type)
+        val sum = r.global.lookupLocal("suma")
+        assertNotNull(sum)
+        assertEquals(DeclarationKind.FUNCTION, sum.kind)
+        assertEquals(FunctionType(listOf(IntegerType, IntegerType), IntegerType), sum.type)
 
         // `interna` vive en el cuerpo, y la Pasada 1 no entra: la declara la Pasada 2.
         assertNull(r.global.lookupLocal("interna"))
-        assertTrue(r.mensajes.isEmpty())
+        assertTrue(r.messages.isEmpty())
     }
 
     @Test
     fun `referencia adelantada entre funciones`() {
-        val r = recolectar(
+        val r = collectDeclarations(
             """
             function a(): integer { return b(); }
             function b(): integer { return 1; }
@@ -75,27 +75,27 @@ class DeclarationCollectorTest {
 
         assertNotNull(r.global.lookupLocal("a"))
         assertNotNull(r.global.lookupLocal("b"))
-        assertTrue(r.mensajes.isEmpty())
+        assertTrue(r.messages.isEmpty())
     }
 
     // El test que justifica las dos rondas: cada clase usa a la otra como tipo de campo.
     @Test
     fun `clases mutuamente referenciadas`() {
-        val r = recolectar(
+        val r = collectDeclarations(
             """
             class A { let b: B; }
             class B { let a: A; }
             """.trimIndent()
         )
 
-        assertTrue(r.mensajes.isEmpty(), "no deberia haber errores: ${r.mensajes}")
+        assertTrue(r.messages.isEmpty(), "no deberia haber errores: ${r.messages}")
         assertEquals(ClassType("B"), r.global.lookupLocal("A")!!.memberScope!!.lookupLocal("b")!!.type)
         assertEquals(ClassType("A"), r.global.lookupLocal("B")!!.memberScope!!.lookupLocal("a")!!.type)
     }
 
     @Test
     fun `los miembros de una clase quedan en su ambito, con isMember`() {
-        val r = recolectar(
+        val r = collectDeclarations(
             """
             class Animal {
               let nombre: string;
@@ -106,21 +106,21 @@ class DeclarationCollectorTest {
 
         val animal = r.global.lookupLocal("Animal")!!.memberScope!!
 
-        val nombre = animal.lookupLocal("nombre")!!
-        assertEquals(StringType, nombre.type)
-        assertTrue(nombre.isMember)
-        assertEquals(0, nombre.offset)
+        val name = animal.lookupLocal("nombre")!!
+        assertEquals(StringType, name.type)
+        assertTrue(name.isMember)
+        assertEquals(0, name.offset)
 
-        val hablar = animal.lookupLocal("hablar")!!
-        assertEquals(FunctionType(emptyList(), StringType), hablar.type)
-        assertTrue(hablar.isMember)
-        assertEquals(1, hablar.offset)
+        val speak = animal.lookupLocal("hablar")!!
+        assertEquals(FunctionType(emptyList(), StringType), speak.type)
+        assertTrue(speak.isMember)
+        assertEquals(1, speak.offset)
     }
 
     // La herencia ENLAZA, no copia: `nombre` sigue viviendo en el ambito de Animal.
     @Test
     fun `la superclase se enlaza y el campo heredado se encuentra`() {
-        val r = recolectar(
+        val r = collectDeclarations(
             """
             class Animal { let nombre: string; }
             class Perro : Animal { function hablar(): string { return this.nombre; } }
@@ -128,17 +128,17 @@ class DeclarationCollectorTest {
         )
 
         val animal = r.global.lookupLocal("Animal")!!.memberScope!!
-        val perro = r.global.lookupLocal("Perro")!!.memberScope!!
+        val dog = r.global.lookupLocal("Perro")!!.memberScope!!
 
-        assertSame(animal, perro.superclass)
-        assertNull(perro.lookupLocal("nombre"))          // no se copio
-        assertNotNull(perro.lookupMember("nombre"))      // se encuentra por la cadena
-        assertTrue(r.mensajes.isEmpty())
+        assertSame(animal, dog.superclass)
+        assertNull(dog.lookupLocal("nombre"))          // no se copio
+        assertNotNull(dog.lookupMember("nombre"))      // se encuentra por la cadena
+        assertTrue(r.messages.isEmpty())
     }
 
     @Test
     fun `las clases quedan enumerables desde globalScope`() {
-        val r = recolectar("class A { } class B { } function f() { }")
+        val r = collectDeclarations("class A { } class B { } function f() { }")
 
         assertEquals(listOf("A", "B"), r.global.children.map { it.name })
     }
@@ -149,49 +149,49 @@ class DeclarationCollectorTest {
 
     @Test
     fun `dos funciones con el mismo nombre`() {
-        val r = recolectar("function f(): integer { return 1; } function f(): integer { return 2; }")
+        val r = collectDeclarations("function f(): integer { return 1; } function f(): integer { return 2; }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("ya fue declarado"))
+        assertTrue(r.messages.first().contains("ya fue declarado"))
     }
 
     @Test
     fun `dos clases con el mismo nombre no dejan un ambito huerfano`() {
-        val r = recolectar("class Perro { let nombre: string; } class Perro { let raza: string; }")
+        val r = collectDeclarations("class Perro { let nombre: string; } class Perro { let raza: string; }")
 
         assertEquals(1, r.diagnostics.count)
 
         // Un solo ambito Perro, y sin el campo de la segunda declaracion.
         assertEquals(1, r.global.children.count { it.name == "Perro" })
-        val perro = r.global.lookupLocal("Perro")!!.memberScope!!
-        assertNotNull(perro.lookupLocal("nombre"))
-        assertNull(perro.lookupLocal("raza"))
+        val dog = r.global.lookupLocal("Perro")!!.memberScope!!
+        assertNotNull(dog.lookupLocal("nombre"))
+        assertNull(dog.lookupLocal("raza"))
     }
 
     @Test
     fun `dos campos con el mismo nombre en la misma clase`() {
-        val r = recolectar("class A { let x: integer; let x: string; }")
+        val r = collectDeclarations("class A { let x: integer; let x: string; }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("ya fue declarado"))
+        assertTrue(r.messages.first().contains("ya fue declarado"))
     }
 
     @Test
     fun `heredar de algo que no es una clase declarada`() {
-        val r = recolectar("class Perro : NoExiste { }")
+        val r = collectDeclarations("class Perro : NoExiste { }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("no es una clase declarada"))
+        assertTrue(r.messages.first().contains("no es una clase declarada"))
     }
 
     // Sin la deteccion, lookupMember entraria en recursion infinita y el compilador
     // colgaria en vez de dar un error.
     @Test
     fun `herencia circular se reporta y el compilador no cuelga`() {
-        val r = recolectar("class A : B { } class B : A { }")
+        val r = collectDeclarations("class A : B { } class B : A { }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("Herencia circular"))
+        assertTrue(r.messages.first().contains("Herencia circular"))
 
         // La cadena quedo acotada: una de las dos no tiene superclase.
         val a = r.global.lookupLocal("A")!!.memberScope!!
@@ -201,34 +201,34 @@ class DeclarationCollectorTest {
 
     @Test
     fun `herencia de si misma`() {
-        val r = recolectar("class A : A { }")
+        val r = collectDeclarations("class A : A { }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("Herencia circular"))
+        assertTrue(r.messages.first().contains("Herencia circular"))
     }
 
     @Test
     fun `un campo de tipo inexistente`() {
-        val r = recolectar("class A { let x: NoExiste; }")
+        val r = collectDeclarations("class A { let x: NoExiste; }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("no está declarado"))
+        assertTrue(r.messages.first().contains("no está declarado"))
     }
 
     @Test
     fun `un campo sin tipo anotado`() {
-        val r = recolectar("class A { let x = 5; }")
+        val r = collectDeclarations("class A { let x = 5; }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("necesita un tipo anotado"))
+        assertTrue(r.messages.first().contains("necesita un tipo anotado"))
     }
 
     @Test
     fun `el constructor no puede declarar tipo de retorno`() {
-        val r = recolectar("class A { function constructor(): integer { return 1; } }")
+        val r = collectDeclarations("class A { function constructor(): integer { return 1; } }")
 
         assertEquals(1, r.diagnostics.count)
-        assertTrue(r.mensajes.first().contains("no puede declarar tipo de retorno"))
+        assertTrue(r.messages.first().contains("no puede declarar tipo de retorno"))
     }
 
     //=============================================
@@ -239,18 +239,18 @@ class DeclarationCollectorTest {
     // referenciables hacia adelante.
     @Test
     fun `no registra variables del nivel superior`() {
-        val r = recolectar("let x: integer = 5; const PI: integer = 314;")
+        val r = collectDeclarations("let x: integer = 5; const PI: integer = 314;")
 
         assertNull(r.global.lookupLocal("x"))
         assertNull(r.global.lookupLocal("PI"))
-        assertTrue(r.mensajes.isEmpty())
+        assertTrue(r.messages.isEmpty())
     }
 
     @Test
     fun `no entra a los bloques`() {
-        val r = recolectar("{ function interna(): integer { return 1; } }")
+        val r = collectDeclarations("{ function interna(): integer { return 1; } }")
 
         assertNull(r.global.lookupLocal("interna"))
-        assertTrue(r.mensajes.isEmpty())
+        assertTrue(r.messages.isEmpty())
     }
 }

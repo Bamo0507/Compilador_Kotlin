@@ -44,15 +44,15 @@ class SyntaxAnalyzerTest {
         assertNull(tree)
 
         // Un LexerError por cada '@': el lexer no agrupa caracteres desconocidos.
-        val lexicos = diagnostics.lexical()
-        assertEquals(3, lexicos.size)
-        assertEquals(listOf(9, 10, 11), lexicos.map { it.location.position })
+        val lexicalErrors = diagnostics.lexical()
+        assertEquals(3, lexicalErrors.size)
+        assertEquals(listOf(9, 10, 11), lexicalErrors.map { it.location.position })
 
         // Y ademas falla el parser, porque el stream le llega con hoyos.
         assertTrue(diagnostics.syntactic().isNotEmpty())
     }
 
-    // El unico calculo del ticket: ANTLR cuenta columnas desde 0 y LexemeLocation
+    // El unico calculo propio del SyntaxAnalyzer: ANTLR cuenta columnas desde 0 y LexemeLocation
     // desde 1. Sin este test, un `+1` faltante o de mas pasa desapercibido.
     @Test
     fun `las columnas se reportan 1-based`() {

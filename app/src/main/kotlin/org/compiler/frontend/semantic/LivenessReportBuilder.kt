@@ -7,7 +7,7 @@ import org.compiler.frontend.semantic.symbols.Scope
 /**
  * Arma el reporte de vivacidad recorriendo el ARBOL DE AMBITOS.
  *
- * No recorre el AST ni lleva cursor: la Fase 4 ya dejo los contadores en cada Symbol
+ * No recorre el AST ni lleva cursor: el TypeChecker ya dejo los contadores en cada Symbol
  * mientras verificaba. Aqui solo se leen y se agrupan.
  *
  * No produce errores: una variable declarada y nunca usada no lo es. Esto va a una

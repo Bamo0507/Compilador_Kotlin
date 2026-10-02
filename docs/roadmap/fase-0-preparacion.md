@@ -448,7 +448,7 @@ los campos se inicializan en orden. Queda documentado.
 
 ## Ticket 0.3: Deuda de convenciones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.2, para no editar los mismos archivos en paralelo
 
 **Archivos:** solo cambios de forma, sin cambiar comportamiento.

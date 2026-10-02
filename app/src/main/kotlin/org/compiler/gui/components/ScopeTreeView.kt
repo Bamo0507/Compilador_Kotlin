@@ -13,8 +13,8 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.KeyboardArrowRight
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -35,7 +35,7 @@ import org.compiler.frontend.semantic.symbols.ScopeKind
  * El arbol de ambitos completo, navegable.
  *
  * Que este arbol se pueda recorrer ENTERO —incluidos los bloques que ya se
- * cerraron— es la demostracion visual de la decision 7: los ambitos no se descartan
+ * cerraron— es la demostracion visual de que los ambitos no se descartan
  * al salir de ellos. Si se hubieran descartado, aqui solo se veria `global`.
  */
 @Composable
@@ -138,7 +138,7 @@ private fun ScopeRow(
             Spacer(modifier = Modifier.size(18.dp))
         } else {
             Icon(
-                imageVector = if (isCollapsed) Icons.Filled.KeyboardArrowRight
+                imageVector = if (isCollapsed) Icons.AutoMirrored.Filled.KeyboardArrowRight
                 else Icons.Filled.KeyboardArrowDown,
                 contentDescription = null,
                 tint = colors.onSurfaceVariant,

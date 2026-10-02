@@ -12,9 +12,9 @@ import kotlin.test.assertTrue
 /**
  * Verifica que la generacion de ANTLR esta bien configurada.
  *
- * No prueba el lenguaje: prueba el BUILD. Si algo de la configuracion del ticket 0.4
- * se rompe —la bandera -visitor, el -package, el dependsOn—, falla aqui y no
- * veinte tickets mas adelante.
+ * No prueba el lenguaje: prueba el BUILD. Si algo de la configuracion de Gradle se
+ * rompe —la bandera -visitor, el -package, el dependsOn—, falla aqui y no en una
+ * fase del compilador que no tiene la culpa.
  */
 class AntlrSmokeTest {
 
@@ -85,7 +85,7 @@ class AntlrSmokeTest {
     // El lexer de ANTLR usa coincidencia mas larga, asi que ante `3.14` gana
     // FloatLiteral (4 caracteres) sobre IntegerLiteral (1).
     @Test
-    fun `mezclar entero y flotante parsea, el tipo lo valida la Fase 4`() {
+    fun `mezclar entero y flotante parsea, el tipo lo valida el TypeChecker`() {
         val parser = parse("let suma = 1.5 + 2;")
 
         parser.program()
@@ -118,13 +118,13 @@ class AntlrSmokeTest {
 
     // La gramatica tiene 4 reglas con alternativas etiquetadas, asi que ANTLR genera
     // 42 metodos por regla + 10 por etiqueta. Si el numero cambia, cambio la
-    // gramatica — y eso obliga a revisar el AstBuilder de la Fase 2.
+    // gramatica — y eso obliga a revisar el AstBuilder.
     @Test
     fun `el BaseVisitor tiene un metodo por regla y por etiqueta`() {
-        val metodos = org.compiler.parser.CompiscriptBaseVisitor::class.java
+        val methods = org.compiler.parser.CompiscriptBaseVisitor::class.java
             .declaredMethods
             .count { it.name.startsWith("visit") }
 
-        assertEquals(52, metodos)
+        assertEquals(52, methods)
     }
 }

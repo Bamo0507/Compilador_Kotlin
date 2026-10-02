@@ -21,7 +21,7 @@ class TypeResolverTest {
 
     private val location = LexemeLocation(1, 1)
 
-    private fun globalConPerro(): Scope {
+    private fun globalWithDog(): Scope {
         val global = Scope(ScopeKind.GLOBAL, "global", parent = null)
         global.declare(
             Symbol(
@@ -43,7 +43,7 @@ class TypeResolverTest {
     @Test
     fun `resuelve los primitivos`() {
         val diagnostics = Diagnostics()
-        val resolver = TypeResolver(globalConPerro(), diagnostics)
+        val resolver = TypeResolver(globalWithDog(), diagnostics)
 
         assertEquals(IntegerType, resolver.resolve(ref("integer")))
         assertTrue(diagnostics.all().isEmpty())
@@ -51,7 +51,7 @@ class TypeResolverTest {
 
     @Test
     fun `cada dimension envuelve en un ArrayType`() {
-        val resolver = TypeResolver(globalConPerro(), Diagnostics())
+        val resolver = TypeResolver(globalWithDog(), Diagnostics())
 
         assertEquals(ArrayType(IntegerType), resolver.resolve(ref("integer", 1)))
         assertEquals(
@@ -63,7 +63,7 @@ class TypeResolverTest {
     @Test
     fun `resuelve una clase declarada`() {
         val diagnostics = Diagnostics()
-        val resolver = TypeResolver(globalConPerro(), diagnostics)
+        val resolver = TypeResolver(globalWithDog(), diagnostics)
 
         assertEquals(ClassType("Perro"), resolver.resolve(ref("Perro")))
         assertTrue(diagnostics.all().isEmpty())
@@ -72,7 +72,7 @@ class TypeResolverTest {
     @Test
     fun `una clase no declarada es ErrorType y se reporta`() {
         val diagnostics = Diagnostics()
-        val resolver = TypeResolver(globalConPerro(), diagnostics)
+        val resolver = TypeResolver(globalWithDog(), diagnostics)
 
         assertEquals(ErrorType, resolver.resolve(ref("Gato")))
         assertEquals(1, diagnostics.count)
@@ -83,7 +83,7 @@ class TypeResolverTest {
     // produciria ClassType("contador"): un tipo que apunta a una clase inexistente.
     @Test
     fun `un nombre que existe pero no es clase es ErrorType`() {
-        val global = globalConPerro()
+        val global = globalWithDog()
         global.declare(
             Symbol(
                 name = "contador",
@@ -100,12 +100,12 @@ class TypeResolverTest {
         assertEquals(1, diagnostics.count)
     }
 
-    // ArrayType(ErrorType) no es ErrorType, y la Fase 4 no lo reconoceria como error ya
+    // ArrayType(ErrorType) no es ErrorType, y el TypeChecker no lo reconoceria como error ya
     // reportado: emitiria un segundo error por la misma equivocacion.
     @Test
     fun `un arreglo de tipo inexistente corta en ErrorType, sin envolver`() {
         val diagnostics = Diagnostics()
-        val resolver = TypeResolver(globalConPerro(), diagnostics)
+        val resolver = TypeResolver(globalWithDog(), diagnostics)
 
         assertEquals(ErrorType, resolver.resolve(ref("Gato", 1)))
         assertEquals(1, diagnostics.count)
@@ -114,7 +114,7 @@ class TypeResolverTest {
     @Test
     fun `un TypeReference nulo devuelve null sin reportar`() {
         val diagnostics = Diagnostics()
-        val resolver = TypeResolver(globalConPerro(), diagnostics)
+        val resolver = TypeResolver(globalWithDog(), diagnostics)
 
         assertNull(resolver.resolve(null))
         assertTrue(diagnostics.all().isEmpty())
@@ -122,7 +122,7 @@ class TypeResolverTest {
 
     @Test
     fun `dos resoluciones del mismo tipo son iguales`() {
-        val resolver = TypeResolver(globalConPerro(), Diagnostics())
+        val resolver = TypeResolver(globalWithDog(), Diagnostics())
 
         assertEquals(resolver.resolve(ref("integer", 1)), resolver.resolve(ref("integer", 1)))
     }
@@ -131,10 +131,10 @@ class TypeResolverTest {
     // deriva de Type.name.
     @Test
     fun `los cuatro primitivos se resuelven por su name`() {
-        val resolver = TypeResolver(globalConPerro(), Diagnostics())
+        val resolver = TypeResolver(globalWithDog(), Diagnostics())
 
-        listOf("integer", "float", "string", "boolean").forEach { nombre ->
-            assertEquals(nombre, resolver.resolve(ref(nombre))?.name)
+        listOf("integer", "float", "string", "boolean").forEach { name ->
+            assertEquals(name, resolver.resolve(ref(name))?.name)
         }
     }
 }

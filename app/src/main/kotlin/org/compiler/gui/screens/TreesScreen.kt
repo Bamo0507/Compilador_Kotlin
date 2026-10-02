@@ -84,7 +84,7 @@ fun TreesScreen(
 
             if (mode != TreeMode.PARSE_TREE) {
                 TreePanel(
-                    title = "AST propio, con los tipos de la Fase 4",
+                    title = "AST decorado con tipos",
                     modifier = Modifier
                         .weight(1f)
                         .fillMaxHeight()

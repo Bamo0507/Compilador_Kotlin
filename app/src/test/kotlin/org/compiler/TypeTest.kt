@@ -78,26 +78,26 @@ class TypeTest {
 
     @Test
     fun `cada tipo tiene un nombre no vacio`() {
-        val todos = listOf(
+        val allErrors = listOf(
             IntegerType, FloatType, StringType, BooleanType,
             VoidType, NullType, ErrorType,
             ArrayType(IntegerType), ClassType("Perro"),
             FunctionType(emptyList(), VoidType)
         )
 
-        assertTrue(todos.all { it.name.isNotBlank() })
+        assertTrue(allErrors.all { it.name.isNotBlank() })
     }
 
     // Este `when` no tiene rama `else`: si se agrega un Type nuevo y no se cubre aqui,
     // el test NO COMPILA. Es la prueba de que el sealed esta completo.
     @Test
     fun `un when sobre Type sin else compila`() {
-        assertEquals("primitivo", categoria(IntegerType))
-        assertEquals("especial", categoria(ErrorType))
-        assertEquals("compuesto", categoria(ArrayType(IntegerType)))
+        assertEquals("primitivo", category(IntegerType))
+        assertEquals("especial", category(ErrorType))
+        assertEquals("compuesto", category(ArrayType(IntegerType)))
     }
 
-    private fun categoria(type: Type): String = when (type) {
+    private fun category(type: Type): String = when (type) {
         IntegerType, FloatType, StringType, BooleanType -> "primitivo"
         VoidType, NullType, ErrorType -> "especial"
         is ArrayType, is ClassType, is FunctionType -> "compuesto"

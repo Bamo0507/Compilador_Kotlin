@@ -424,7 +424,7 @@ class AstBuilder : CompiscriptBaseVisitor<Node>() {
             cases = ctx.switchCase().map { visit(it) as SwitchCase },
 
             // El `?` distingue "sin default" (null) de "default vacio" (lista vacia), y
-            // la Fase 5 usa esa diferencia.
+            // el FlowAnalyzer usa esa diferencia.
             defaultBody = ctx.defaultCase()?.statement()?.map { visit(it) as Statement },
             location = locationOf(ctx)
         )

@@ -10,13 +10,13 @@ import kotlin.test.assertTrue
 
 class DiagnosticsTest {
 
-    private fun lexico(line: Int, position: Int) =
+    private fun lexical(line: Int, position: Int) =
         CompilerError.LexerError(LexemeLocation(line, position), "caracter no reconocido")
 
-    private fun sintactico(line: Int, position: Int) =
+    private fun syntactic(line: Int, position: Int) =
         CompilerError.ParserError(LexemeLocation(line, position), "se esperaba ';'")
 
-    private fun semantico(line: Int, position: Int) =
+    private fun semantic(line: Int, position: Int) =
         CompilerError.SemanticError(LexemeLocation(line, position), "tipo incompatible")
 
     @Test
@@ -28,39 +28,39 @@ class DiagnosticsTest {
         assertTrue(diagnostics.all().isEmpty())
     }
 
-    // Esta es la razon de ser del ticket: con un `object` habia que acordarse de
+    // Esta es la razon de que Diagnostics sea una clase: con un `object` habia que acordarse de
     // limpiar el estado global antes de cada corrida.
     @Test
     fun `dos instancias no comparten errores`() {
-        val primera = Diagnostics()
-        val segunda = Diagnostics()
+        val first = Diagnostics()
+        val second = Diagnostics()
 
-        primera.report(lexico(1, 1))
+        first.report(lexical(1, 1))
 
-        assertEquals(1, primera.count)
-        assertEquals(0, segunda.count)
-        assertFalse(segunda.hasErrors)
+        assertEquals(1, first.count)
+        assertEquals(0, second.count)
+        assertFalse(second.hasErrors)
     }
 
     @Test
     fun `all ordena por linea y luego por columna`() {
         val diagnostics = Diagnostics()
-        diagnostics.report(semantico(9, 5))
-        diagnostics.report(lexico(3, 12))
-        diagnostics.report(sintactico(3, 4))
+        diagnostics.report(semantic(9, 5))
+        diagnostics.report(lexical(3, 12))
+        diagnostics.report(syntactic(3, 4))
 
-        val ubicaciones = diagnostics.all().map { it.location.line to it.location.position }
+        val locations = diagnostics.all().map { it.location.line to it.location.position }
 
-        assertEquals(listOf(3 to 4, 3 to 12, 9 to 5), ubicaciones)
+        assertEquals(listOf(3 to 4, 3 to 12, 9 to 5), locations)
     }
 
     @Test
     fun `cada nivel se filtra por separado`() {
         val diagnostics = Diagnostics()
-        diagnostics.report(lexico(1, 1))
-        diagnostics.report(sintactico(2, 1))
-        diagnostics.report(sintactico(3, 1))
-        diagnostics.report(semantico(4, 1))
+        diagnostics.report(lexical(1, 1))
+        diagnostics.report(syntactic(2, 1))
+        diagnostics.report(syntactic(3, 1))
+        diagnostics.report(semantic(4, 1))
 
         assertEquals(1, diagnostics.lexical().size)
         assertEquals(2, diagnostics.syntactic().size)

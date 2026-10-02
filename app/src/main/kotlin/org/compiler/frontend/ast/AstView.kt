@@ -40,7 +40,7 @@ import org.compiler.frontend.ast.models.While
  * Convierte el AST a la vista neutral que dibuja la GUI.
  *
  * En `detail` van el tipo y el valor constante que dejo el TypeChecker: es lo que
- * hace de esta pantalla la evidencia visible de la Fase 4.
+ * hace de esta pantalla la evidencia visible del analisis semantico.
  */
 fun Program.toTreeView(): TreeNodeView =
     TreeNodeView("Program", detail = null, children = statements.map { it.toView() })

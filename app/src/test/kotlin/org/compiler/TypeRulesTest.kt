@@ -19,7 +19,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Tests del ticket 4.1: la tabla de verdad del lenguaje.
+ * La tabla de verdad del lenguaje.
  *
  * Se prueban con tipos puros, sin construir AST ni ambitos: es lo que compra que
  * TypeRules no conozca ni uno ni otro.
@@ -41,8 +41,8 @@ class TypeRulesTest {
     }
 
     private val animal = ClassType("Animal")
-    private val perro = ClassType("Perro")
-    private val gato = ClassType("Gato")
+    private val dog = ClassType("Perro")
+    private val cat = ClassType("Gato")
 
     // ── A1/A2/A3: aritmetica ───────────────────────────────────────────────
 
@@ -128,7 +128,7 @@ class TypeRulesTest {
 
     @Test
     fun `igualdad de clase con null da boolean`() {
-        assertEquals(BooleanType, rules.equality(perro, NullType))
+        assertEquals(BooleanType, rules.equality(dog, NullType))
         assertEquals(BooleanType, rules.equality(NullType, ArrayType(IntegerType)))
     }
 
@@ -162,15 +162,15 @@ class TypeRulesTest {
 
     @Test
     fun `una subclase cabe en su superclase pero no al reves`() {
-        assertTrue(rules.isAssignable(target = animal, source = perro))
-        assertFalse(rules.isAssignable(target = perro, source = animal))
+        assertTrue(rules.isAssignable(target = animal, source = dog))
+        assertFalse(rules.isAssignable(target = dog, source = animal))
         // Hermanas tampoco: un Gato no es un Perro.
-        assertFalse(rules.isAssignable(target = perro, source = gato))
+        assertFalse(rules.isAssignable(target = dog, source = cat))
     }
 
     @Test
     fun `null cabe en clases y arreglos pero no en primitivos`() {
-        assertTrue(rules.isAssignable(target = perro, source = NullType))
+        assertTrue(rules.isAssignable(target = dog, source = NullType))
         assertTrue(rules.isAssignable(target = ArrayType(IntegerType), source = NullType))
         assertFalse(rules.isAssignable(target = IntegerType, source = NullType))
         assertFalse(rules.isAssignable(target = StringType, source = NullType))
@@ -180,7 +180,7 @@ class TypeRulesTest {
     @Test
     fun `el arreglo vacio encaja con cualquier arreglo`() {
         assertTrue(rules.isAssignable(target = ArrayType(IntegerType), source = ArrayType(NullType)))
-        assertTrue(rules.isAssignable(target = ArrayType(perro), source = ArrayType(NullType)))
+        assertTrue(rules.isAssignable(target = ArrayType(dog), source = ArrayType(NullType)))
     }
 
     // S5, decision documentada: el agujero de Java, cerrado en compilacion.
@@ -188,7 +188,7 @@ class TypeRulesTest {
     fun `los arreglos no son covariantes`() {
         assertFalse(rules.isAssignable(target = ArrayType(FloatType), source = ArrayType(IntegerType)))
         // Ni siquiera con subtipado adentro: Perro[] no cabe en Animal[].
-        assertFalse(rules.isAssignable(target = ArrayType(animal), source = ArrayType(perro)))
+        assertFalse(rules.isAssignable(target = ArrayType(animal), source = ArrayType(dog)))
     }
 
     @Test
@@ -225,22 +225,22 @@ class TypeRulesTest {
 
     @Test
     fun `unify de clases hermanas da el ancestro comun`() {
-        assertEquals(animal, rules.unify(perro, gato))
+        assertEquals(animal, rules.unify(dog, cat))
         // Y de una clase con su superclase, la superclase.
-        assertEquals(animal, rules.unify(perro, animal))
+        assertEquals(animal, rules.unify(dog, animal))
     }
 
     @Test
     fun `unify sin tipo comun devuelve null`() {
         assertNull(rules.unify(StringType, BooleanType))
-        assertNull(rules.unify(IntegerType, perro))
+        assertNull(rules.unify(IntegerType, dog))
         // Dos clases sin ancestro comun tampoco unifican.
-        assertNull(rules.unify(perro, ClassType("Piedra")))
+        assertNull(rules.unify(dog, ClassType("Piedra")))
     }
 
     @Test
     fun `unify de null con clase da la clase`() {
-        assertEquals(perro, rules.unify(NullType, perro))
+        assertEquals(dog, rules.unify(NullType, dog))
         assertEquals(ArrayType(IntegerType), rules.unify(ArrayType(IntegerType), NullType))
     }
 
@@ -271,10 +271,10 @@ class TypeRulesTest {
 
     @Test
     fun `dos jerarquias distintas dan respuestas distintas`() {
-        val conHerencia = TypeRules { if (it == "Perro") "Animal" else null }
-        val sinHerencia = TypeRules { null }
+        val withInheritance = TypeRules { if (it == "Perro") "Animal" else null }
+        val withoutInheritance = TypeRules { null }
 
-        assertTrue(conHerencia.isAssignable(target = animal, source = perro))
-        assertFalse(sinHerencia.isAssignable(target = animal, source = perro))
+        assertTrue(withInheritance.isAssignable(target = animal, source = dog))
+        assertFalse(withoutInheritance.isAssignable(target = animal, source = dog))
     }
 }

@@ -1,10 +1,44 @@
 package org.compiler.interpreter
 
-import org.compiler.frontend.ast.models.*
+import org.compiler.frontend.ast.models.ArrayLiteral
+import org.compiler.frontend.ast.models.Assignment
+import org.compiler.frontend.ast.models.AssignmentExpression
+import org.compiler.frontend.ast.models.BinaryOperation
+import org.compiler.frontend.ast.models.BinaryOperator
+import org.compiler.frontend.ast.models.Block
+import org.compiler.frontend.ast.models.Break
+import org.compiler.frontend.ast.models.ClassDeclaration
+import org.compiler.frontend.ast.models.Continue
+import org.compiler.frontend.ast.models.DoWhile
+import org.compiler.frontend.ast.models.Expression
+import org.compiler.frontend.ast.models.ExpressionStatement
+import org.compiler.frontend.ast.models.For
+import org.compiler.frontend.ast.models.ForEach
+import org.compiler.frontend.ast.models.FunctionCall
+import org.compiler.frontend.ast.models.FunctionDeclaration
+import org.compiler.frontend.ast.models.Identifier
+import org.compiler.frontend.ast.models.If
+import org.compiler.frontend.ast.models.IndexAccess
+import org.compiler.frontend.ast.models.Literal
+import org.compiler.frontend.ast.models.ObjectCreation
+import org.compiler.frontend.ast.models.OperatorGroup
+import org.compiler.frontend.ast.models.Print
+import org.compiler.frontend.ast.models.Program
+import org.compiler.frontend.ast.models.PropertyAccess
+import org.compiler.frontend.ast.models.Return
+import org.compiler.frontend.ast.models.Statement
+import org.compiler.frontend.ast.models.Switch
+import org.compiler.frontend.ast.models.TernaryOperation
+import org.compiler.frontend.ast.models.ThisReference
+import org.compiler.frontend.ast.models.TryCatch
+import org.compiler.frontend.ast.models.UnaryOperation
+import org.compiler.frontend.ast.models.UnaryOperator
+import org.compiler.frontend.ast.models.VariableDeclaration
+import org.compiler.frontend.ast.models.While
 import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
-import org.compiler.frontend.semantic.wrapToInteger
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.StringType
+import org.compiler.frontend.semantic.wrapToInteger
 import org.compiler.models.LexemeLocation
 
 // El resultado de ejecutar un programa.
@@ -18,8 +52,8 @@ data class ExecutionResult(
  * Ejecuta el AST ya validado.
  *
  * La misma forma que el TypeChecker —una funcion por construccion del lenguaje— pero
- * en vez de devolver un tipo, devuelve un VALOR. Corre despues de las fases 3-5, asi
- * que puede asumir que todo esta bien tipado: no revalida nada.
+ * en vez de devolver un tipo, devuelve un VALOR. Corre despues del analisis
+ * semantico, asi que puede asumir que todo esta bien tipado: no revalida nada.
  */
 class Interpreter {
 
@@ -274,7 +308,7 @@ class Interpreter {
     // ===================================================
 
     private fun evaluateObjectCreation(expr: ObjectCreation): RuntimeValue {
-        // La Fase 3 ya valido que la clase existe, pero solo se registran las del
+        // La Pasada 1 ya valido que la clase existe, pero solo se registran las del
         // nivel superior: una anidada en un bloque llegaria aqui sin declaracion.
         val declaration = classDeclarations[expr.className]
             ?: throw RuntimeError(expr.location,
@@ -559,7 +593,7 @@ class Interpreter {
     //  Ayudantes de conversion
     // =================================================
 
-    // Un valor plegado por la Fase 4 (o el `value` de un Literal) a RuntimeValue.
+    // Un valor plegado por el TypeChecker (o el `value` de un Literal) a RuntimeValue.
     private fun toRuntimeValue(constant: Any?): RuntimeValue = when (constant) {
         null -> NullValue
         is Long -> IntValue(constant)

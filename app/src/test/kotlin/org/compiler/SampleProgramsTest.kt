@@ -18,31 +18,31 @@ class SampleProgramsTest {
 
     @Test
     fun `estan los dos puntos de partida y los dos grupos de la bateria`() {
-        val grupos = SamplePrograms.grouped()
+        val groups = SamplePrograms.grouped()
 
         assertEquals(
             listOf(SampleGroup.STARTER, SampleGroup.VALID, SampleGroup.INVALID),
-            grupos.keys.toList()
+            groups.keys.toList()
         )
-        assertEquals(2, grupos.getValue(SampleGroup.STARTER).size)
-        assertTrue(grupos.getValue(SampleGroup.VALID).isNotEmpty())
-        assertTrue(grupos.getValue(SampleGroup.INVALID).isNotEmpty())
+        assertEquals(2, groups.getValue(SampleGroup.STARTER).size)
+        assertTrue(groups.getValue(SampleGroup.VALID).isNotEmpty())
+        assertTrue(groups.getValue(SampleGroup.INVALID).isNotEmpty())
     }
 
     @Test
     fun `la opcion en blanco no trae codigo`() {
-        val enBlanco = SamplePrograms.byId(SamplePrograms.BLANK_ID)
+        val blank = SamplePrograms.byId(SamplePrograms.BLANK_ID)
 
-        assertNotNull(enBlanco)
-        assertEquals("", enBlanco.source)
+        assertNotNull(blank)
+        assertEquals("", blank.source)
     }
 
     @Test
     fun `el programa por defecto es la demostracion y compila limpio`() {
-        val porDefecto = SamplePrograms.default
+        val defaultSample = SamplePrograms.default
 
-        assertEquals(SamplePrograms.DEFAULT_ID, porDefecto.id)
-        assertTrue(CompilerPipeline.compile(porDefecto.source).errors.isEmpty())
+        assertEquals(SamplePrograms.DEFAULT_ID, defaultSample.id)
+        assertTrue(CompilerPipeline.compile(defaultSample.source).errors.isEmpty())
     }
 
     // El nombre sale de la anotacion `// NOMBRE:` del propio archivo, no del nombre
@@ -50,18 +50,18 @@ class SampleProgramsTest {
     // aritmética".
     @Test
     fun `cada programa declara su nombre legible`() {
-        val sinNombre = SamplePrograms.all
+        val unnamed = SamplePrograms.all
             .filter { it.group != SampleGroup.STARTER }
             .filterNot { it.source.startsWith("// NOMBRE:") }
 
-        assertTrue(sinNombre.isEmpty(), "sin anotación // NOMBRE: ${sinNombre.map { it.id }}")
+        assertTrue(unnamed.isEmpty(), "sin anotación // NOMBRE: ${unnamed.map { it.id }}")
     }
 
     @Test
     fun `no hay nombres repetidos en el menu`() {
-        val nombres = SamplePrograms.all.map { it.name }
+        val names = SamplePrograms.all.map { it.name }
 
-        assertEquals(nombres.size, nombres.toSet().size, "nombres duplicados en $nombres")
+        assertEquals(names.size, names.toSet().size, "nombres duplicados en $names")
     }
 
     // El punto del selector: cargar un ejemplo y darle a compilar tiene que

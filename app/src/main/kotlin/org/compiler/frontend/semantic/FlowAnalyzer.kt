@@ -148,7 +148,7 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
 
     // Si una funcion declara tipo de retorno, TODOS sus caminos deben devolver algo.
     private fun checkAllPathsReturn(decl: FunctionDeclaration) {
-        // Sin tipo declarado la funcion es void: no tiene que retornar (decision 15).
+        // Sin tipo declarado la funcion es void: no tiene que retornar.
         val returnType = decl.returnType ?: return
 
         if (!alwaysReturns(decl.body.statements)) {
@@ -199,8 +199,8 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
         else -> false
     }
 
-    // Funciona con `true`, con `1 == 1` y con una `const`, porque la Fase 4 ya plego
-    // el valor. Con una variable mutable no: ver la limitacion en el ticket.
+    // Funciona con `true`, con `1 == 1` y con una `const`, porque el TypeChecker ya
+    // plego el valor. Con una variable mutable no: su valor puede cambiar entre vueltas.
     private fun isAlwaysTrue(condition: Expression): Boolean =
         condition.constantValue == true
 

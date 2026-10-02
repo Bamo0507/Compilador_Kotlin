@@ -2,7 +2,15 @@ package org.compiler.frontend.semantic
 
 import org.compiler.frontend.ast.models.BinaryOperator
 import org.compiler.frontend.ast.models.UnaryOperator
-import org.compiler.frontend.semantic.symbols.*
+import org.compiler.frontend.semantic.symbols.ArrayType
+import org.compiler.frontend.semantic.symbols.BooleanType
+import org.compiler.frontend.semantic.symbols.ClassType
+import org.compiler.frontend.semantic.symbols.ErrorType
+import org.compiler.frontend.semantic.symbols.FloatType
+import org.compiler.frontend.semantic.symbols.IntegerType
+import org.compiler.frontend.semantic.symbols.NullType
+import org.compiler.frontend.semantic.symbols.StringType
+import org.compiler.frontend.semantic.symbols.Type
 
 // integer es de 32 bits: el resultado de una operacion se recorta como en Java, asi que
 // 2147483647 + 1 da -2147483648. Los enteros se guardan como Long para que un literal
@@ -110,16 +118,16 @@ class TypeRules(private val hierarchy: ClassHierarchy) {
     }
 
     private fun commonAncestor(left: ClassType, right: ClassType): Type? {
-        val ancestrosDeLeft = mutableSetOf<String>()
+        val leftAncestors = mutableSetOf<String>()
         var current: String? = left.name
-        while (current != null && ancestrosDeLeft.add(current)) {
+        while (current != null && leftAncestors.add(current)) {
             current = hierarchy.superclassOf(current)
         }
 
         current = right.name
         val visited = mutableSetOf<String>()
         while (current != null && visited.add(current)) {
-            if (current in ancestrosDeLeft) return ClassType(current)
+            if (current in leftAncestors) return ClassType(current)
             current = hierarchy.superclassOf(current)
         }
         return null

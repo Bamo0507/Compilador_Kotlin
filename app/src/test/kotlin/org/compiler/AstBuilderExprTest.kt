@@ -1,4 +1,4 @@
-// Tests del Ticket 2.2: la mitad de expresiones del AstBuilder.
+// Tests de la mitad de expresiones del AstBuilder.
 //
 // El punto de entrada es parser.expression(), no parser.program(): aqui se prueban
 // expresiones sueltas, sin envolverlas en sentencias. Cualquier regla de ANTLR
@@ -108,7 +108,7 @@ class AstBuilderExprTest {
     }
 
     // Aqui el plegado no protege el valor ((p&&q)&&r da lo mismo que p&&(q&&r)):
-    // protege el ORDEN de evaluacion del cortocircuito de la Fase 6.
+    // protege el ORDEN de evaluacion del cortocircuito del Interpreter.
     @Test
     fun `el and pliega a la izquierda`() {
         val (left, right) = binary(expr("p && q && r"), BinaryOperator.AND)
@@ -167,12 +167,12 @@ class AstBuilderExprTest {
     // negacion anida sin trabajo extra.
     @Test
     fun `doble negacion anida`() {
-        val fuera = assertIs<UnaryOperation>(expr("!!x"))
+        val outside = assertIs<UnaryOperation>(expr("!!x"))
 
-        assertEquals(UnaryOperator.NOT, fuera.operator)
-        val dentro = assertIs<UnaryOperation>(fuera.operand)
-        assertEquals(UnaryOperator.NOT, dentro.operator)
-        assertIdentifier(dentro.operand, "x")
+        assertEquals(UnaryOperator.NOT, outside.operator)
+        val inside = assertIs<UnaryOperation>(outside.operand)
+        assertEquals(UnaryOperator.NOT, inside.operator)
+        assertIdentifier(inside.operand, "x")
     }
 
     // ── Ternario ───────────────────────────────────────────────────────────
@@ -183,10 +183,10 @@ class AstBuilderExprTest {
 
         assertIdentifier(t.condition, "a")
         assertIdentifier(t.ifTrue, "b")
-        val anidado = assertIs<TernaryOperation>(t.ifFalse)
-        assertIdentifier(anidado.condition, "c")
-        assertIdentifier(anidado.ifTrue, "d")
-        assertIdentifier(anidado.ifFalse, "e")
+        val nested = assertIs<TernaryOperation>(t.ifFalse)
+        assertIdentifier(nested.condition, "c")
+        assertIdentifier(nested.ifTrue, "d")
+        assertIdentifier(nested.ifFalse, "e")
     }
 
     // ── Literales: el tipo se decide por la forma del texto ────────────────
@@ -202,7 +202,7 @@ class AstBuilderExprTest {
     }
 
     // toLong y no toInt: este numero es sintacticamente valido pero no cabe en Int.
-    // El AstBuilder lo guarda; el desborde lo reporta la Fase 4 con linea y columna.
+    // El AstBuilder lo guarda; el desborde lo reporta el TypeChecker con linea y columna.
     @Test
     fun `un entero que no cabe en Int se guarda como Long`() {
         assertLiteral(expr("99999999999"), 99_999_999_999L, IntegerType)
@@ -221,35 +221,35 @@ class AstBuilderExprTest {
     // ── La cadena de sufijos ───────────────────────────────────────────────
 
     // La llamada a metodo NO es un nodo aparte: es un FunctionCall cuyo callee es
-    // un PropertyAccess. La Fase 4 maneja ese caso explicitamente.
+    // un PropertyAccess. El TypeChecker maneja ese caso explicitamente.
     @Test
     fun `llamada a metodo es FunctionCall sobre PropertyAccess`() {
         val call = assertIs<FunctionCall>(expr("perro.hablar()"))
 
         assertTrue(call.arguments.isEmpty())
-        val acceso = assertIs<PropertyAccess>(call.callee)
-        assertEquals("hablar", acceso.propertyName)
-        assertIdentifier(acceso.target, "perro")
+        val access = assertIs<PropertyAccess>(call.callee)
+        assertEquals("hablar", access.propertyName)
+        assertIdentifier(access.target, "perro")
     }
 
     @Test
     fun `el indexado encadenado envuelve hacia afuera`() {
-        val fuera = assertIs<IndexAccess>(expr("lista[0][1]"))
+        val outside = assertIs<IndexAccess>(expr("lista[0][1]"))
 
-        assertLiteral(fuera.index, 1L, IntegerType)
-        val dentro = assertIs<IndexAccess>(fuera.target)
-        assertLiteral(dentro.index, 0L, IntegerType)
-        assertIdentifier(dentro.target, "lista")
+        assertLiteral(outside.index, 1L, IntegerType)
+        val inside = assertIs<IndexAccess>(outside.target)
+        assertLiteral(inside.index, 0L, IntegerType)
+        assertIdentifier(inside.target, "lista")
     }
 
     @Test
     fun `el acceso a propiedad encadenado envuelve hacia afuera`() {
-        val fuera = assertIs<PropertyAccess>(expr("perro.dueno.nombre"))
+        val outside = assertIs<PropertyAccess>(expr("perro.dueno.nombre"))
 
-        assertEquals("nombre", fuera.propertyName)
-        val dentro = assertIs<PropertyAccess>(fuera.target)
-        assertEquals("dueno", dentro.propertyName)
-        assertIdentifier(dentro.target, "perro")
+        assertEquals("nombre", outside.propertyName)
+        val inside = assertIs<PropertyAccess>(outside.target)
+        assertEquals("dueno", inside.propertyName)
+        assertIdentifier(inside.target, "perro")
     }
 
     @Test
@@ -267,12 +267,12 @@ class AstBuilderExprTest {
     // Recursiva por la derecha en la gramatica: a = (b = c) sale gratis.
     @Test
     fun `la asignacion anida a la derecha`() {
-        val fuera = assertIs<AssignmentExpression>(expr("a = b = c"))
+        val outside = assertIs<AssignmentExpression>(expr("a = b = c"))
 
-        assertIdentifier(fuera.target, "a")
-        val dentro = assertIs<AssignmentExpression>(fuera.value)
-        assertIdentifier(dentro.target, "b")
-        assertIdentifier(dentro.value, "c")
+        assertIdentifier(outside.target, "a")
+        val inside = assertIs<AssignmentExpression>(outside.value)
+        assertIdentifier(inside.target, "b")
+        assertIdentifier(inside.value, "c")
     }
 
     // OJO: `obj.prop` entra por AssignExpr (leftHandSide absorbe el `.prop` como
@@ -293,13 +293,13 @@ class AstBuilderExprTest {
 
     @Test
     fun `new con y sin argumentos`() {
-        val conArgs = assertIs<ObjectCreation>(expr("new Perro(\"Toby\")"))
-        assertEquals("Perro", conArgs.className)
-        assertLiteral(conArgs.arguments.single(), "Toby", StringType)
+        val withArguments = assertIs<ObjectCreation>(expr("new Perro(\"Toby\")"))
+        assertEquals("Perro", withArguments.className)
+        assertLiteral(withArguments.arguments.single(), "Toby", StringType)
 
-        val sinArgs = assertIs<ObjectCreation>(expr("new Animal()"))
-        assertEquals("Animal", sinArgs.className)
-        assertTrue(sinArgs.arguments.isEmpty())
+        val withoutArguments = assertIs<ObjectCreation>(expr("new Animal()"))
+        assertEquals("Animal", withoutArguments.className)
+        assertTrue(withoutArguments.arguments.isEmpty())
     }
 
     @Test
@@ -313,11 +313,11 @@ class AstBuilderExprTest {
     // le da a la operacion la location de su operando izquierdo.
     @Test
     fun `cada nodo lleva la ubicacion de su primer token`() {
-        val suma = assertIs<BinaryOperation>(expr("x + y"))
+        val sum = assertIs<BinaryOperation>(expr("x + y"))
 
-        assertEquals(LexemeLocation(line = 1, position = 1), suma.location)
-        assertEquals(LexemeLocation(line = 1, position = 1), suma.left.location)
-        assertEquals(LexemeLocation(line = 1, position = 5), suma.right.location)
+        assertEquals(LexemeLocation(line = 1, position = 1), sum.location)
+        assertEquals(LexemeLocation(line = 1, position = 1), sum.left.location)
+        assertEquals(LexemeLocation(line = 1, position = 5), sum.right.location)
     }
 
     @Test

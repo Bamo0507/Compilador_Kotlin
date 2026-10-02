@@ -1,6 +1,6 @@
-// Ticket 8.1: los programas .cps que DEBEN compilar.
+// Los programas .cps que DEBEN compilar.
 //
-// A diferencia de los tests unitarios de cada ticket —que prueban una funcion—,
+// A diferencia de los tests unitarios —que prueban una funcion—,
 // estos corren el compilador COMPLETO sobre un programa real, desde el texto hasta
 // la ejecucion.
 //
@@ -20,18 +20,18 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-class ProgramasValidosTest {
+class ValidProgramsTest {
 
     @TestFactory
     fun `cada programa valido compila sin errores`(): List<DynamicTest> =
-        programasDe(SampleGroup.VALID).map { programa ->
-            DynamicTest.dynamicTest(programa.name) {
-                val resultado = CompilerPipeline.compile(programa.source)
+        programsOf(SampleGroup.VALID).map { sample ->
+            DynamicTest.dynamicTest(sample.name) {
+                val result = CompilerPipeline.compile(sample.source)
 
                 assertTrue(
-                    resultado.errors.isEmpty(),
-                    "${programa.id} debería compilar sin errores, pero produjo:\n" +
-                        resultado.errors.joinToString("\n") {
+                    result.errors.isEmpty(),
+                    "${sample.id} debería compilar sin errores, pero produjo:\n" +
+                        result.errors.joinToString("\n") {
                             "  línea ${it.location.line}: ${it.message}"
                         }
                 )
@@ -43,35 +43,35 @@ class ProgramasValidosTest {
     // exactamente eso, en ese orden.
     @TestFactory
     fun `cada programa valido imprime su salida anotada`(): List<DynamicTest> =
-        programasDe(SampleGroup.VALID)
-            .filter { salidaEsperadaDe(it).isNotEmpty() }
-            .map { programa ->
-                DynamicTest.dynamicTest(programa.name) {
-                    val esperada = salidaEsperadaDe(programa)
-                    val resultado = CompilerPipeline.compile(programa.source)
+        programsOf(SampleGroup.VALID)
+            .filter { expectedOutputOf(it).isNotEmpty() }
+            .map { sample ->
+                DynamicTest.dynamicTest(sample.name) {
+                    val expected = expectedOutputOf(sample)
+                    val result = CompilerPipeline.compile(sample.source)
 
-                    val ejecucion = resultado.execution
+                    val execution = result.execution
                     assertNotNull(
-                        ejecucion,
-                        "${programa.id} no se ejecutó. Errores:\n" +
-                            resultado.errors.joinToString("\n") {
+                        execution,
+                        "${sample.id} no se ejecutó. Errores:\n" +
+                            result.errors.joinToString("\n") {
                                 "  línea ${it.location.line}: ${it.message}"
                             }
                     )
 
                     assertNull(
-                        ejecucion.runtimeError,
-                        "${programa.id} falló en ejecución: ${ejecucion.runtimeError?.message}"
+                        execution.runtimeError,
+                        "${sample.id} falló en ejecución: ${execution.runtimeError?.message}"
                     )
 
                     assertEquals(
-                        esperada, ejecucion.output,
-                        "La salida de ${programa.id} no coincide con sus anotaciones // SALIDA:"
+                        expected, execution.output,
+                        "La salida de ${sample.id} no coincide con sus anotaciones // SALIDA:"
                     )
                 }
             }
 
-    // Criterio de aceptacion del ticket: demo_completa.cps ES el programa por
+    // demo_completa.cps ES el programa por
     // defecto del IDE. Si alguien cambia uno de los dos y no el otro, la demo de la
     // presentacion deja de estar cubierta por la bateria y nadie se entera.
     @Test
@@ -86,18 +86,18 @@ class ProgramasValidosTest {
 
         // Los programas los enumera el mismo cargador que usa el selector del IDE,
         // asi que la bateria y el menu nunca se pueden desincronizar.
-        fun programasDe(grupo: SampleGroup): List<SampleProgram> {
-            val programas = SamplePrograms.all.filter { it.group == grupo }
+        fun programsOf(group: SampleGroup): List<SampleProgram> {
+            val programs = SamplePrograms.all.filter { it.group == group }
 
             // Sin esto, borrar la carpeta por accidente dejaria la bateria en cero
             // tests y en verde, que es la peor forma de fallar.
-            assertTrue(programas.isNotEmpty(), "No hay programas .cps del grupo $grupo")
+            assertTrue(programs.isNotEmpty(), "No hay programas .cps del grupo $group")
 
-            return programas
+            return programs
         }
 
-        fun salidaEsperadaDe(programa: SampleProgram): List<String> =
-            programa.source.lineSequence()
+        fun expectedOutputOf(sample: SampleProgram): List<String> =
+            sample.source.lineSequence()
                 .filter { it.startsWith("// SALIDA:") }
                 .map { it.removePrefix("// SALIDA:").trim() }
                 .toList()

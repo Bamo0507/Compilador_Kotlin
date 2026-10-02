@@ -9,7 +9,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * Tests del ticket 7.1.
+ * Tests del CompilerPipeline.
  *
  * El pipeline no tiene logica propia: lo que se prueba es el ORDEN de las etapas y
  * que cada fallo deje el resultado en la forma que la GUI espera.
@@ -36,10 +36,10 @@ class CompilerPipelineTest {
 
     @Test
     fun `la raiz del arbol de ANTLR es la regla program`() {
-        val vista = CompilerPipeline.compile("print(1);").parseTreeView
+        val treeView = CompilerPipeline.compile("print(1);").parseTreeView
 
-        assertNotNull(vista)
-        assertEquals("program", vista.label)
+        assertNotNull(treeView)
+        assertEquals("program", treeView.label)
     }
 
     // La torre de precedencia de la gramatica: llegar a un identificador cuesta once
@@ -47,10 +47,10 @@ class CompilerPipelineTest {
     // lado en pantalla.
     @Test
     fun `el arbol de ANTLR es mucho mas grande que el fuente`() {
-        val vista = CompilerPipeline.compile("print(x);").parseTreeView
+        val treeView = CompilerPipeline.compile("print(x);").parseTreeView
 
-        assertNotNull(vista)
-        assertTrue(vista.count() > 15, "nodos: ${vista.count()}")
+        assertNotNull(treeView)
+        assertTrue(treeView.count() > 15, "nodos: ${treeView.count()}")
     }
 
     // ── Cada fallo deja el resultado en una forma distinta ─────────────────

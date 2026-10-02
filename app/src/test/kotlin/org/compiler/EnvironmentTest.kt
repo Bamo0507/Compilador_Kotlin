@@ -64,45 +64,45 @@ class EnvironmentTest {
 
     @Test
     fun `un hijo ve las variables del padre`() {
-        val padre = Environment()
-        padre.define("x", IntValue(1))
+        val parentNode = Environment()
+        parentNode.define("x", IntValue(1))
 
-        val hijo = padre.child()
+        val child = parentNode.child()
 
-        assertEquals(IntValue(1), hijo.get("x"))
+        assertEquals(IntValue(1), child.get("x"))
     }
 
     // Es lo que hace que `let x = 1; { x = 2; } print(x);` imprima 2.
     @Test
     fun `assign en un hijo modifica la variable del padre`() {
-        val padre = Environment()
-        padre.define("x", IntValue(1))
-        val hijo = padre.child()
+        val parentNode = Environment()
+        parentNode.define("x", IntValue(1))
+        val child = parentNode.child()
 
-        assertTrue(hijo.assign("x", IntValue(2)))
+        assertTrue(child.assign("x", IntValue(2)))
 
-        assertEquals(IntValue(2), padre.get("x"))
+        assertEquals(IntValue(2), parentNode.get("x"))
     }
 
     // Y esto es lo que hace que `let x = 1; { let x = 2; } print(x);` imprima 1.
     @Test
     fun `define en un hijo tapa la del padre sin modificarla`() {
-        val padre = Environment()
-        padre.define("x", IntValue(1))
-        val hijo = padre.child()
+        val parentNode = Environment()
+        parentNode.define("x", IntValue(1))
+        val child = parentNode.child()
 
-        hijo.define("x", IntValue(2))
+        child.define("x", IntValue(2))
 
-        assertEquals(IntValue(2), hijo.get("x"))    // el hijo ve la suya
-        assertEquals(IntValue(1), padre.get("x"))   // el padre conserva la original
+        assertEquals(IntValue(2), child.get("x"))    // el hijo ve la suya
+        assertEquals(IntValue(1), parentNode.get("x"))   // el padre conserva la original
     }
 
     @Test
     fun `assign a un nombre inexistente devuelve false`() {
-        val padre = Environment()
-        val hijo = padre.child()
+        val parentNode = Environment()
+        val child = parentNode.child()
 
-        assertFalse(hijo.assign("fantasma", IntValue(1)))
-        assertNull(padre.get("fantasma"))
+        assertFalse(child.assign("fantasma", IntValue(1)))
+        assertNull(parentNode.get("fantasma"))
     }
 }
