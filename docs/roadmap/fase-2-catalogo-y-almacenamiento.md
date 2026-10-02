@@ -271,7 +271,7 @@ sin fallos ni omitidas.
 
 ## Ticket 2.4 · Lector y escritor de CSV
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.3
 
 **Archivos:**
@@ -335,6 +335,17 @@ mismo directorio y lo renombra encima al final. Un `ALTER` sobre una tabla grand
 que se interrumpa a la mitad dejaría el CSV truncado; con el renombre, o está el
 archivo viejo completo o el nuevo completo.
 
+El lector trabaja con texto UTF-8 y distingue los saltos de línea dentro de
+comillas de los que separan filas. Acepta `CRLF`, `LF`, `CR` y un BOM UTF-8
+inicial. Reporta archivos sin encabezado, comillas mal formadas y filas cuyo
+número de campos no coincide con el encabezado. Conserva los valores como texto
+crudo; la conversión a `Value` sigue siendo responsabilidad de `ValueCodec`.
+
+El escritor valida el ancho de todas las filas antes de crear el temporal y usa
+`Files.move` con `ATOMIC_MOVE` y `REPLACE_EXISTING`. Si el sistema de archivos no
+permite un movimiento atómico, la operación falla en lugar de reemplazar el CSV
+con una garantía más débil. El temporal se elimina al terminar o fallar.
+
 **Aceptación:**
 
 - ida y vuelta con comas, comillas dobles y saltos de línea dentro de campos
@@ -342,6 +353,13 @@ archivo viejo completo o el nuevo completo.
 - escribir y volver a leer da exactamente lo mismo
 - un archivo con solo header da lista de filas vacía, no error
 - si el proceso muere a media escritura, el archivo original queda intacto
+
+**Verificación:** 12 pruebas en `storage/CsvTest.kt` cubren ida y vuelta,
+escapado, nulos, cadena vacía, saltos de línea, encabezado sin filas, archivos
+inválidos, reemplazo y conservación del archivo previo ante una fila inválida.
+`./gradlew test` pasa con 175 pruebas, sin fallos ni omitidas. La garantía ante
+una interrupción del proceso deriva del movimiento atómico; no se simula la
+muerte del proceso en las pruebas.
 
 ---
 
