@@ -39,6 +39,13 @@ presentaciones no profundizan.
 Antes de empezar un ticket se da una sinopsis corta de lo que aborda, y se toca código
 solo con el visto bueno. Un ticket a la vez.
 
+Los documentos entregables, como `docs/lenguaje-intermedio.md`, se escriben como el
+documento final desde el primer ticket: prosa conceptual que explica la teoría y lo que
+se hizo, sin diagramas ASCII, sin bloques de código innecesarios y sin secciones
+pendientes, porque se van a pasar a Google Docs. La excepción son los ejemplos de
+traducción que pide el enunciado: se muestran como fragmentos cortos de TAC, nunca con
+rutas, clases ni código de Kotlin.
+
 ---
 
 ## Mapa de fases

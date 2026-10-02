@@ -507,7 +507,7 @@ macOS. Un evaluador que abre el repositorio no debería preguntarse qué son.
 
 ## Ticket 0.5: Sección 1 del documento del lenguaje intermedio
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.1
 
 **Archivos:**
@@ -540,14 +540,13 @@ algo que todavía no está decidido.
    que el desplazamiento `i * tamaño` aparece en el TAC y no en el AST. El tamaño
    concreto se remite a la sección de la tabla de símbolos, que se escribe después.
 
-Las secciones siguientes se listan al final como *pendiente*, con el punto de teoría
-que las va a llenar.
-
 ### Aceptación
 
 - La sección 1 cubre los cuatro apartados.
 - No afirma nada de la sintaxis del TAC ni de tamaños que no esté decidido.
-- Cita la presentación 06 y el Dragon Book para cada afirmación teórica.
+- Está escrita como el documento final: prosa conceptual, sin diagramas ASCII, sin
+  bloques de código innecesarios y sin secciones pendientes, porque el documento se
+  va a pasar a Google Docs.
 
 ---
 
