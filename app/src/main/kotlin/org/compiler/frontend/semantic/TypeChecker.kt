@@ -105,8 +105,16 @@ class TypeChecker(
     // El punto de entrada. Lo llama el CompilerPipeline.
     //
     // No abre ningun ambito: el programa ES globalScope, que ya creo la Pasada 1.
+    //
+    // Los cuerpos de funciones y clases del nivel superior van al final, para que vean
+    // todas las globales, declaradas antes o despues. Sus firmas ya las registro la
+    // Pasada 1, asi que el resto del programa puede llamarlas igual.
     fun check(program: Program) {
-        program.statements.forEach { checkStatement(it) }
+        val (declarations, rest) = program.statements.partition {
+            it is FunctionDeclaration || it is ClassDeclaration
+        }
+        rest.forEach { checkStatement(it) }
+        declarations.forEach { checkStatement(it) }
     }
 
     // Las 17 sentencias. Sin rama `else`: si se agrega una y se olvida su funcion,
@@ -204,7 +212,11 @@ class TypeChecker(
     private fun checkIdentifier(expr: Identifier): TypedValue {
         val symbol = currentScope.lookup(expr.name)
         if (symbol == null) {
-            report(expr, "La variable '${expr.name}' no está declarada")
+            // Un miembro de la clase solo se alcanza con `this.`: si el nombre existe
+            // como miembro, el error lo dice.
+            val member = currentScope.enclosingClass()?.lookupMember(expr.name)
+            val hint = if (member != null) ". ¿Quisiste decir 'this.${expr.name}'?" else ""
+            report(expr, "La variable '${expr.name}' no está declarada$hint")
             return decorate(expr, TypedValue(ErrorType))
         }
 
@@ -214,8 +226,14 @@ class TypeChecker(
 
         // Los contadores de vivacidad se llevan aqui y solo
         // aqui: la Fase 5 ya no recorre el AST.
-        symbol.useCount += 1
-        symbol.lastUseLine = expr.location.line
+        //
+        // Una escritura no es un uso: una variable que solo se escribe nunca
+        // necesito su memoria. El maxOf es porque los cuerpos del nivel superior se
+        // revisan al final, aunque esten mas arriba en el archivo.
+        if (!checkingAssignmentTarget) {
+            symbol.useCount += 1
+            symbol.lastUseLine = maxOf(symbol.lastUseLine ?: 0, expr.location.line)
+        }
 
         // Captura: el uso esta en una funcion mas anidada que la
         // declaracion, y la declaracion no es global.
@@ -290,7 +308,7 @@ class TypeChecker(
             !operand.isConstant -> null
             expr.operator == UnaryOperator.NOT -> !asBoolean(operand)
             operand.constant is Double -> -asDouble(operand)
-            else -> -asLong(operand)
+            else -> wrapToInteger(-asLong(operand))
         }
         return decorate(expr, TypedValue(resultType, folded))
     }
@@ -396,6 +414,9 @@ class TypeChecker(
     // sale al ambito exterior: un campo heredado si, una
     // variable global llamada igual no.
     private fun checkPropertyAccess(expr: PropertyAccess): TypedValue {
+        // En `obj.campo = 5` se escribe el campo, pero el objeto SI se lee.
+        val isWrite = checkingAssignmentTarget
+        checkingAssignmentTarget = false
         val targetType = checkExpression(expr.target).type
         if (targetType == ErrorType) return decorate(expr, TypedValue(ErrorType))
 
@@ -413,8 +434,10 @@ class TypeChecker(
         }
 
         expr.resolvedMember = member
-        member.useCount += 1
-        member.lastUseLine = expr.location.line
+        if (!isWrite) {
+            member.useCount += 1
+            member.lastUseLine = maxOf(member.lastUseLine ?: 0, expr.location.line)
+        }
         return decorate(expr, TypedValue(member.type))
     }
 
@@ -427,6 +450,11 @@ class TypeChecker(
     // Se invoca desde checkFunctionDeclaration en el ticket 4.4, cuando se entra al
     // ámbito de una clase y las firmas de todos los métodos ya están disponibles.
     private fun checkOverride(declaration: FunctionDeclaration, classScope: Scope) {
+        // El constructor no se invoca a traves de una referencia a la superclase:
+        // `new Perro(...)` nombra la clase exacta, asi que su firma no participa del
+        // subtipado.
+        if (declaration.name == CONSTRUCTOR_NAME) return
+
         val inherited = classScope.superclass?.lookupMember(declaration.name) ?: return
         val ownType = classScope.lookupLocal(declaration.name)?.type ?: return
         if (ownType != inherited.type) {
@@ -657,8 +685,10 @@ class TypeChecker(
         // tenga uno seria imposible de cumplir.
         //
         // Se suprime SOLO para el destino directo. En `lista[i] = 5` el destino es un
-        // IndexAccess y ahi la lista si se lee, asi que el chequeo debe aplicar.
-        val targetValue = if (target is Identifier) {
+        // IndexAccess y ahi la lista si se lee, asi que el chequeo debe aplicar. Un
+        // PropertyAccess tambien prende la bandera, para que escribir un campo no
+        // cuente como uso; el mismo apaga la bandera antes de leer su objeto.
+        val targetValue = if (target is Identifier || target is PropertyAccess) {
             checkingAssignmentTarget = true
             try {
                 checkExpression(target)
@@ -746,7 +776,10 @@ class TypeChecker(
             )
         }
 
-        val functionType = currentScope.lookup(decl.name)?.type as? FunctionType
+        // lookupLocal y no lookup: la firma siempre esta en el ambito actual, sea una
+        // funcion anidada recien declarada, una del nivel superior o un metodo. Y un
+        // lookup desde una clase saltaria sus propios miembros.
+        val functionType = currentScope.lookupLocal(decl.name)?.type as? FunctionType
 
         val previousScope = currentScope
         val previousReturnType = currentReturnType
@@ -853,7 +886,7 @@ class TypeChecker(
     ): Any? {
         if (!left.isConstant || !right.isConstant || resultType == ErrorType) return null
 
-        return when (operator) {
+        val folded = when (operator) {
             BinaryOperator.ADD -> when {
                 resultType == StringType -> "${left.constant}${right.constant}"
                 resultType == FloatType -> asDouble(left) + asDouble(right)
@@ -872,6 +905,9 @@ class TypeChecker(
             BinaryOperator.AND -> asBoolean(left) && asBoolean(right)
             BinaryOperator.OR -> asBoolean(left) || asBoolean(right)
         }
+
+        // Todo resultado entero se recorta a 32 bits; los demas se devuelven tal cual.
+        return if (folded is Long) wrapToInteger(folded) else folded
     }
 
     // Cubre / y % — el modulo entre cero falla igual.

@@ -2,6 +2,7 @@ package org.compiler.interpreter
 
 import org.compiler.frontend.ast.models.*
 import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
+import org.compiler.frontend.semantic.wrapToInteger
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.StringType
 import org.compiler.models.LexemeLocation
@@ -133,7 +134,8 @@ class Interpreter {
     ): RuntimeValue = when (expr.type) {
         StringType -> StringValue(asString(left) + asString(right))
         FloatType -> FloatValue(applyFloat(expr.operator, asDouble(left), asDouble(right)))
-        else -> IntValue(applyLong(expr.operator, asLong(left), asLong(right), expr))
+        // integer es de 32 bits: el resultado se recorta igual que en el plegado.
+        else -> IntValue(wrapToInteger(applyLong(expr.operator, asLong(left), asLong(right), expr)))
     }
 
     private fun applyLong(
@@ -170,7 +172,7 @@ class Interpreter {
             UnaryOperator.NOT -> BoolValue(!asBoolean(operand))
             UnaryOperator.NEGATE ->
                 if (expr.type == FloatType) FloatValue(-asDouble(operand))
-                else IntValue(-asLong(operand))
+                else IntValue(wrapToInteger(-asLong(operand)))
         }
     }
 
@@ -301,9 +303,21 @@ class Interpreter {
             ?.let { classDeclarations[it] }
             ?.let { initializeFields(it, instance) }
 
-        declaration.members.filterIsInstance<VariableDeclaration>().forEach { field ->
-            instance.fields[field.name] =
-                field.initializer?.let { evaluate(it) } ?: defaultValueFor(field)
+        // Los inicializadores corren sobre la instancia que se esta construyendo, igual
+        // que el constructor, y cuelgan del global: evaluarlos en el entorno de quien
+        // hizo `new` seria alcance dinamico.
+        val fieldEnvironment = globalEnvironment.child()
+        fieldEnvironment.define("this", instance)
+
+        val previous = environment
+        environment = fieldEnvironment
+        try {
+            declaration.members.filterIsInstance<VariableDeclaration>().forEach { field ->
+                instance.fields[field.name] =
+                    field.initializer?.let { evaluate(it) } ?: defaultValueFor(field)
+            }
+        } finally {
+            environment = previous
         }
     }
 

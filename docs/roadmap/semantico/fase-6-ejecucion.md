@@ -38,7 +38,7 @@ nodo. Ver "Los dos despachadores" en el ticket 6.2.
 
 ## Ticket 6.1 — Valores en ejecución y entorno
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.1
 
 **Archivos:**
@@ -185,7 +185,7 @@ class Environment(private val parent: Environment? = null) {
 
 ## Ticket 6.2 — `Interpreter`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.1
 
 **Archivos:**

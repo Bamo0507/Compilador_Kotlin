@@ -23,7 +23,7 @@ código, y `docs/lenguaje-intermedio.md` con la sección 1.
 
 ## Ticket 0.1: Archivar el roadmap del analizador semántico
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**
@@ -176,7 +176,7 @@ un mismo índice.
 
 ## Ticket 0.2: Corregir el analizador semántico
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**

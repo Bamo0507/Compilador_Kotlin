@@ -4,6 +4,11 @@ import org.compiler.frontend.ast.models.BinaryOperator
 import org.compiler.frontend.ast.models.UnaryOperator
 import org.compiler.frontend.semantic.symbols.*
 
+// integer es de 32 bits: el resultado de una operacion se recorta como en Java, asi que
+// 2147483647 + 1 da -2147483648. Los enteros se guardan como Long para que un literal
+// fuera de rango se pueda reportar; este recorte es sobre el valor, no sobre el tipo.
+fun wrapToInteger(value: Long): Long = value.toInt().toLong()
+
 fun interface ClassHierarchy {
     fun superclassOf(className: String): String?
 }

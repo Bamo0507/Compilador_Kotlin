@@ -40,7 +40,7 @@ ticket; aquí se agregan los de integración y se cierra la documentación.
 
 ## Ticket 8.1 — Batería de programas `.cps`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.1
 
 **Archivos:**
@@ -216,7 +216,7 @@ print(perro.hablar());
 
 ## Ticket 8.2 — Documentación de arquitectura y de ejecución
 
-- **Estado**: pendiente
+- **Estado**: en progreso
 - **Depende de**: 7.4
 
 **Archivos:**

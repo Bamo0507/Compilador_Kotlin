@@ -253,4 +253,58 @@ class TypeCheckerStmtTest {
         val r = verificar("let x: integer = (1 + \"a\") * 2;")
         assertEquals(1, r.diagnostics.count, "errores: ${r.mensajes}")
     }
+
+
+    // ── Constructores y miembros de clase ──────────────────────────────────
+
+    // El constructor no participa del subtipado: new nombra la clase exacta.
+    @Test
+    fun `una subclase puede declarar un constructor con otra firma`() {
+        valido(
+            """
+            class Animal { let nombre: string; function constructor(n: string) { this.nombre = n; } }
+            class Perro : Animal {
+              let raza: string;
+              function constructor(n: string, r: string) { this.nombre = n; this.raza = r; }
+            }
+            let p: Perro = new Perro("Toby", "lab");
+            """.trimIndent()
+        )
+    }
+
+    @Test
+    fun `un miembro sin this no es visible y el error sugiere this`() {
+        conError(
+            "class Contador { let cuenta: integer = 0; function sumar() { cuenta = cuenta + 1; } }",
+            "¿Quisiste decir 'this.cuenta'?"
+        )
+        conError(
+            "class A { function f(): integer { return 1; } function g(): integer { return f(); } }",
+            "¿Quisiste decir 'this.f'?"
+        )
+        conError("class A { let x: integer = 1; let y: integer = x; }", "¿Quisiste decir 'this.x'?")
+    }
+
+    @Test
+    fun `un miembro con this es valido`() {
+        valido("class Contador { let cuenta: integer = 0; function sumar() { this.cuenta = this.cuenta + 1; } }")
+        valido("class A { let x: integer = 1; let y: integer = this.x + 1; }")
+    }
+
+    // Como en TypeScript: el nombre suelto salta la clase y encuentra la global.
+    @Test
+    fun `un nombre suelto en un metodo encuentra la global aunque haya un campo igual`() {
+        val r = verificar(
+            "let cuenta: string = \"global\"; class A { let cuenta: integer = 0; function f(): string { return cuenta; } }"
+        )
+        assertTrue(r.mensajes.isEmpty(), "no deberia haber errores: ${r.mensajes}")
+    }
+
+    // ── Orden de revision del nivel superior ───────────────────────────────
+
+    @Test
+    fun `una funcion puede usar una global declarada mas abajo`() {
+        valido("function mostrar() { print(contador); } let contador: integer = 5; mostrar();")
+        valido("class A { function f(): integer { return limite; } } let limite: integer = 3;")
+    }
 }

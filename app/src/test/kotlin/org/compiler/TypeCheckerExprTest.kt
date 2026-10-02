@@ -189,4 +189,12 @@ class TypeCheckerExprTest {
         assertEquals(ErrorType, expr.type)
         assertEquals(1, diagnostics.count)
     }
+
+
+    // integer es de 32 bits: el plegado recorta igual que Java.
+    @Test
+    fun `el plegado entero se recorta a 32 bits`() {
+        assertEquals(-2147483648L, check("2147483647 + 1").first.constantValue)
+        assertEquals(2147483647L, check("-2147483647 - 2").first.constantValue)
+    }
 }

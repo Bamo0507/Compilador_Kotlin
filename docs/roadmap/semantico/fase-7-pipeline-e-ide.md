@@ -433,7 +433,7 @@ mismo componente.
 
 ## Ticket 7.4 — GUI: tabla de símbolos y reporte de vivacidad
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.2
 
 **Archivos:**

@@ -66,24 +66,21 @@ class Scope(
     /**
      * El lookup general: para resolver un nombre suelto como `x` o `saludar`.
      *
-     * Busca en este nivel, luego en la cadena de superclases, y por ultimo en la de
-     * ambitos que lo contienen. Gana la primera coincidencia, que es la regla del
-     * ambito mas anidado.
+     * Busca en este nivel y luego en los ambitos que lo contienen. Gana la primera
+     * coincidencia, que es la regla del ambito mas anidado.
      */
     fun lookup(name: String): Symbol? {
-        val local = symbols[name]
-        if (local != null) return local
-
-        val inherited = superclass?.lookupMember(name)
-        if (inherited != null) return inherited
-
-        return parent?.lookup(name)
+        // Los miembros de una clase solo se alcanzan con `this.`, como en TypeScript:
+        // el nombre suelto sigue de largo hacia el ambito que contiene a la clase.
+        if (kind == ScopeKind.CLASS) return parent?.lookup(name)
+        return symbols[name] ?: parent?.lookup(name)
     }
 
     /**
      * Solo ESTE nivel, sin recorrer ninguna cadena.
      *
-     * Para detectar redeclaracion, y para buscar el `constructor` de una clase.
+     * Para detectar redeclaracion, y para encontrar la firma de una funcion recien
+     * declarada en el ambito actual.
      */
     fun lookupLocal(name: String): Symbol? = symbols[name]
 

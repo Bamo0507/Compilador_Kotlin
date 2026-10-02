@@ -430,4 +430,60 @@ class InterpreterTest {
             )
         )
     }
+
+
+    // ── Correcciones del semantico ─────────────────────────────────────────
+
+    @Test
+    fun `la aritmetica entera en ejecucion se recorta a 32 bits`() {
+        assertEquals(listOf("-2147483648"), output("let m: integer = 2147483647; print(m + 1);"))
+        assertEquals(listOf("2147483647"), output("let m: integer = -2147483647; print(m - 2);"))
+    }
+
+    @Test
+    fun `un constructor propio con otra firma en la subclase corre`() {
+        assertEquals(
+            listOf("Toby lab"),
+            output(
+                """
+                class Animal { let nombre: string; function constructor(n: string) { this.nombre = n; } }
+                class Perro : Animal {
+                  let raza: string;
+                  function constructor(n: string, r: string) { this.nombre = n; this.raza = r; }
+                }
+                let p: Perro = new Perro("Toby", "lab");
+                print(p.nombre + " " + p.raza);
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `un inicializador de campo puede usar this`() {
+        assertEquals(
+            listOf("2"),
+            output("class A { let x: integer = 1; let y: integer = this.x + 1; } let a: A = new A(); print(a.y);")
+        )
+    }
+
+    // Un inicializador lee la global, no una local de quien hizo `new`.
+    @Test
+    fun `un inicializador de campo no ve las locales de quien hace new`() {
+        assertEquals(
+            listOf("1"),
+            output(
+                """
+                let g: integer = 1;
+                class A { let v: integer = g; }
+                function crear(): integer { let g: integer = 99; let a: A = new A(); return a.v; }
+                print(crear());
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `una funcion usa una global declarada mas abajo`() {
+        assertEquals(listOf("5"), output("function mostrar() { print(contador); } let contador: integer = 5; mostrar();"))
+    }
 }

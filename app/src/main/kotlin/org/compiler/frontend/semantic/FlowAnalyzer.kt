@@ -192,6 +192,10 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
             stmt.cases.all { alwaysReturns(it.body) } &&
             alwaysReturns(stmt.defaultBody)
 
+        // Si el try termina, retorno; si falla, el catch tambien tiene que retornar.
+        is TryCatch -> alwaysReturns(stmt.tryBlock.statements) &&
+            alwaysReturns(stmt.catchBlock.statements)
+
         else -> false
     }
 

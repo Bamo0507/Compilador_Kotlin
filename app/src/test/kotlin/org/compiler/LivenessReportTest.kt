@@ -201,4 +201,31 @@ class LivenessReportTest {
         assertEquals(setOf("global"), r.entriesByScope.keys)
         assertTrue(r.neverUsed.isEmpty())
     }
+
+
+    // ── Escrituras ─────────────────────────────────────────────────────────
+
+    @Test
+    fun `una escritura no cuenta como uso`() {
+        val x = reporte("let x: integer = 0;\nx = 5;\nx = 10;").simbolo("x")
+
+        assertEquals(0, x.useCount)
+        assertTrue(x.neverUsed)
+    }
+
+    @Test
+    fun `escribir un campo no cuenta como uso del campo`() {
+        val r = reporte("class C { let cuenta: integer; function reiniciar() { this.cuenta = 0; } }")
+
+        assertEquals(0, r.simbolo("cuenta").useCount)
+    }
+
+    // El cuerpo de mostrar se revisa al final aunque este arriba: el ultimo uso es
+    // la linea mayor, no la ultima revisada.
+    @Test
+    fun `el ultimo uso es la linea mayor`() {
+        val r = reporte("function mostrar() { print(g); }\nlet g: integer = 1;\nprint(g);")
+
+        assertEquals(3, r.simbolo("g").lastUseLine)
+    }
 }

@@ -228,4 +228,17 @@ class FlowAnalyzerTest {
         val e = errores("let x: boolean = true; function f(): integer[] { if (x) { return [1]; } }")
         assertTrue(e.single().contains("'integer[]'"), "mensaje: $e")
     }
+
+
+    // ── try/catch ──────────────────────────────────────────────────────────
+
+    @Test
+    fun `un try catch donde las dos ramas retornan garantiza retorno`() {
+        valido("function f(): integer { try { return 1; } catch (e) { return 2; } }")
+    }
+
+    @Test
+    fun `un try catch donde solo el try retorna no garantiza retorno`() {
+        conError("function f(): integer { try { return 1; } catch (e) { } }", "hay caminos que no retornan")
+    }
 }

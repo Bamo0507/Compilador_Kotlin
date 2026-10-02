@@ -1,69 +1,74 @@
-# Roadmap — Analizador Semántico de Compiscript
+# Roadmap: Generación de código intermedio para Compiscript
 
-Plan de desarrollo del Proyecto 2: análisis semántico de Compiscript sobre ANTLR,
-con tabla de símbolos, verificación de tipos, ejecución e IDE.
+Plan de desarrollo de la etapa de generación de código intermedio: traducir el AST ya
+validado de Compiscript a código de tres direcciones (TAC), con manejo de temporales,
+tabla de símbolos extendida y registros de activación.
+
+El roadmap de la etapa anterior, el analizador semántico, está archivado en
+[`semantico/`](./semantico/README.md). Sus decisiones 1 a 16 siguen vigentes.
 
 ---
 
-## Antes de empezar: qué cambió respecto al proyecto anterior
+## Qué se entrega
 
-El proyecto anterior construía a mano un generador de analizadores: expresiones
-regulares a AFD para el léxico, y tablas LL(1)/SLR(1)/LALR(1) para el sintáctico.
-**Todo eso se reemplaza por ANTLR.**
-
-Esto es importante entenderlo bien porque cambia la percepción del tamaño del
-trabajo. El enunciado dice, literal:
-
-> **Analizador Sintáctico:** Basado en la gramática de Compiscript (ANTLR),
-> reutilizando o extendiendo el trabajo de la fase anterior.
-
-Y en objetivos específicos: *"Implementar el analizador sintáctico de Compiscript
-utilizando ANTLR (u otra herramienta similar)."*
-
-Traducción: **ANTLR genera el lexer y el parser desde el archivo `.g4`.** No se
-reimplementa nada a mano. No hay normalización de regex, ni Shunting Yard, ni
-construcción de AFD, ni tablas de parsing, ni reescritura de gramática por
-precedencia.
-
-El trabajo real de este proyecto es **semántica, tabla de símbolos e IDE**, y eso
-es exactamente lo que califica la rúbrica:
+El enunciado pide el TAC generado, el reporte de errores, y el estado de la tabla de
+símbolos con la información para la generación de código (direcciones,
+desplazamientos, registros de activación). Además: la batería de pruebas, la
+documentación de la arquitectura y de cómo ejecutar, la documentación del lenguaje
+intermedio con ejemplos y supuestos, y el IDE funcional.
 
 | Componente | Puntos | Qué es realmente |
 |---|---|---|
-| IDE | 15 | Adaptar la GUI Compose que ya existe |
-| Analizador Sintáctico y Semántico | 60 | ANTLR (casi gratis) + **el verificador de tipos** (todo el trabajo) |
-| Tabla de Símbolos | 25 | Árbol de ámbitos con entornos anidados |
-| **Total** | **100** | **85 puntos son semántica y tabla de símbolos** |
+| Diseño de CI | 25 | `Quadruple`, su sintaxis y `docs/lenguaje-intermedio.md` |
+| Generación de TAC | 65 | El generador, el manejo de temporales y la batería de pruebas |
+| Tabla de Símbolos | 10 | Zonas, tamaños, desplazamientos y registros de activación |
+
+El assembler de la etapa siguiente es ARM de 32 bits (Raspberry Pi). Lo único de esta
+etapa que depende de eso son los tamaños de la decisión 42.
+
+---
+
+## Cómo se trabaja
+
+Cada punto de teoría se estudia primero, hasta entenderlo. Después se estructura su
+fase con sus tickets, y al cerrarla se pasa al siguiente punto. La fuente de verdad son
+las presentaciones del curso (06 Generación de código intermedio, 07 Entornos en tiempo
+de ejecución, 08 Introducción a la recolección de basura), y el Dragon Book donde las
+presentaciones no profundizan.
+
+Antes de empezar un ticket se da una sinopsis corta de lo que aborda, y se toca código
+solo con el visto bueno. Un ticket a la vez.
 
 ---
 
 ## Mapa de fases
 
-| Fase | Qué se logra al terminarla | Tickets |
+| Fase | Qué se logra | Rúbrica |
 |---|---|---|
-| [**0 — Limpieza y base**](./fase-0-limpieza-y-base.md) | Repo limpio, compilando, con ANTLR generando lexer y parser | 6 |
-| [**1 — Modelos congelados**](./fase-1-modelos.md) | Las 4 estructuras que los 3 integrantes deben acordar antes de escribir lógica | 5 |
-| [**2 — Del árbol de ANTLR al AST propio**](./fase-2-ast.md) | Un árbol limpio, con la torre de precedencia colapsada | 3 |
-| [**3 — Pasada 1: declaraciones**](./fase-3-declaraciones.md) | El árbol de ámbitos poblado con todas las declaraciones | 2 |
-| [**4 — Pasada 2: tipos**](./fase-4-tipos.md) | Cada expresión con su tipo verificado y su valor plegado | 4 |
-| [**5 — Flujo y vivacidad**](./fase-5-flujo-y-vivacidad.md) | `return`/`break`/`continue`, código muerto, metadatos para el GC | 2 |
-| [**6 — Ejecución**](./fase-6-ejecucion.md) | El programa corre y `print(3+5)` imprime `8` | 2 |
-| [**7 — Pipeline e IDE**](./fase-7-pipeline-e-ide.md) | Todo orquestado y visible en la GUI | 4 |
-| [**8 — Pruebas y documentación**](./fase-8-pruebas-y-docs.md) | Casos exitosos y fallidos por regla, más los entregables de docs | 3 |
-| | | **31** |
+| [0, Preparación](./fase-0-preparacion.md) | Roadmap archivado, semántico corregido, repo limpio | prerrequisito |
+| [1, Diseño del lenguaje intermedio](./fase-1-diseno-del-lenguaje-intermedio.md) | `Quadruple`, su sintaxis y su documento | Diseño de CI, 25 |
+| [2, Expresiones y temporales](./fase-2-expresiones-y-temporales.md) | El generador, el GDA y el pool de temporales | Generación de TAC, 65 |
+| [3, Control de flujo](./fase-3-control-de-flujo.md) | Condiciones con caída, sentencias, `switch` y `try/catch` | Generación de TAC, 65 |
+| [4, Tabla de símbolos y funciones](./fase-4-tabla-de-simbolos-y-funciones.md) | Zonas, tamaños, desplazamientos, registros de activación y funciones | Tabla de Símbolos, 10 |
+| [5, Objetos y listas](./fase-5-objetos-y-listas.md) | Objetos, métodos con despacho, listas y chequeos | Generación de TAC, 65 |
+| [6, El IDE](./fase-6-ide.md) | La pantalla de código intermedio | entregable |
+| [7, Batería y documentación](./fase-7-bateria-y-documentacion.md) | Los `.tac` dorados y los documentos finales | Generación de TAC, 65, y Diseño de CI, 25 |
 
-### Dos notas sobre el orden
+## Mapa de los puntos de teoría
 
-**La Fase 1 es un cuello de botella deliberado.** Nadie escribe lógica de
-análisis hasta que los cuatro modelos estén acordados por los tres y mergeados.
-Es lo que permite que desde la Fase 2 trabajen en paralelo sin pisarse, y el
-enunciado exige commits individuales por integrante.
-
-**La Fase 6 (ejecución) va después de la 5**, aunque el catedrático la pidió.
-El intérprete corre sobre el AST **ya validado**: si ejecutas antes de verificar,
-ejecutas código con errores de tipo y obtienes basura en vez de un error. Además,
-buena parte de la demo (`print(3+5)` → `8`) ya sale de la Fase 4 con plegado de
-constantes, sin intérprete.
+| # | Punto de teoría | Fuente | Fase |
+|---|---|---|---|
+| 1 | Por qué una representación intermedia | 06 | Fase 0 |
+| 2 | GDA y número de valor | 06 | Fase 2 |
+| 3 | Código de tres direcciones: direcciones e instrucciones | 06 | Fase 1 |
+| 4 | Cuádruplos y tripletas | 06 | Fase 1 |
+| 5 | Temporales: asignación y reciclaje | Dragon Book 6 | Fase 2 |
+| 6 | Traducción de control de flujo | Dragon Book 6.6 a 6.8 | Fase 3 |
+| 7 | Subdivisión de la memoria en ejecución | 07 | Fase 4 |
+| 8 | Árboles de activación y la pila durante las llamadas | 07 | Fase 4 |
+| 9 | Registros de activación, secuencia de llamadas y enlaces de acceso | 07, Dragon Book 7.2 y 7.3 | Fase 4 |
+| 10 | Objetos, métodos y listas en memoria | Dragon Book 6.4 | Fase 5 |
+| 11 | Montículo, administrador de memoria y recolección de basura | 07, 08 | Fase 5 |
 
 ---
 
@@ -71,16 +76,16 @@ constantes, sin intérprete.
 
 Cada ticket lleva:
 
-- **Estado** — `pendiente` | `en progreso` | `completado`. Se actualiza a mano.
-- **Depende de** — tickets previos requeridos.
-- **Archivos** — qué crea, modifica o elimina.
-- **Qué es esto, en simple** — explicación en lenguaje llano, cuando el concepto
+- **Estado**: `pendiente` | `en progreso` | `completado`. Se actualiza a mano.
+- **Depende de**: tickets previos requeridos.
+- **Archivos**: qué crea, modifica o elimina.
+- **Qué es esto, en simple**: explicación en lenguaje llano, cuando el concepto
   lo necesita.
-- **Qué se hace** — el diseño concreto, con código.
-- **Por qué** — la razón de la decisión. Presente siempre que la decisión no sea
+- **Qué se hace**: el diseño concreto, con código.
+- **Por qué**: la razón de la decisión. Presente siempre que la decisión no sea
   obvia, porque son las que se preguntan en la defensa.
-- **Aceptación** — cuándo se considera terminado, en criterios verificables.
-- **Respaldo** — la sección del enunciado, del libro o de las notas de clase que
+- **Aceptación**: cuándo se considera terminado, en criterios verificables.
+- **Respaldo**: la sección del enunciado, del libro o de las notas de clase que
   lo justifica.
 
 ---
@@ -109,143 +114,48 @@ Estos aplican a cada ticket sin repetirlos:
 
 ---
 
-## Estructura de carpetas al terminar
+## Decisiones de esta etapa
 
-```
-app/src/main/
-├── antlr/
-│   └── Compiscript.g4                    la gramática: fuente de verdad del sintáctico
-│
-└── kotlin/org/compiler/
-    ├── models/
-    │   └── LexemeLocation.kt              línea + columna (sobrevive del proyecto anterior)
-    │
-    ├── diagnostics/
-    │   ├── CompilerError.kt               sealed: LexerError | ParserError | SemanticError
-    │   └── Diagnostics.kt                 colector de errores, una instancia por compilación
-    │
-    ├── frontend/
-    │   ├── syntax/
-    │   │   ├── DiagnosticsErrorListener.kt errores de ANTLR -> Diagnostics
-    │   │   └── SyntaxAnalyzer.kt           .cps -> parse tree de ANTLR
-    │   │
-    │   ├── ast/
-    │   │   ├── models/                     Node, Expression, Statement, TypeReference, operadores
-    │   │   └── AstBuilder.kt               Visitor de ANTLR: parse tree -> AST propio
-    │   │
-    │   └── semantic/
-    │       ├── symbols/
-    │       │   ├── Type.kt                 jerarquía sellada de tipos
-    │       │   ├── Symbol.kt / DeclarationKind.kt
-    │       │   └── Scope.kt / ScopeKind.kt  árbol de ámbitos
-    │       ├── ScopeDeclaration.kt          declareOrReport: lo usan las dos pasadas
-    │       ├── TypeResolver.kt              TypeReference escrito -> Type resuelto
-    │       ├── DeclarationCollector.kt      PASADA 1: declaraciones
-    │       ├── TypeRules.kt                 las reglas de inferencia, una función por regla
-    │       ├── TypeChecker.kt               PASADA 2: verificación y plegado
-    │       ├── FlowAnalyzer.kt              return/break/continue, código muerto
-    │       └── LivenessReportBuilder.kt     reporte de vivacidad para el GC
-    │
-    ├── interpreter/
-    │   ├── RuntimeValue.kt                  los valores en ejecución
-    │   ├── Environment.kt                    ámbitos con valores
-    │   └── Interpreter.kt                    ejecuta el AST validado
-    │
-    ├── runtime/
-    │   ├── CompilerPipeline.kt               orquestador: una llamada, un resultado
-    │   └── models/CompilationResult.kt
-    │
-    └── gui/
-        ├── state/AppState.kt
-        ├── screens/                          Workspace, Trees, Symbols
-        └── components/                       CodeEditor, ErrorList, TreeCanvas, Console, ...
-```
-
----
-
-## El pipeline completo, en orden
-
-```
-archivo .cps
-     │
-     ▼  ANTLR Lexer + Parser  (+ DiagnosticsErrorListener)
-parse tree de ANTLR ─────────────────────────► errores léxicos y sintácticos
-     │                                          vista visual del árbol (requisito)
-     ▼  AstBuilder (Visitor de ANTLR)
-AST propio  ── colapsa la torre de 11 niveles de precedencia
-     │
-     ▼  DeclarationCollector          PASADA 1
-árbol de ámbitos completo ─────────────────► errores de declaración
-     │                                          vista de tabla de símbolos (requisito)
-     ▼  TypeChecker                   PASADA 2
-AST decorado (cada Expression con su tipo) ────────► errores de tipo
-     │  + valores plegados (3+5 = 8)
-     ▼  FlowAnalyzer
-     │                              ─────────► errores de flujo y código muerto
-     ▼  LivenessReportBuilder
-     │                              ─────────► reporte de vivacidad para el GC
-     ▼  Interpreter  (solo si no hay errores)
-salida del programa ─────────────────────────► consola del IDE
-```
-
----
-
-## Reparto sugerido entre los 3 integrantes
-
-El enunciado exige *"commits individuales que evidencien claramente la
-contribución de cada integrante"*. Eso condiciona la arquitectura: hay que poder
-partir el trabajo en tres frentes que no se pisen.
-
-| Frente | Fases y tickets | Depende de |
-|---|---|---|
-| **A — Infra, AST e IDE** | 0.4, 0.5, 1.4, 1.5, 2.x, 7.x | nada |
-| **B — Símbolos y tipos** | 0.6, 1.1, 1.2, 1.3, 3.x | acordar los modelos con A |
-| **C — Verificación y ejecución** | 4.x, 5.x, 6.x | modelos de A y B |
-
-La clave para que no se bloqueen: **congelar los cinco modelos de la Fase 1 el
-primer día**, revisados por los tres, antes de escribir cualquier lógica.
-
-La Fase 0 y la Fase 8 se hacen entre todos.
-
----
-
-## Decisiones ya cerradas
-
-Estas se discutieron y quedaron cerradas antes de escribir los tickets. Cada una
-tiene su razón anotada porque van a ser preguntadas.
+Se numeran desde la 17, a continuación de las 16 de la etapa anterior. Las que se tomen
+al estudiar o ejecutar un ticket se agregan aquí en el momento.
 
 | # | Decisión | Elegida | Por qué |
 |---|---|---|---|
-| 1 | `float` en el lenguaje | **Se agrega a la gramática** | El enunciado pide aritmética sobre `integer` o `float`, y la gramática de ejemplo no tenía `float`. Se extiende `baseType` y se agrega `FloatLiteral`. Ver ticket 0.5. |
-| 2 | Modificar `Compiscript.g4` | **Sí, documentando cada cambio en esta tabla** | El enunciado dice *"a partir de la gramática oficial y extenderlo"*. Se descartó un `docs/decisiones-gramatica.md` aparte: con un solo cambio, un tercer documento se desactualiza más rápido de lo que se lee. Cada cambio futuro entra aquí. |
-| 3 | Ejecución de código | **Sí, es requisito** | El catedrático espera las tres cosas: árbol sintáctico, árbol validado semánticamente, y el resultado de ejecutar. No está en la rúbrica escrita, pero sí se pidió. |
-| 4 | Condición del `switch` | **Comparable con sus `case`, no `boolean`** | Toda condición de control de flujo se resuelve como operación booleana: en `switch (x) { case 1: }` lo que ocurre es `x == 1`, una comparación que produce `boolean`. La regla real es que el sujeto y los `case` sean comparables entre sí. |
-| 5 | Fall-through en el `switch` | **No existe** | Se deduce del propio enunciado: `break` solo se permite dentro de bucles, así que no hay forma de expresar caída al siguiente caso. Cada `case` ejecuta su cuerpo y el `switch` termina. |
-| 6 | Sobrecarga de funciones | **No existe** | El enunciado pide *"detección de redeclaración de funciones con el mismo nombre"*: dos funciones con el mismo nombre es error. Un ámbito guarda un símbolo por nombre. Elimina toda la resolución de sobrecarga. |
-| 7 | Ámbitos al cerrarse | **Árbol permanente, no pila que descarta** | Tres razones independientes: el enunciado pide mostrar *"el estado de la tabla de símbolos por cada entorno"* (25 pts); la herencia necesita el ámbito de la superclase ya cerrado; y los closures capturan su ámbito de definición, que no puede morir. |
-| 8 | Equivalencia de tipos | **Nominal para clases, estructural para arreglos** | `class Perro : Animal` te obliga a *declarar* la relación de subtipo, y eso es la marca de un sistema nominal. Los arreglos no tienen nombre, así que se comparan por su tipo de elemento. |
-| 9 | Comparación de tipos | **El `==` de Kotlin, sin canonicalización** | Los `data class` ya generan `equals` estructural, y la profundidad máxima real es 2 (`integer[][]`). Canonicalizar añadiría una caché y un riesgo de desincronización para ahorrar nanosegundos. |
-| 10 | Warnings | **No existen: un solo nivel de severidad** | No se piden. `CompilerError` no lleva `Severity`. El *"código muerto"* que sí pide el enunciado va como **error**. La información de vivacidad para el GC no es un diagnóstico: es otra vista. |
-| 11 | Pasadas semánticas sobre el AST propio, no sobre el parse tree de ANTLR | **AST propio** | Razón técnica decisiva: un Listener de ANTLR recorre **todo** automáticamente y no se le puede impedir entrar a los cuerpos de las funciones. La Pasada 1 necesita justamente *no* entrar (es lo que habilita las referencias adelantadas). Con funciones recursivas sobre el AST simplemente no recurres. Ver ticket 3.2. |
-| 12 | Módulo `%` con `float` | **Solo `integer`** | Es lo más simple y lo más común en lenguajes de este perfil. Queda documentado como regla A3. |
-| 13 | Tabla de tipos numerada | **No existe** | Se evaluó y se descartó. Un id entero solo puede contestar *"¿son iguales?"*; no puede decir si un tipo es numérico, de qué es un arreglo, o cuáles son los parámetros de una función — que es lo que el verificador pregunta casi siempre. Y comparar tipos ya es tan barato como comparar enteros: los primitivos son `data object` (una sola instancia, se comparan por referencia) y los compuestos tienen profundidad máxima 2. `Symbol` guarda `type: Type` directamente, que en Kotlin **es** la "referencia al tipo" que piden las notas de clase. |
-| 14 | Categoría de un símbolo | **`DeclarationKind` (5 valores) + un booleano `isMember`** | Sin `FIELD` ni `METHOD`: eran el producto cruzado de dos ejes independientes (*qué es* × *dónde vive*), y ese cruce dejaba sin categoría clara a un `const` dentro de una clase. Separados, cada regla pregunta una sola cosa: `kind == CONSTANT` para la reasignación, `isMember` para el acceso con `this.`. `Scope.declare` pone `isMember` automáticamente —el ámbito ya sabe si es una clase—, así que no se puede equivocar. No se llama `category` porque ese término ya significa "categoría de lexema", ni `DeclarationType` porque `Type` ya significa "tipo de dato". |
-| 15 | Función sin tipo de retorno anotado | **Es `void`; no se infiere del cuerpo** | La gramática lo permite (`(':' type)?`) y el caso normal es una función que solo imprime. Inferir del primer `return` rompería la Pasada 1, que registra la firma **sin entrar al cuerpo** — y el `return` está justamente ahí. Consecuencias: `function f() { return 1; }` es **error** (*"debe devolver 'void', no 'integer'"*), y `return;` pelado dentro de una función void es **legal** como salida temprana. |
-| 16 | Herencia del constructor | **Se hereda si la subclase no declara uno propio** | Al revés que en Java, y por una razón concreta: Compiscript **no tiene `super`**, así que una subclase sin constructor propio no tendría ninguna forma de inicializar los campos heredados y la herencia quedaría inutilizable. Además el ejemplo de `Especificaciones.md` lo asume: `class Perro : Animal` sin constructor, invocado como `new Perro("Toby")`. Se implementa con `lookupMember` en vez de `lookupLocal` (tickets 4.3 y 6.2). |
+| 17 | Dónde vive el generador | `frontend/intermediate/` | En la teoría, generar código intermedio es el último paso del front-end (Dragon Book 1.2). `backend/` queda para la fase de assembler. |
+| 18 | Cuándo corre | Etapa G, solo si no hubo errores | Paso 4 del enunciado: *"Si no existen errores, el generador recorre el árbol"*. Es la misma regla que ya sigue el intérprete. |
+| 19 | El intérprete | Se queda y convive | No estorba, la GUI ya muestra su salida, y la decisión de validar el TAC ejecutándolo se toma en el punto 3. |
+| 20 | Miembros de clase sin `this.` | No son visibles por nombre suelto | Es la regla de TypeScript, del que Compiscript es subconjunto. Hoy el verificador los aceptaba y el intérprete fallaba. |
+| 21 | Rango de `integer` | 32 bits, con recorte | El TAC va a declarar que un `integer` mide 4 bytes; el plegado y el intérprete calculaban en 64. |
+| 22 | Cuerpos del nivel superior | Se revisan al final de la Pasada 2 | Así una función puede usar una global declarada más abajo. Limitación: llamarla antes de la declaración da error en ejecución, igual que el `ReferenceError` de TypeScript. |
+| 23 | Qué cuenta como uso en la vivacidad | Solo las lecturas | Para un recolector de basura importa la última lectura. Una variable que solo se escribe nunca necesitó su memoria. |
+| 24 | Destino de los saltos | Etiquetas simbólicas, sin backpatching | El backpatching existe para traducir en una sola pasada dentro de un parser ascendente, donde la condición se genera antes de conocer su destino. Aquí el generador recorre el AST completo y pasa las etiquetas a los hijos como atributo heredado. Además, un número de instrucción del TAC no sobrevive al assembler: cada instrucción se vuelve varias, y el ensamblador trabaja con etiquetas de forma nativa. Se documenta en `docs/lenguaje-intermedio.md`. |
+| 25 | Representación de las instrucciones | Cuádruplos, como `sealed interface Quadruple` con una `data class` por familia | El enunciado pide temporales y su reciclaje, y las tripletas no tienen temporales. La ventaja de las tripletas indirectas, reordenar barato, no se usa porque no se mueven instrucciones después de generarlas. Una clase por familia, y no un registro genérico `(op, arg1, arg2, result)`, hace que cada instrucción traiga exactamente sus campos y que el `when` sea exhaustivo. La tabla de cuatro columnas de la teoría se obtiene con `toRow()`. |
+| 26 | `print` | Instrucción propia, `print_<tipo> x` | Se lee directo en el TAC. El sufijo es obligatorio porque imprimir un entero y un string son llamadas al sistema distintas en assembler. |
+| 27 | Tipos en las operaciones | Sufijo de tipo en el operador (`+`, `+f`, `<s`), `concat` para strings y conversión explícita `inttofloat` | En assembler, sumar enteros y flotantes son instrucciones distintas. La conversión explícita deja visible el ensanchamiento implícito del lenguaje (Dragon Book 6.5.2). |
+| 28 | `try/catch` | Instrucciones `try L`, `endtry` y `throw x`, con semántica de manejador | Se pidió en la etapa anterior. Es la idea de `setjmp`/`longjmp`: el `throw` encuentra el manejador aunque esté varias llamadas abajo, y descarta los registros de activación de por medio. Cómo se descartan lo implementa la fase de assembler. |
+| 29 | Errores en ejecución | Chequeos emitidos en el TAC, en línea, que disparan `throw` con la línea del fuente | Sin chequeos, la máquina lee memoria basura en silencio, y el `catch` nunca tendría nada que atrapar. División entre cero en la Fase 2; índice y `null` con los objetos y las listas; la recursión demasiado profunda queda fuera de alcance, documentada. |
+| 30 | GDA | Uno por expresión, construido desde el AST, sin compartir en expresiones con llamadas o asignaciones anidadas | Es lo que muestran las diapositivas 12 y 13. Una llamada puede cambiar una global, y una asignación anidada cambia una variable: en esos casos dos subexpresiones iguales no son el mismo valor. |
+| 31 | Reciclaje de temporales | Pool con conteo de usos, que entrega el libre de índice más bajo | Con un GDA un temporal tiene varios lectores y deja de morir en orden de pila, y el contador clásico generaría código que pisa valores vivos. En un árbol el pool entrega los mismos nombres que el contador. |
+| 32 | Plegado de constantes en el TAC | Se usa: una expresión con `constantValue` se emite como constante | El `TypeChecker` ya calculó el valor y garantiza que es correcto; recalcularlo en ejecución sería trabajo repetido. |
+| 33 | La copia al destino | Se conserva: `t1 = a + b` y después `x = t1` | Es la forma de la diapositiva 24. Escribir directo en `x` es una optimización que la teoría no muestra. |
+| 34 | Condiciones con caída | Sí: la condición solo salta hacia el lado que no sigue, con la relación invertida | Es la técnica del Dragon Book 6.6.5. Ahorra un `goto` por condición, que sin ella aparecería en cada `if` y cada bucle. |
+| 35 | Traducción del `switch` | Cadena de comparaciones | La tabla de saltos (Dragon Book 6.8) exige `case` enteros constantes y cercanos, y en Compiscript un `case` puede ser un string o una variable. |
+| 36 | Subexpresiones con saltos adentro (ternario, `&&` y `\|\|` como valor) | Entran al GDA como nodo `Opaque`, y la expresión que las contiene no comparte nodos | Extiende la decisión 30: entre dos ramas solo se ejecuta una, y un nodo compartido entre ellas no estaría calculado en la otra. Las llamadas y los accesos a campos y elementos entran por el mismo nodo. |
+| 37 | Variable del `catch` | `try L, e`: la instrucción nombra la variable que recibe el mensaje | Hace explícito en el TAC el flujo del mensaje del `throw`, en vez de dejarlo en la semántica de la instrucción. |
+| 38 | Funciones como valores | Prohibidas: una función solo se puede llamar. `let g = f;` es error semántico | Una función anidada guardada y llamada después de que retorna la que la contiene seguiría su enlace de acceso hasta un registro de activación ya liberado. Con la regla, una pila y los enlaces de acceso alcanzan siempre, y el TAC solo necesita llamadas indirectas para los métodos (decisión 43), que no capturan variables de ninguna hoja. Llamar en cualquier posición de valor (`r = sumar(2, 3)`) sigue permitido. Ningún programa de la batería lo usaba. |
+| 39 | El código del nivel superior | Se envuelve en un `main` implícito, con su propio registro de activación | Así todo temporal vive en un registro de activación, y la fase de assembler maneja los temporales de una sola forma. Las globales siguen en datos estáticos. |
+| 40 | Variables de otro registro de activación | La dirección lleva los saltos de enlace de acceso: `cuenta^1` | El TAC queda legible y el número de saltos visible. Expandirlo a instrucciones que siguen el enlace es trabajo mecánico de la fase de assembler, igual que cualquier acceso a una local. El documento muestra la expansión como ejemplo. |
+| 41 | Variables con el mismo nombre en el TAC | Sufijo con la línea de la declaración, solo cuando hay ambigüedad: `x` y `x@3`; la columna se agrega si dos chocan en la misma línea | El sufijo dice dónde está declarada sin abrir la tabla de símbolos. El nombre del ámbito no sirve porque no es único, y un contador no informa nada. Una variable sin otra del mismo nombre que la pueda confundir, como el parámetro `n` de dos funciones distintas, no lleva sufijo. |
+| 42 | Tamaños y alineación | `integer` 4, `float` 8, `boolean` 1, referencias 4, cada temporal 8; alineación natural y registro redondeado a 8 | El objetivo de assembler es ARM de 32 bits (Raspberry Pi): las direcciones miden 4 bytes y la pila se alinea a 8. El `float` en doble precisión coincide con el intérprete. Un temporal mide 8 porque el pool recicla nombres sin mirar el tipo. La alineación natural (Dragon Book 6.3.4) es una sola función y deja visibles los tamaños que pide el enunciado. |
+| 43 | Despacho de métodos sobrescritos | Tabla de métodos (vtable) por clase en datos estáticos; la casilla 0 de cada objeto apunta a la de su clase, y la llamada es indirecta | Con `let a: Animal = new Perro()`, el compilador no sabe la clase real, y llamar a `Animal.hablar` imprimiría lo incorrecto. La tabla cuesta tres instrucciones por llamada sin importar cuántas subclases haya, y es la técnica estándar. Los métodos heredados ocupan en la tabla la misma posición que en la del padre, igual que los campos en el objeto. |
+| 44 | Inicialización de campos | Una rutina `$init` por clase, separada del constructor, que primero llama a la de la superclase | Si una subclase hereda el constructor del padre, ese constructor no conoce los campos de la subclase. Con `$init` aparte, todos los campos se inicializan siempre. Es la traducción de los inicializadores que pueden usar `this`. |
+| 45 | Chequeo de `null` | Antes de cada acceso a un campo, a un elemento y de cada llamada a método, salvo sobre `this` | Completa la decisión 29: sin el chequeo, la máquina lee la dirección 0 en vez de disparar un error que el `catch` pueda atrapar. `this` nunca es `null`. |
+| 46 | Ubicación de las tablas de métodos | Al inicio del TAC, antes de `$main` | Son datos estáticos, no código. La fase de assembler las traduce a su sección de datos. |
+| 47 | Strings | Referencias de 4 bytes; los literales viven en datos estáticos y un `concat` pide su bloque en el montículo | El texto de un literal se conoce al compilar; el de una concatenación solo al ejecutar. |
+| 48 | Liberación del montículo | No se libera: `alloc` es la única operación, y se documenta como limitación | El enunciado de esta etapa pide el TAC, no un recolector. Los programas de la batería son pequeños y terminan pronto. El diseño deja posible un recolector por rastreo más adelante: las referencias apuntan al inicio del objeto y la casilla 0 identifica su clase, las dos suposiciones de la presentación 08. |
+| 49 | Cómo verifica la batería el TAC | Archivos dorados: cada `.cps` válido lleva su `.tac` esperado; los inválidos no deben producir TAC | Agregar un caso sigue siendo agregar archivos, y los `.tac` sirven de ejemplos para el documento y para quien califica. Un intérprete de TAC verificaría además que el código calcula bien, pero es una pieza grande que el enunciado no pide. Los `.tac` se regeneran con `./gradlew test -DupdateGolden=true` y el cambio se revisa en el `git diff`. |
 
----
+## Decisiones pendientes
 
-## Las cuatro propiedades del sistema de tipos
-
-El catedrático pidió que se apliquen explícitamente. Cada una tiene una decisión
-concreta señalable en el código:
-
-| Propiedad | Qué exige | Dónde se cumple |
-|---|---|---|
-| **Verificable** | Existe un algoritmo que decide si el programa está bien tipado | `TypeChecker` (Fase 4). Cada regla de la gramática tiene su función y **toda** expresión recibe un tipo, aunque sea `ErrorType`. Ninguna construcción queda sin regla. |
-| **Decidible** | El algoritmo **termina** con verdadero o falso en tiempo finito | El recorrido es sobre un árbol **finito** y sin unificación recursiva. Con anotaciones explícitas más inferencia local (solo del inicializador y del `foreach`), la terminación es inmediata. |
-| **Realizable** | Lo verificable estáticamente se verifica en compilación; **lo que no, dinámicamente en ejecución** | Dos casos con las dos mitades implementadas. **Índices**: `lista[-1]` con literal se rechaza en la Fase 4 gracias al plegado; `lista[i]` con variable va al chequeo dinámico del `Interpreter` (Fase 6). **División entre cero**: `1 / 0` es error de compilación; `1 / x` con `x` variable se verifica en ejecución. De ahí sale el `try/catch` del lenguaje. |
-| **Transparente** | El programador puede **predecir** si pasa la validación y **entender por qué** falló | Los mensajes de error no son cosmética, **son un requisito del sistema de tipos**. Cada error lleva línea, columna, tipo esperado, tipo encontrado y la regla violada. Es lo que justifica invertir en el formato de errores. |
-
-Las reglas de inferencia en notación de Cardelli, con su función y su test, viven
-en [`docs/reglas-de-tipos.md`](../reglas-de-tipos.md) (se crea en el ticket 4.1).
+Ninguna por ahora. La de las funciones que escapan de la función que las contiene se
+cerró con la decisión 38, al estudiar los enlaces de acceso.
