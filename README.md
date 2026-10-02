@@ -35,8 +35,6 @@ símbolos, la vivacidad, los errores y la salida. Se hizo de esta forma para que
 interfaz gráfica no tuviera que orquestar nada, es decir, la GUI llama una vez y
 de ahí en adelante solo lee campos.
 
-El diagrama completo de la implementación está en `docs/arquitectura.excalidraw`.
-
 ### Lo que valida el analizador semántico
 
 - **Tipos**, aritmética sobre `integer` y `float`, operadores lógicos sobre
@@ -219,7 +217,7 @@ Compilador_Kotlin/
 ├── docs/
 │   ├── roadmap/                              el plan por fases y tickets
 │   ├── reglas-de-tipos.md                    las reglas del sistema de tipos
-│   └── arquitectura.excalidraw               diagrama de la implementación
+│   └── informe-analisis-semantico.pdf        informe de la etapa del analizador semántico
 ├── gradle/libs.versions.toml                 version catalog
 └── app/build.gradle.kts                      config del módulo
 ```

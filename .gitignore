@@ -20,5 +20,5 @@ local.properties
 # Test-generated rendering artifacts
 extras/*.png
 
-
-
+# Metadata de macOS
+.DS_Store

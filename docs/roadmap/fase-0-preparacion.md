@@ -481,7 +481,7 @@ símbolos extendida (puntos 5 a 7), y limpiarlo ahora sería tocarlo dos veces.
 
 ## Ticket 0.4: Limpieza del repositorio
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**
