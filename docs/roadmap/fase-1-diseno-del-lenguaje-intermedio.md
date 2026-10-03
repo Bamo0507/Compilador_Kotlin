@@ -288,7 +288,7 @@ una vista. Es la misma regla que separa `Type` de `TypeRules`.
 
 ## Ticket 1.3: El documento del lenguaje intermedio, secciones 2 a 7
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2, 0.5
 
 **Archivos:**
