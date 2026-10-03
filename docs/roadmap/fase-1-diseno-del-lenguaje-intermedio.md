@@ -27,7 +27,7 @@ del documento.
 
 ## Ticket 1.1: Direcciones, etiquetas y cuádruplos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.2
 
 **Archivos:**
