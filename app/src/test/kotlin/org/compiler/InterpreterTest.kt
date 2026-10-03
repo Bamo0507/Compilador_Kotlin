@@ -294,8 +294,8 @@ class InterpreterTest {
     @Test
     fun `los campos de tipo clase arrancan en null`() {
         assertEquals(
-            listOf("null"),
-            output("class A { let otro: A; }\nprint(new A().otro);")
+            listOf("true"),
+            output("class A { let otro: A; }\nprint(new A().otro == null);")
         )
     }
 

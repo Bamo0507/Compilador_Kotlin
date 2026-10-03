@@ -300,6 +300,18 @@ class TypeCheckerStmtTest {
         assertTrue(r.messages.isEmpty(), "no deberia haber errores: ${r.messages}")
     }
 
+    // ── print ──────────────────────────────────────────────────────────────
+
+    @Test
+    fun `print acepta solo tipos simples`() {
+        assertValid("print(1); print(2.5); print(\"a\"); print(true);")
+
+        assertError("print([1, 2]);", "print solo acepta")
+        assertError("class A { } print(new A());", "print solo acepta")
+        assertError("print(null);", "print solo acepta")
+        assertError("function f() { } print(f());", "print solo acepta")
+    }
+
     // ── Orden de revision del nivel superior ───────────────────────────────
 
     @Test

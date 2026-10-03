@@ -126,7 +126,7 @@ class TypeChecker(
             is ClassDeclaration -> checkClassDeclaration(stmt)
             is Assignment -> checkAssignment(stmt)
             is ExpressionStatement -> checkExpression(stmt.expr)
-            is Print -> checkExpression(stmt.expr)
+            is Print -> checkPrint(stmt)
             is Block -> checkBlock(stmt)
             is If -> checkIfStatement(stmt)
             is While -> checkWhileStatement(stmt)
@@ -151,6 +151,17 @@ class TypeChecker(
         body()
         // Nunca es nulo: el ambito se acaba de abrir como hijo del actual.
         currentScope = checkNotNull(currentScope.parent)
+    }
+
+    // print solo sabe imprimir valores simples: un objeto o una lista no tienen una
+    // forma de texto definida en el lenguaje, y una funcion void no produce nada.
+    private fun checkPrint(stmt: Print) {
+        val type = checkExpression(stmt.expr).type
+        val printable = type == IntegerType || type == FloatType ||
+            type == StringType || type == BooleanType || type == ErrorType
+        if (!printable) {
+            report(stmt.expr, "print solo acepta integer, float, string o boolean, no '${type.name}'")
+        }
     }
 
     // La usan if, while, do-while y for. Es lo que hace que `if (x = 1)` sea error:

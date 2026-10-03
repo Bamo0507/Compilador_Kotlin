@@ -193,7 +193,7 @@ en la Fase 4.
 
 ## Ticket 1.2: La sintaxis textual y la vista de cuádruplo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -201,6 +201,8 @@ en la Fase 4.
 - `frontend/intermediate/TacPrinter.kt` (NUEVO)
 - `frontend/intermediate/models/QuadrupleRow.kt` (NUEVO)
 - `app/src/test/kotlin/org/compiler/TacPrinterTest.kt` (NUEVO)
+- `frontend/semantic/TypeChecker.kt` (MODIFICAR: `print` solo de tipos simples, decisión 50)
+- `resources/programas/invalidos/print_de_objeto.cps` (NUEVO)
 
 ### La sintaxis
 
@@ -256,11 +258,21 @@ Ejemplos de cómo cae cada familia en las columnas:
 | Cuádruplo | operador | arg1 | arg2 | resultado |
 |---|---|---|---|---|
 | `t2 = b * t1` | `*` | `b` | `t1` | `t2` |
-| `t1 = - c` | `-` | `c` | | `t1` |
+| `t1 = - c` | `minus` | `c` | | `t1` |
 | `a = t5` | `=` | `t5` | | `a` |
 | `ifFalse t1 goto L2` | `ifFalse` | `t1` | | `L2` |
 | `t3 = lista[t2]` | `=[]` | `lista` | `t2` | `t3` |
+| `lista[t2] = t1` | `[]=` | `t2` | `t1` | `lista` |
 | `param t1` | `param` | `t1` | | |
+
+**Dos convenciones de la tabla:** el menos unario se escribe `minus`, como en el Dragon
+Book (figura 6.10), para que no se confunda con el binario en la columna de operador. En
+`x[i] = y`, la columna de resultado es `x`, lo que se escribe, igual que en el resto de
+las familias.
+
+**`print` solo de tipos simples (decisión 50):** al definir los sufijos de `print` se
+vio que el `TypeChecker` aceptaba imprimir objetos, listas y `null`, para los que no
+hay sufijo. Se volvió error semántico, con su test y su `.cps` inválido.
 
 **Por qué el printer está aparte del modelo:** `Quadruple` es datos; cómo se escribe es
 una vista. Es la misma regla que separa `Type` de `TypeRules`.
