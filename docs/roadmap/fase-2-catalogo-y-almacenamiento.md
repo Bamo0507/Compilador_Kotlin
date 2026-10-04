@@ -365,7 +365,7 @@ muerte del proceso en las pruebas.
 
 ## Ticket 2.5 · `CatalogLoader`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.3, 2.4
 
 **Archivos:**
@@ -376,11 +376,14 @@ muerte del proceso en las pruebas.
 ### Qué hace
 
 ```kotlin
-class CatalogLoader(private val diagnostics: Diagnostics) {
+class CatalogLoader(
+    private val directory: DataDirectory,
+    private val diagnostics: Diagnostics
+) {
 
     // Lee TODOS los .json del directorio. NO abre ningun .csv:
     // esquema ansioso, datos perezosos.
-    fun cargar(): Catalog
+    fun load(): Catalog
 }
 ```
 
@@ -406,12 +409,29 @@ por corrida.
 **El chequeo estructural NO va aquí**, va en el semántico, porque necesita abrir
 el CSV para leer el header y esta etapa no abre CSV. Ver ticket 4.2.
 
+El cargador lee los JSON asociados a los CSV y detecta los JSON huérfanos por
+separado. Si una columna tiene un tipo desconocido, reporta el error y conserva
+las demás columnas válidas de esa tabla para acumular diagnósticos. También
+rechaza `NULL` y `<error>` como tipos persistidos, aunque el serializador los
+reconozca para la ida y vuelta de los modelos internos. Las columnas se conservan
+provisionalmente en el orden del JSON; el orden definitivo se verificará contra
+el encabezado del CSV en el semántico, sin abrir el CSV en esta etapa.
+
+El diagnóstico de catálogo usa ubicación SQL `(1, 1)` porque proviene de un
+archivo de datos y `CompilerError` todavía exige una posición de fuente. El
+mensaje identifica el archivo, la tabla o la columna afectada.
+
 **Aceptación:**
 
 - directorio vacío da `Catalog` vacío sin errores
 - cada caso de la tabla de arriba tiene su test
 - un ciclo de FK entre dos tablas carga bien y no cuelga
 - cargar 3 tablas no abre ningún `.csv`, verificable con archivos inexistentes
+
+**Verificación:** 12 pruebas en `catalog/CatalogLoaderTest.kt` cubren directorio
+vacío, carga de varias tablas sin parsear sus CSV, los seis casos de error,
+referencia a columna inexistente, tipos internos, ciclos de FK y acumulación de
+diagnósticos. `./gradlew test` pasa con 187 pruebas, sin fallos ni omitidas.
 
 ---
 
