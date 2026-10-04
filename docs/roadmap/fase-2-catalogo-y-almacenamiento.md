@@ -30,7 +30,7 @@ data/
 
 ## Ticket 2.1 · `Constraint`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2
 
 **Archivos:**
@@ -437,7 +437,7 @@ diagnósticos. `./gradlew test` pasa con 187 pruebas, sin fallos ni omitidas.
 
 ## Ticket 2.6 · Escritura del catálogo y `addConstraint`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.5
 
 **Archivos:**
@@ -473,13 +473,23 @@ pocos `ALTER` por script, no es medible.
 ```kotlin
 object CatalogWriter {
     // Escribe SOLO las tablas cuyo esquema cambio.
-    fun flush(original: Catalog, final: Catalog)
+    fun flush(original: Catalog, final: Catalog, directory: DataDirectory)
 }
 ```
 
 Compara tabla por tabla y para cada diferencia escribe el `.json`, borra el par de
 archivos si la tabla desapareció, o crea ambos si es nueva. Usa la escritura
 atómica de 2.4.
+
+La comparación es por nombre, tipo y restricciones de cada columna, en orden:
+los modelos `Table` y `Column` no tienen igualdad estructural. Los JSON cambiados
+se escriben mediante un temporal y movimiento atómico. Una tabla nueva recibe
+un CSV con solo el encabezado; una tabla eliminada pierde los dos archivos.
+
+Para una tabla existente, este escritor cambia solamente el JSON. Cuando un
+`ALTER` agregue o quite columnas, la fase 7 deberá actualizar también las filas
+y el encabezado CSV en el mismo volcado. `CatalogWriter` aislado no realiza esa
+transformación de datos ni garantiza atomicidad entre distintos archivos.
 
 **Aceptación:**
 
@@ -489,3 +499,9 @@ atómica de 2.4.
 - una prueba de ida y vuelta completa: escribir a mano un `users.csv` y un
   `users.json`, cargarlos y volverlos a escribir, y comparar byte por byte. Eso
   prueba de una sola vez el formato, el escapado, los nulos y las fechas
+
+**Verificación:** 11 pruebas en `catalog/CatalogWriterTest.kt` cubren operaciones
+inmutables, ausencia de escrituras ante esquemas equivalentes, creación y borrado
+de pares de archivos, escritura selectiva e ida y vuelta de CSV y JSON con
+comillas, nulos y fechas. `./gradlew test` pasa con 198 pruebas, sin fallos ni
+omitidas.
