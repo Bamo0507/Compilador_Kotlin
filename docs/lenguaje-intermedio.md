@@ -332,6 +332,217 @@ en la columna de operador los dos se verían iguales. En las instrucciones que e
 algo, la columna de resultado es lo que se escribe, y en los saltos es la etiqueta de
 destino.
 
+## 8. Temporales
+
+Cada operación necesita un lugar donde dejar su resultado, y ese lugar es un temporal.
+La forma más simple de asignarlos es inventar uno nuevo por operación, pero eso
+desperdicia nombres: en una expresión larga, la mayoría de los temporales se lee una
+sola vez y después ya no sirve. Es por esto que el enunciado pide un algoritmo que los
+recicle.
+
+El algoritmo clásico, que se vio en clase, es un contador. Cada vez que se necesita un
+temporal se entrega `t` con el valor del contador y se incrementa, y cada vez que una
+instrucción lee un temporal se decrementa. Esto funciona gracias a un invariante: en un
+árbol, cada temporal tiene exactamente un lector, que es su padre, y los temporales
+mueren en orden de pila, de tal forma que el último en crearse es el primero en
+leerse. Por ejemplo, `r = a + b * c - d` necesita un solo temporal:
+
+```
+t1 = b * c
+t1 = a + t1
+t1 = t1 - d
+r = t1
+```
+
+No obstante, este invariante deja de cumplirse con un GDA (sección 9), porque ahí un
+nodo compartido tiene varios lectores. Si se aplica el contador al ejemplo de la
+diapositiva 19, `r = a + a * (b - c) + (b - c) * d`, el resultado es incorrecto:
+
+```
+t1 = b - c
+t1 = a * t1
+t1 = a + t1
+t1 = t1 * d
+t0 = t1 + t1
+r = t0
+```
+
+En la segunda instrucción, el contador ve que `t1` se leyó y lo da por libre, así que
+el resultado de `a * t1` se escribe encima de `b - c`. Sin embargo, `b - c` todavía
+tiene un lector pendiente, que es `(b - c) * d`, y cuando llega su turno lee un valor
+que ya no es el suyo. Incluso aparece un `t0`, porque el contador bajó una vez de más.
+
+La solución que usamos es un pool con conteo de usos, que generaliza al contador. Cada
+temporal se pide indicando cuántas veces se va a leer, que en el GDA es la cantidad de
+aristas que llegan al nodo, y cada lectura le resta uno. Recién cuando llega a cero, el
+temporal vuelve al pool, y el pool entrega siempre el libre de índice más bajo, lo cual
+hace que el resultado sea determinista. Con el mismo ejemplo:
+
+```
+t1 = b - c
+t2 = a * t1
+t2 = a + t2
+t1 = t1 * d
+t1 = t2 + t1
+r = t1
+```
+
+Aquí `b - c` se pidió con dos usos, así que después de la primera lectura sigue vivo y
+la multiplicación tiene que usar `t2`. Cabe mencionar que en un árbol, donde todo
+temporal tiene un solo uso, el pool entrega exactamente los mismos nombres que el
+contador, como se ve en el primer ejemplo. Es por esto que considero que el contador
+es el caso particular del pool, y no un algoritmo distinto.
+
+Adicional, importa el orden en que se libera y se pide. Una instrucción primero libera
+sus operandos y después pide el temporal de su resultado, y eso es lo que permite
+escribir `t1 = t1 * d`, reutilizando el nombre que acaba de liberarse. Si se pide antes
+de liberar, el código sigue siendo correcto, pero gasta un temporal más:
+
+```
+t1 = b - c
+t2 = a * t1
+t3 = a + t2
+t2 = t1 * d
+t1 = t3 + t2
+r = t1
+```
+
+## 9. GDA
+
+Un grafo dirigido acíclico, o GDA, es un árbol sintáctico en el que una subexpresión
+que aparece varias veces se representa con un solo nodo. En `a + a * (b - c) + (b - c) * d`,
+la resta `b - c` está escrita dos veces, pero calcula el mismo valor, así que se
+calcula una sola vez y su resultado se reutiliza.
+
+Para construirlo usamos el método del número de valor de la diapositiva 14. Los nodos
+se guardan en una lista, y el número de valor de cada nodo es su posición en ella. Antes
+de crear una operación, se busca en una tabla hash la llave formada por el operador y
+los números de sus hijos; si ya existe, se devuelve ese número en lugar de crear un
+nodo nuevo. Para el ejemplo anterior, el GDA queda así:
+
+| Número | Nodo | Padres |
+|---|---|---|
+| 0 | `a` | 2 |
+| 1 | `b` | 1 |
+| 2 | `c` | 1 |
+| 3 | `-` sobre 1 y 2 | 2 |
+| 4 | `*` sobre 0 y 3 | 1 |
+| 5 | `+` sobre 0 y 4 | 1 |
+| 6 | `d` | 1 |
+| 7 | `*` sobre 3 y 6 | 1 |
+| 8 | `+` sobre 5 y 7 | 0 (raíz) |
+
+Son nueve nodos, como en la diapositiva 13. La columna de padres es justamente la
+cantidad de usos con la que el generador pide el temporal de cada nodo (sección 8).
+
+Hay tres detalles en la construcción. El primero es que las conversiones implícitas
+también son nodos, de tal forma que si `x + 2.5` aparece dos veces, `x` se convierte a
+flotante una sola vez. El segundo es que si el analizador semántico ya calculó el valor
+de una subexpresión, como en `3 + 5`, esa subexpresión es directamente una hoja con la
+constante `8`. El tercero es que las variables y las constantes son hojas que no
+generan instrucción, así que siempre se comparten.
+
+No obstante, hay casos en los que dos subexpresiones iguales no calculan el mismo
+valor. En `a * b + g() + a * b`, la función `g` podría modificar `a` o `b`, y en
+`(x = 5) + x`, la `x` de la derecha ya no vale lo mismo que antes de la asignación. Es
+por esto que, si una expresión contiene una llamada o una asignación anidada, se
+construye sin la tabla hash, y cada operación es un nodo nuevo:
+
+| Número | Nodo | Padres |
+|---|---|---|
+| 0 | `a` | 2 |
+| 1 | `b` | 2 |
+| 2 | `*` sobre 0 y 1 | 1 |
+| 3 | llamada a `g` | 1 |
+| 4 | `+` sobre 2 y 3 | 1 |
+| 5 | `*` sobre 0 y 1 | 1 |
+| 6 | `+` sobre 4 y 5 | 0 (raíz) |
+
+Las dos multiplicaciones son los nodos 2 y 5. Saber con exactitud qué nodos dependen de
+lo que una llamada pudo cambiar requeriría un análisis de efectos, y considero que no
+vale la pena, ya que una expresión con llamadas rara vez repite subexpresiones.
+
+Cabe mencionar que este GDA se construye por expresión y desde el árbol sintáctico, tal
+como en las diapositivas 12 y 13. El Dragon Book (sección 8.5) presenta además un GDA
+por bloque básico, construido sobre el código intermedio, que puede compartir valores
+entre sentencias distintas, pero que tiene que invalidar nodos cada vez que una
+variable se reasigna. Esa es una optimización aparte, y encaja mejor en la etapa de
+assembler.
+
+## 10. Expresiones y sentencias simples
+
+El generador recorre el árbol sintáctico con una función por construcción. Las
+sentencias no devuelven nada, y las expresiones devuelven la dirección donde quedó su
+valor. Toda expresión pasa por su GDA, que se emite en postorden desde la raíz: cada
+operación se emite una sola vez, y la segunda vez que un padre la necesita, recibe el
+mismo temporal. La siguiente tabla resume cómo se traduce cada sentencia.
+
+| Sentencia | Traducción |
+|---|---|
+| `let x: integer = e;` y `const` | El código de `e`, y después `x = <dirección de e>` |
+| `let x: integer;` | `x = 0`, el valor inicial de su tipo |
+| `x = e;` | El código de `e`, y después `x = <dirección de e>` |
+| `print(e);` | El código de `e`, y después `print_<tipo> <dirección de e>` |
+| `e;` | El código de `e`, y su valor se descarta |
+| `{ ... }` | Las sentencias de adentro, en orden |
+
+Un bloque no genera nada propio, porque cada variable ya es una entrada de la tabla de
+símbolos, de tal forma que dos variables con el mismo nombre en bloques distintos ya son
+direcciones distintas. Del mismo modo, una variable sin inicializar arranca en el valor
+inicial de su tipo, que es `0`, `0.0`, `""` o `false`, el mismo que usa el intérprete.
+
+La copia final se conserva aunque cueste una instrucción: `t1 = a + b` seguido de
+`x = t1`, que es la forma de la diapositiva 24. Escribir directo en `x` sería una
+optimización que la teoría no muestra.
+
+Para el ejemplo de la diapositiva 19, la diapositiva usa cinco temporales, uno por
+operación, y nuestro generador usa dos (sección 8). La diferencia viene de las dos
+ideas juntas: el GDA evita calcular `b - c` dos veces, y el pool recicla los nombres en
+cuanto dejan de tener lectores.
+
+En cuanto a los tipos, una suma de un entero con un flotante convierte primero el
+entero, y una suma de textos es una concatenación. Si el analizador semántico ya plegó
+una constante, se usa directamente, así que `a + 2 * 3` multiplica en tiempo de
+compilación y `"Hola " + "mundo"` no genera ninguna operación:
+
+```
+t1 = inttofloat x
+t1 = t1 +f 2.5
+f = t1
+
+t1 = a + 6
+r = t1
+
+s = "Hola mundo"
+```
+
+Al dividir entre una variable, se emite el chequeo de división entre cero de la sección
+6, justo antes de la división y con la línea del código fuente en el mensaje. Si el
+divisor es una constante, el chequeo no se emite, porque el analizador semántico ya
+rechazó la división entre la constante cero:
+
+```
+    if d != 0 goto L1
+    throw "División entre cero (línea 2)"
+L1:
+    t1 = a / d
+    q = t1
+```
+
+Por último, una asignación puede aparecer dentro de una expresión, y su valor es lo
+que quedó en la variable. Aquí hay un caso que no es obvio: en `x + (x = 5)`, la `x` de
+la izquierda vale lo que valía antes de la asignación, porque se evalúa primero. Sin
+embargo, una variable no genera instrucción, y se lee recién cuando se emite la suma,
+cuando la asignación ya ocurrió. Es por esto que, si la parte derecha reasigna una
+variable de la izquierda, esa variable se copia antes a un temporal:
+
+```
+t1 = x
+x = 5
+t1 = t1 + x
+r = t1
+```
+
 ## Supuestos
 
 - Una instrucción tiene como máximo un operador del lado derecho.
@@ -341,3 +552,11 @@ destino.
   booleanos; un objeto o una lista se muestran imprimiendo sus campos o recorriéndola.
 - Los errores en ejecución se detectan con chequeos explícitos en el código intermedio,
   y llevan la línea del código fuente donde ocurrieron.
+- Una expresión con llamadas o asignaciones anidadas no comparte subexpresiones.
+- Una variable sin inicializar arranca en el valor inicial de su tipo: `0`, `0.0`, `""`
+  o `false`, y `null` para las clases y las listas.
+- El chequeo de división entre cero solo se emite para enteros: en flotantes, dividir
+  entre cero da infinito, igual que en el intérprete.
+- Si la parte derecha de una operación reasigna una variable de la izquierda, la
+  variable se copia antes a un temporal, para respetar la evaluación de izquierda a
+  derecha.

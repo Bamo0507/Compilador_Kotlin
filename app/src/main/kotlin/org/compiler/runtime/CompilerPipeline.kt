@@ -3,6 +3,8 @@ package org.compiler.runtime
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.AstBuilder
 import org.compiler.frontend.ast.models.Program
+import org.compiler.frontend.intermediate.TacGenerator
+import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.semantic.DeclarationCollector
 import org.compiler.frontend.semantic.FlowAnalyzer
 import org.compiler.frontend.semantic.LivenessReportBuilder
@@ -52,6 +54,10 @@ object CompilerPipeline {
         val execution =
             if (execute && !diagnostics.hasErrors) Interpreter().run(ast) else null
 
+        // Etapa G: codigo intermedio, solo si no quedo ningun error. Corre aparte de la
+        // ejecucion: una no depende de la otra.
+        val tac = if (!diagnostics.hasErrors) generateIntermediateCode(ast) else null
+
         return CompilationResult(
             source = source,
             parseTreeView = parseTreeView,
@@ -59,7 +65,19 @@ object CompilerPipeline {
             globalScope = collector.globalScope,
             garbageCollectorReport = garbageCollectorReport,
             errors = diagnostics.all(),
-            execution = execution
+            execution = execution,
+            tac = tac
         )
     }
+
+    // Lo que el generador todavia no traduce (un `while`, una llamada) es un TODO, que
+    // lanza NotImplementedError. Se atrapa SOLO ese: el programa es valido y el IDE no
+    // debe caerse, pero cualquier otra excepcion es un bug del generador y tiene que
+    // verse. Estas ramas desaparecen con sus fases.
+    private fun generateIntermediateCode(ast: Program): TacProgram? =
+        try {
+            TacGenerator().generate(ast)
+        } catch (pending: NotImplementedError) {
+            null
+        }
 }

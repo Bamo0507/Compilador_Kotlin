@@ -684,6 +684,11 @@ class TypeChecker(
             // Solo las constantes guardan su valor: ver checkIdentifier.
             constantValue = if (decl.isConstant) initializer?.constant else null
         )
+
+        // La COPIA que guardo el ambito, no el Symbol de arriba: Scope.declare
+        // completa offset y profundidad en una copia, y es esa la que encuentran los
+        // usos de la variable. El generador de TAC necesita que sean la misma.
+        decl.symbol = currentScope.lookupLocal(decl.name)
     }
 
     // Las tres reglas de toda asignacion, en un solo lugar.

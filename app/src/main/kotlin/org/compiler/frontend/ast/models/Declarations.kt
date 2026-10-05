@@ -1,5 +1,6 @@
 package org.compiler.frontend.ast.models
 
+import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.models.LexemeLocation
 
 // let x: integer = 5;   var y: string;   const PI: integer = 314;
@@ -12,7 +13,13 @@ data class VariableDeclaration(
     val initializer: Expression?,
     val isConstant: Boolean,
     override val location: LexemeLocation
-) : Statement
+) : Statement {
+
+    // El Symbol que declaro el TypeChecker. Lo lee el generador de TAC: `let x = e`
+    // escribe en Name(symbol), y sin esto tendria que volver a buscar el nombre. Es
+    // el mismo motivo por el que Identifier guarda su resolvedSymbol.
+    var symbol: Symbol? = null
+}
 
 // function saludar(nombre: string): string
 data class FunctionDeclaration(
