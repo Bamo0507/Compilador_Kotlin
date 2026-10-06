@@ -3,9 +3,9 @@
 // Se compara el TEXTO del TAC, con TacPrinter: es lo que se lee en el documento y en
 // el IDE, y deja ver los temporales tal como se reciclan.
 //
-// El invariante del pool —al terminar cada sentencia no queda ningun temporal
-// vivo— lo verifica el propio generador con un `check` despues de cada sentencia, asi
-// que se cumple en TODOS estos tests: si alguno lo violara, lanzaria.
+// El invariante del pool —al terminar cada sentencia del nivel superior no queda
+// ningun temporal vivo— lo verifica el propio generador con un `check`, asi que se
+// cumple en TODOS estos tests: si alguno lo violara, lanzaria.
 package org.compiler
 
 import org.compiler.frontend.intermediate.TacPrinter
@@ -230,8 +230,8 @@ class TacGeneratorExprTest {
     // Lo que el generador aun no traduce es un TODO. El pipeline lo atrapa y deja el
     // TAC en null: el IDE no se cae con un programa que todavia no se puede traducir.
     @Test
-    fun `un programa con un while deja el TAC en null sin lanzar`() {
-        val result = compile("let i: integer = 0;\nwhile (i < 3) { i = i + 1; }")
+    fun `un programa con algo que aun no se traduce deja el TAC en null sin lanzar`() {
+        val result = compile("function f(): integer { return 1; }\nlet v: integer = f();")
 
         assertTrue(result.errors.isEmpty())
         assertNull(result.tac)

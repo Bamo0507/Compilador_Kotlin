@@ -644,6 +644,8 @@ class TypeChecker(
                 location = stmt.location,
                 initialized = true
             )
+            // La copia que guardo el ambito, que es la que encuentran los usos.
+            stmt.catchSymbol = currentScope.lookupLocal(stmt.catchParameterName)
             stmt.catchBlock.statements.forEach { checkStatement(it) }
         }
     }

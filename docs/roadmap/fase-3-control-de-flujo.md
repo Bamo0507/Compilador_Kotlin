@@ -177,7 +177,7 @@ el GDA como las comparaciones con saltos.
 
 ## Ticket 3.2: Las sentencias de control, `break` y `continue`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.1
 
 **Archivos:**
@@ -253,11 +253,16 @@ tiene un bucle, así que la pila nunca está vacía cuando se usa.
 | Dos bucles anidados con `break` en el interno | salta al `Lfin` del interno |
 | `break` dentro de un `switch` dentro de un `while` | salta al `Lfin` del `while` |
 
+**Al implementarlo:** el caso de `break` dentro de un `switch` se prueba en el ticket
+3.3, porque el `switch` todavía no se traduce. `LoopLabels` lleva por ahora solo las dos
+etiquetas: el contador de `try` abiertos lo agrega el ticket 3.4. `flujo_break_continue.cps`
+todavía no genera TAC porque usa `foreach`, que es del ticket 5.4.
+
 ---
 
 ## Ticket 3.3: `switch`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.2
 
 **Archivos:**
@@ -308,11 +313,19 @@ un string o una variable. Con una cadena todos los casos se traducen igual.
 | Sujeto `a + b` | se evalúa una vez, en un temporal que vive hasta la última comparación |
 | `switch` con strings | comparaciones con `!=s` |
 
+**Al implementarlo:** `generateExpression` recibe cuántos lectores tiene su resultado
+(`readers`, uno por defecto), y el `switch` lo usa para que el sujeto viva hasta la última
+comparación. Si el sujeto es una variable y algún `case` no es puro, se copia antes, igual
+que en la decisión 54. Para no duplicar la tabla de la caída ni la conversión, se
+extrajeron `emitComparisonJump` y `convertAddress`, que reciben direcciones ya calculadas.
+Un temporal perdido dentro de un cuerpo anidado se detecta al terminar la sentencia del
+nivel superior que lo contiene.
+
 ---
 
 ## Ticket 3.4: `try/catch`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.2
 
 **Archivos:**
@@ -368,11 +381,16 @@ Lfin:
 | `break` dentro de un `catch` dentro de un bucle | ningún `endtry`: el manejador ya no está |
 | Dos `try` anidados y un `break` en el interno | dos `endtry` |
 
+**Al implementarlo:** el nodo `TryCatch` del AST ganó un campo `catchSymbol`, que llena
+el `TypeChecker` al declarar la variable del `catch`, igual que `VariableDeclaration`
+guarda el suyo: `try L, e` necesita el `Symbol` de `e` y el nodo solo guardaba su nombre.
+`break` y `continue` pasan por `jumpOutOfLoop`, que emite los `endtry` antes del salto.
+
 ---
 
 ## Ticket 3.5: El documento, secciones de control de flujo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.4, 2.4
 
 **Archivos:**

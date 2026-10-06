@@ -46,6 +46,8 @@ import org.compiler.frontend.intermediate.models.Relational
 import org.compiler.frontend.intermediate.models.RelationalOperator
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.intermediate.models.TacUnaryOperator
+import org.compiler.frontend.intermediate.models.TryBegin
+import org.compiler.frontend.intermediate.models.TryEnd
 import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.Unary
@@ -75,8 +77,35 @@ class TacGenerator {
     private val temporaries = TemporaryAllocator()
     private var nextLabel = 1
 
+    // A donde saltan break y continue dentro de un bucle, y cuantos try habia abiertos
+    // al entrar: la diferencia con los de ahora es cuantos endtry hay que emitir.
+    private data class LoopLabels(
+        val breakLabel: Label,
+        val continueLabel: Label,
+        val openTriesAtEntry: Int
+    )
+
+    // Los bucles abiertos, el mas interno al final: break y continue van al de arriba.
+    private val loops = ArrayDeque<LoopLabels>()
+
+    // Cuantos try hay abiertos en este momento. Un break o continue que abandona un try
+    // tiene que quitar su manejador antes de saltar.
+    private var openTries = 0
+
     fun generate(program: Program): TacProgram {
-        program.statements.forEach { generateStatement(it) }
+        program.statements.forEach { statement ->
+            generateStatement(statement)
+
+            // El invariante del pool: entre sentencias del nivel superior no queda
+            // ningun temporal vivo. Si queda uno, el generador perdio una lectura y el
+            // TAC estaria mal: es un bug del compilador, y es mejor que salte aqui que
+            // en el assembler. Solo en el nivel superior, porque dentro de un `switch`
+            // el sujeto sigue vivo a proposito mientras corren los cuerpos de los case.
+            check(!temporaries.hasLiveTemporaries) {
+                "Quedaron temporales vivos al terminar la sentencia de la linea " +
+                    "${statement.location.line}"
+            }
+        }
         return TacProgram(instructions.toList(), temporaries.temporaryCount)
     }
 
@@ -95,20 +124,19 @@ class TacGenerator {
 
             // El bloque no genera nada propio: las variables ya son Name con su
             // Symbol, asi que dos `x` de bloques distintos ya son direcciones distintas.
-            is Block -> stmt.statements.forEach { generateStatement(it) }
+            is Block -> generateBlock(stmt)
+            is If -> generateIf(stmt)
+            is While -> generateWhile(stmt)
+            is DoWhile -> generateDoWhile(stmt)
+            is For -> generateFor(stmt)
+            is Break -> jumpOutOfLoop { it.breakLabel }
+            is Continue -> jumpOutOfLoop { it.continueLabel }
 
-            is If, is While, is DoWhile, is For, is ForEach, is Switch,
-            is Break, is Continue -> TODO("control de flujo")
-            is TryCatch -> TODO("try/catch")
+            is Switch -> generateSwitch(stmt)
+            is ForEach -> TODO("foreach")
+            is TryCatch -> generateTryCatch(stmt)
             is FunctionDeclaration, is ReturnStatement -> TODO("funciones y llamadas")
             is ClassDeclaration -> TODO("clases y objetos")
-        }
-
-        // El invariante del pool: entre sentencias no queda ningun temporal vivo. Si
-        // queda uno, el generador perdio una lectura y el TAC estaria mal: es un bug
-        // del compilador, y es mejor que salte aqui que en el assembler.
-        check(!temporaries.hasLiveTemporaries) {
-            "Quedaron temporales vivos al terminar la sentencia de la linea ${stmt.location.line}"
         }
     }
 
@@ -146,6 +174,202 @@ class TacGenerator {
         temporaries.consume(value)
     }
 
+    private fun generateBlock(block: Block) {
+        block.statements.forEach { generateStatement(it) }
+    }
+
+    //  if (B) S                 if (B) S1 else S2
+    //      <B: cae, L1>             <B: cae, L1>
+    //      S                        S1
+    //  L1:                          goto L2
+    //                           L1: S2
+    //                           L2:
+    //
+    // La condicion cae al cuerpo y solo salta cuando es falsa.
+    private fun generateIf(stmt: If) {
+        val elseBranch = stmt.elseBranch
+        val falseLabel = newLabel()
+
+        generateCondition(stmt.condition, null, falseLabel)
+        generateBlock(stmt.thenBranch)
+
+        if (elseBranch == null) {
+            instructions += LabelDefinition(falseLabel)
+            return
+        }
+
+        val endLabel = newLabel()
+        instructions += Goto(endLabel)
+        instructions += LabelDefinition(falseLabel)
+        generateBlock(elseBranch)
+        instructions += LabelDefinition(endLabel)
+    }
+
+    //  while (B) S
+    //  L1: <B: cae, L2>
+    //      S
+    //      goto L1
+    //  L2:
+    private fun generateWhile(stmt: While) {
+        val startLabel = newLabel()
+        val endLabel = newLabel()
+
+        instructions += LabelDefinition(startLabel)
+        generateCondition(stmt.condition, null, endLabel)
+        withinLoop(LoopLabels(breakLabel = endLabel, continueLabel = startLabel, openTries)) {
+            generateBlock(stmt.body)
+        }
+        instructions += Goto(startLabel)
+        instructions += LabelDefinition(endLabel)
+    }
+
+    //  do S while (B);
+    //  L1: S
+    //  L2: <B: L1, cae>
+    //  L3:
+    //
+    // La condicion verdadera es la vuelta del bucle: no hace falta un goto propio. Y
+    // continue va a L2, a reevaluar la condicion, no a repetir el cuerpo.
+    private fun generateDoWhile(stmt: DoWhile) {
+        val bodyLabel = newLabel()
+        val conditionLabel = newLabel()
+        val endLabel = newLabel()
+
+        instructions += LabelDefinition(bodyLabel)
+        withinLoop(LoopLabels(breakLabel = endLabel, continueLabel = conditionLabel, openTries)) {
+            generateBlock(stmt.body)
+        }
+        instructions += LabelDefinition(conditionLabel)
+        generateCondition(stmt.condition, bodyLabel, null)
+        instructions += LabelDefinition(endLabel)
+    }
+
+    //  for (init; B; update) S
+    //      init
+    //  L1: <B: cae, L3>
+    //      S
+    //  L2: update
+    //      goto L1
+    //  L3:
+    //
+    // continue va a L2: la actualizacion corre tambien despues de un continue. Sin
+    // condicion no se compara nada, y el bucle solo sale con break.
+    private fun generateFor(stmt: For) {
+        stmt.initializer?.let { generateStatement(it) }
+
+        val startLabel = newLabel()
+        val updateLabel = newLabel()
+        val endLabel = newLabel()
+
+        instructions += LabelDefinition(startLabel)
+        stmt.condition?.let { generateCondition(it, null, endLabel) }
+        withinLoop(LoopLabels(breakLabel = endLabel, continueLabel = updateLabel, openTries)) {
+            generateBlock(stmt.body)
+        }
+        instructions += LabelDefinition(updateLabel)
+        stmt.update?.let { temporaries.consume(generateExpression(it)) }
+        instructions += Goto(startLabel)
+        instructions += LabelDefinition(endLabel)
+    }
+
+    //      t1 = <sujeto>
+    //      if t1 != 1 goto L2
+    //      <cuerpo del case 1>
+    //      goto L1
+    //  L2: if t1 != 2 goto L3
+    //      <cuerpo del case 2>
+    //      goto L1
+    //  L3: <default>
+    //  L1:
+    //
+    // Una cadena de comparaciones y no una tabla de saltos: un case puede ser un string
+    // o una variable. Sin fall-through, cada case termina saltando al final.
+    private fun generateSwitch(stmt: Switch) {
+        val endLabel = newLabel()
+        val subject = generateSubject(stmt)
+
+        stmt.cases.forEach { case ->
+            val nextLabel = newLabel()
+            val kind = ExpressionDag.comparisonKind(stmt.subject, case.value)
+            val left = convertAddress(subject, stmt.subject.type, kind)
+            val right = convertedTo(kind, case.value)
+            emitComparisonJump(left, RelationalOperator.EQUAL, right, kind, null, nextLabel)
+
+            case.body.forEach { generateStatement(it) }
+            instructions += Goto(endLabel)
+            instructions += LabelDefinition(nextLabel)
+        }
+
+        stmt.defaultBody?.forEach { generateStatement(it) }
+        instructions += LabelDefinition(endLabel)
+    }
+
+    // El sujeto se evalua UNA vez y se lee una vez por case, asi que su temporal vive
+    // todo el switch. Si es una variable y algun case puede modificarla, como una
+    // llamada, se copia antes: el switch compara contra el valor de cuando empezo.
+    private fun generateSubject(stmt: Switch): Address {
+        val readers = stmt.cases.size
+        if (readers == 0) {
+            temporaries.consume(generateExpression(stmt.subject))
+            return Constant(null)
+        }
+
+        val subject = generateExpression(stmt.subject, readers)
+        val casesArePure = stmt.cases.all { ExpressionDag.isPure(it.value) }
+        if (subject !is Name || casesArePure) return subject
+
+        val snapshot = temporaries.newTemp(readers)
+        instructions += Copy(snapshot, subject)
+        return snapshot
+    }
+
+    // El switch no apila nada: no es un bucle, y un break dentro de el sale del bucle
+    // que lo contiene.
+    private inline fun withinLoop(labels: LoopLabels, body: () -> Unit) {
+        loops.addLast(labels)
+        body()
+        loops.removeLast()
+    }
+
+    // break y continue: si abandonan un try, primero quitan su manejador, uno por cada
+    // try abierto desde que se entro al bucle. Sin eso, un error posterior, ya fuera del
+    // bucle, saltaria a un catch que no le corresponde.
+    private fun jumpOutOfLoop(target: (LoopLabels) -> Label) {
+        // El FlowAnalyzer ya garantiza que todo break y continue esta dentro de un bucle.
+        val loop = checkNotNull(loops.lastOrNull()) { "break o continue fuera de un bucle" }
+
+        repeat(openTries - loop.openTriesAtEntry) { instructions += TryEnd }
+        instructions += Goto(target(loop))
+    }
+
+    //      try L1, e
+    //      <cuerpo del try>
+    //      endtry
+    //      goto L2
+    //  L1: <cuerpo del catch>
+    //  L2:
+    //
+    // try registra el manejador: si algo falla, el mensaje va a e y se salta a L1. El
+    // catch no cuenta como try abierto: el throw que llevo ahi ya quito el manejador.
+    private fun generateTryCatch(stmt: TryCatch) {
+        val catchSymbol = requireNotNull(stmt.catchSymbol) {
+            "'${stmt.catchParameterName}' sin Symbol: ¿corrio el TypeChecker?"
+        }
+        val handlerLabel = newLabel()
+        val endLabel = newLabel()
+
+        instructions += TryBegin(handlerLabel, Name(catchSymbol))
+        openTries += 1
+        generateBlock(stmt.tryBlock)
+        openTries -= 1
+        instructions += TryEnd
+        instructions += Goto(endLabel)
+
+        instructions += LabelDefinition(handlerLabel)
+        generateBlock(stmt.catchBlock)
+        instructions += LabelDefinition(endLabel)
+    }
+
     private fun copyInto(target: Address, value: Address) {
         instructions += Copy(target, value)
         temporaries.consume(value)
@@ -163,11 +387,13 @@ class TacGenerator {
      * hijo consume el temporal, y el de cada nodo se pide con tantos usos como padres
      * tiene. La raiz tiene un lector mas: la sentencia que la contiene.
      */
-    private fun generateExpression(expr: Expression): Address {
+    // `readers` es cuantas veces se va a leer el resultado: casi siempre una, salvo el
+    // sujeto de un switch, que se compara una vez por case.
+    private fun generateExpression(expr: Expression, readers: Int = 1): Address {
         val dag = ExpressionDag.build(expr)
         val emitted = HashMap<Int, Address>()
 
-        fun usesOf(node: Int): Int = dag.parentCount[node] + if (node == dag.root) 1 else 0
+        fun usesOf(node: Int): Int = dag.parentCount[node] + if (node == dag.root) readers else 0
 
         fun emit(node: Int): Address {
             emitted[node]?.let { return it }
@@ -385,6 +611,19 @@ class TacGenerator {
         val right = convertedTo(kind, condition.right)
         val operator = ExpressionDag.relationalOf(condition.operator)
 
+        emitComparisonJump(left, operator, right, kind, trueLabel, falseLabel)
+    }
+
+    // El salto de una comparacion con sus dos operandos ya calculados. Con caida, si el
+    // lado verdadero sigue de largo se salta al falso con la relacion invertida.
+    private fun emitComparisonJump(
+        left: Address,
+        operator: RelationalOperator,
+        right: Address,
+        kind: OperandKind,
+        trueLabel: Label?,
+        falseLabel: Label?
+    ) {
         when {
             trueLabel != null -> {
                 instructions += IfRelationalGoto(left, operator, right, kind, trueLabel)
@@ -422,10 +661,13 @@ class TacGenerator {
 
     // Un operando de una comparacion, convertido a flotante si el otro lo es. Una
     // constante entera se convierte aqui mismo, sin instruccion.
-    private fun convertedTo(kind: OperandKind, operand: Expression): Address {
-        val address = generateExpression(operand)
+    private fun convertedTo(kind: OperandKind, operand: Expression): Address =
+        convertAddress(generateExpression(operand), operand.type, kind)
+
+    // Lo mismo, para una direccion que ya se calculo, como el sujeto de un switch.
+    private fun convertAddress(address: Address, type: Type?, kind: OperandKind): Address {
         val needsConversion =
-            kind == OperandKind.FLOAT && ExpressionDag.kindOf(operand.type) == OperandKind.INTEGER
+            kind == OperandKind.FLOAT && ExpressionDag.kindOf(type) == OperandKind.INTEGER
         if (!needsConversion) return address
 
         val value = (address as? Constant)?.value

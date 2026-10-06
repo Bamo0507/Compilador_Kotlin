@@ -1,5 +1,6 @@
 package org.compiler.frontend.ast.models
 
+import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.models.LexemeLocation
 
 data class If(
@@ -69,7 +70,12 @@ data class TryCatch(
     val catchParameterName: String,
     val catchBlock: Block,
     override val location: LexemeLocation
-) : Statement
+) : Statement {
+
+    // El Symbol de la variable del catch, que declaro el TypeChecker. Lo lee el
+    // generador de TAC para `try L, e`, igual que VariableDeclaration guarda el suyo.
+    var catchSymbol: Symbol? = null
+}
 
 data class Break(
     override val location: LexemeLocation

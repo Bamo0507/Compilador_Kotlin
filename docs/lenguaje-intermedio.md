@@ -543,6 +543,115 @@ t1 = t1 + x
 r = t1
 ```
 
+## 11. Condiciones
+
+En una sentencia condicional no interesa guardar si una comparación es verdadera, sino
+ir a un lado o al otro del código. Es por esto que las condiciones no se traducen como
+un valor, sino como código de saltos: a cada condición se le pasan dos etiquetas, una
+para cuando es verdadera y otra para cuando es falsa, y su código salta a la que
+corresponda. Las etiquetas las crea quien contiene a la condición y se las entrega a
+ella, de tal forma que funcionan como un atributo heredado, que es justamente lo que
+permite usar etiquetas simbólicas sin necesidad de backpatching.
+
+El cortocircuito de la conjunción y la disyunción sale de cómo se reparten esas
+etiquetas, sin que el operador genere ninguna instrucción propia. En una conjunción, si
+la primera condición es falsa se salta directo a la etiqueta falsa, y la segunda ni
+siquiera se evalúa; en una disyunción, si la primera es verdadera se salta directo a la
+verdadera. La negación tampoco genera nada, ya que es la misma condición con las dos
+etiquetas intercambiadas. Por ejemplo, una condición que pide que a sea menor que b y que
+c sea mayor que d se traduce como dos saltos condicionales hacia el final del bloque,
+uno por cada comparación, y si el primero se toma, la segunda comparación nunca ocurre.
+
+Adicional, se aplica una técnica que el Dragon Book llama caída. Cuando la instrucción
+siguiente es justamente a donde tendría que saltar la condición, ese salto es inútil, ya
+que de todas formas la ejecución continúa ahí. En esos casos la condición solo salta
+hacia el otro lado, invirtiendo la relación si hace falta: en lugar de saltar al cuerpo
+cuando a es menor que b y después saltar al final en el caso contrario, se salta al final
+directamente cuando a es mayor o igual que b. Esto ahorra una instrucción por cada
+condición, y considero que es importante porque, sin ella, cada sentencia condicional y
+cada ciclo tendría un salto que no hace nada. Cabe mencionar que invertir una relación
+supone que no hay valores NaN, ya que con ellos negar una comparación no es lo mismo que
+invertirla.
+
+Por último, si el analizador semántico ya calculó el valor de una condición, como en un
+ciclo cuya condición es la constante verdadera, no se compara nada: la condición
+simplemente cae al cuerpo.
+
+## 12. Sentencias de control
+
+Todas las sentencias de control siguen la misma idea: se crean las etiquetas que hacen
+falta, se genera la condición con las etiquetas que le corresponden y se coloca cada
+etiqueta en su lugar. En el if, la condición cae al cuerpo y solo salta cuando es falsa;
+si hay else, el cuerpo del if termina con un salto al final para no ejecutar también el
+else.
+
+En el while, la condición se evalúa al inicio y el cuerpo termina regresando a ella. En
+el do-while, en cambio, el cuerpo va primero y es la condición verdadera la que regresa
+al inicio, así que no hace falta un salto hacia atrás propio. El for ejecuta primero su
+inicialización, luego la condición y el cuerpo, y al final la actualización antes de
+regresar a la condición; si no tiene condición, no se compara nada y el ciclo solo
+termina con un break.
+
+Para poder traducir break y continue, el generador lleva una pila con las etiquetas del
+ciclo más cercano: al entrar a un ciclo apila su etiqueta de salida y su etiqueta de
+continuación, y al salir las desapila. Un break salta a la salida y un continue a la
+continuación, que depende del ciclo: en el while es el inicio, en el do-while es la
+condición, y en el for es la actualización. Esto último es importante, porque si un
+continue dentro de un for saltara directo a la condición se saltaría la actualización, y
+en el caso típico, donde la actualización incrementa un contador, el ciclo nunca
+terminaría.
+
+Cabe mencionar que las etiquetas de cada ciclo se emiten aunque ningún break o continue
+las use, ya que quitarlas requeriría otra pasada sobre el código y una etiqueta sin uso
+no cambia lo que el programa hace.
+
+## 13. Switch, ternario y booleanos como valor
+
+El switch se traduce como una cadena de comparaciones: el sujeto se compara con el valor
+de cada caso, y si no coincide se salta a la comparación del caso siguiente. El Dragon
+Book presenta también una traducción con una tabla de saltos indexada por el valor de
+cada caso, pero esa técnica exige que los casos sean enteros constantes y cercanos entre
+sí, y en Compiscript un caso puede ser un texto o una variable. Como Compiscript no tiene
+fall-through, cada caso termina saltando al final del switch, y el caso por defecto va al
+final de la cadena.
+
+Si el sujeto es una expresión, se calcula una sola vez y su temporal se mantiene vivo
+hasta la última comparación, aunque los cuerpos de los casos usen sus propios
+temporales. Del mismo modo, como el switch no es un ciclo, no agrega nada a la pila de
+break y continue, de tal forma que un break dentro de un switch sale del ciclo que lo
+contiene.
+
+El operador ternario es un if-else que deja un valor. El temporal del resultado se pide
+antes de generar los saltos, y cada rama copia su valor en él antes de saltar al final.
+Por otro lado, la conjunción y la disyunción solo existen como saltos, así que cuando se
+usan para producir un valor, por ejemplo al guardarlas en una variable booleana, se
+generan los saltos y después se escribe verdadero o falso según el lado al que se llegó.
+
+Estas construcciones, junto con las llamadas, la creación de objetos y listas, y el
+acceso a campos y elementos, no son una operación aritmética simple, sino que necesitan
+su propia traducción. Dentro del GDA entran como una subexpresión que nunca se comparte, y
+la operación de arriba solo recibe el temporal donde quedó su resultado. Adicional, si
+una expresión contiene alguna de ellas, el GDA no reutiliza ningún cálculo en esa
+expresión, porque una subexpresión dentro de una rama de un ternario puede no
+ejecutarse. Por el mismo motivo, una variable que aparece a la izquierda de una de ellas
+se copia antes a un temporal, ya que podría ser modificada por lo que se ejecuta a su
+derecha.
+
+## 14. Try/catch
+
+El try/catch se traduce con las instrucciones de manejador de la sección 6. La
+instrucción que abre el bloque protegido registra la etiqueta del catch y la variable
+que recibe el mensaje del error, y el bloque termina con la instrucción que quita el
+manejador, seguida de un salto que se brinca el catch.
+
+La parte que no es obvia aparece cuando un break o un continue abandonan un bloque
+protegido. Si solo se tradujeran como un salto, el manejador quedaría registrado, y un
+error posterior, ya fuera del ciclo, saltaría a un catch que no le corresponde. Es por
+esto que el generador lleva la cuenta de cuántos bloques protegidos hay abiertos, y un
+break o continue quita un manejador por cada bloque que abandona antes de saltar. En
+cambio, un break dentro del catch no quita ninguno, porque el error que llevó hasta ahí
+ya quitó el manejador.
+
 ## Supuestos
 
 - Una instrucción tiene como máximo un operador del lado derecho.
@@ -560,3 +669,5 @@ r = t1
 - Si la parte derecha de una operación reasigna una variable de la izquierda, la
   variable se copia antes a un temporal, para respetar la evaluación de izquierda a
   derecha.
+- Invertir una relación supone que no hay valores NaN.
+- Las etiquetas de los ciclos se emiten aunque ningún salto las use.
