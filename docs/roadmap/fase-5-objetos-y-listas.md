@@ -216,7 +216,7 @@ Cada método se emite como función, con la etiqueta `Clase.metodo` y `this` en 
 parámetros.
 
 **En el GDA**, una lectura de campo, una llamada a método y un `new` entran como nodos
-`Opaque` (decisión 36): no se comparten.
+`Subexpression` (decisión 36): no se comparten.
 
 ### Aceptación
 

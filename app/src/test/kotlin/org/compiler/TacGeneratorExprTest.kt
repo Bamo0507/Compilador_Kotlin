@@ -1,9 +1,9 @@
-// Ticket 2.3: el generador de TAC y la etapa G.
+// El generador de TAC y la etapa G del pipeline.
 //
 // Se compara el TEXTO del TAC, con TacPrinter: es lo que se lee en el documento y en
 // el IDE, y deja ver los temporales tal como se reciclan.
 //
-// El invariante del ticket —al terminar cada sentencia no queda ningun temporal
+// El invariante del pool —al terminar cada sentencia no queda ningun temporal
 // vivo— lo verifica el propio generador con un `check` despues de cada sentencia, asi
 // que se cumple en TODOS estos tests: si alguno lo violara, lanzaria.
 package org.compiler
@@ -21,7 +21,8 @@ class TacGeneratorExprTest {
 
     // ── Infraestructura ────────────────────────────────────────────────────
 
-    private fun compile(source: String): CompilationResult = CompilerPipeline.compile(source, execute = false)
+    private fun compile(source: String): CompilationResult =
+        CompilerPipeline.compile(source, execute = false)
 
     // El TAC de `code`, con las variables ya declaradas en la linea 1. Las lineas del
     // preludio (`a = 1`, `b = 2`, ...) se descartan: no son lo que se prueba.
@@ -37,13 +38,14 @@ class TacGeneratorExprTest {
     }
 
     private fun temporaryCount(code: String): Int {
-        val prelude = "let a: integer = 1; let b: integer = 2; let c: integer = 3; let d: integer = 4;"
+        val prelude = "let a: integer = 1; let b: integer = 2; " +
+            "let c: integer = 3; let d: integer = 4;"
         return assertNotNull(compile("$prelude\n$code").tac).temporaryCount
     }
 
     // ── Expresiones ────────────────────────────────────────────────────────
 
-    // El TypeChecker ya plego 3 + 5: no se emite ninguna suma (decision 32).
+    // El TypeChecker ya plego 3 + 5: no se emite ninguna suma.
     @Test
     fun `una expresion constante se imprime ya calculada`() {
         assertEquals(listOf("print_i 8"), tac("print(3 + 5);", variables = ""))
@@ -97,7 +99,10 @@ class TacGeneratorExprTest {
     // Una comparacion produce un booleano como VALOR, no un salto.
     @Test
     fun `una comparacion guarda su resultado`() {
-        assertEquals(listOf("t1 = x < y", "b = t1"), tac("let b: boolean = x < y;", variables = "x y"))
+        assertEquals(
+            listOf("t1 = x < y", "b = t1"),
+            tac("let b: boolean = x < y;", variables = "x y")
+        )
     }
 
     @Test
@@ -108,7 +113,7 @@ class TacGeneratorExprTest {
         )
     }
 
-    // ── El chequeo de division entre cero (decision 29) ────────────────────
+    // ── El chequeo de division entre cero ──────────────────────────────────
 
     // El divisor es una variable: el TypeChecker no pudo decidir, asi que el TAC lleva
     // el chequeo en linea, con la linea del fuente en el mensaje.
@@ -130,7 +135,10 @@ class TacGeneratorExprTest {
     // el TypeChecker.
     @Test
     fun `dividir entre una constante no emite chequeo`() {
-        assertEquals(listOf("t1 = a / 2", "q = t1"), tac("let q: integer = a / 2;", variables = "a"))
+        assertEquals(
+            listOf("t1 = a / 2", "q = t1"),
+            tac("let q: integer = a / 2;", variables = "a")
+        )
     }
 
     // El modulo tambien divide, y el divisor puede ser un temporal.

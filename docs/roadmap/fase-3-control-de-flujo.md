@@ -19,13 +19,13 @@ Los `TODO` de control de flujo de la Fase 2 desaparecen.
 
 ## Ticket 3.1: Las condiciones como saltos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.3
 
 **Archivos:**
 
 - `frontend/intermediate/TacGenerator.kt` (MODIFICAR: `generateCondition`)
-- `frontend/intermediate/ExpressionDag.kt` (MODIFICAR: nodo `Opaque`)
+- `frontend/intermediate/ExpressionDag.kt` (MODIFICAR: `Untranslated` pasa a `Subexpression`)
 - `frontend/intermediate/models/Operators.kt` (MODIFICAR: `RelationalOperator.inverted`)
 - `app/src/test/kotlin/org/compiler/TacGeneratorConditionTest.kt` (NUEVO)
 
@@ -102,23 +102,57 @@ L2:
     m = t1
 ```
 
-### El nodo `Opaque` del GDA
+### Las subexpresiones del GDA
 
-Un ternario o un `&&` como valor tienen saltos adentro, así que no caben en un nodo
-del GDA. Entran como un nodo `Opaque`: el GDA lo trata como una hoja que nunca se
-comparte, y al emitirlo llama a `generateExpression` sobre su subexpresión.
+Un operando que no es una operación aritmética simple necesita su propia traducción:
+con saltos (el ternario, `&&` y `||` como valor), con una llamada (`f(x)`, `new`) o con
+acceso a memoria (`p.nombre`, `lista[i]`). Entra al GDA como una `Subexpression`: el GDA
+la trata como una hoja que nunca se comparte, y el generador la traduce con su propia
+función. La operación de arriba solo recibe el temporal donde quedó el resultado.
+
+Reemplaza al nodo `Untranslated` de la Fase 2. Es una jerarquía sellada con un caso por
+construcción, para que el `when` del generador los nombre y el compilador obligue a
+traducir cada uno (decisión 36):
 
 ```kotlin
-// Una subexpresion que el GDA no sabe descomponer porque tiene saltos adentro. Se
-// genera por separado y nunca se comparte.
-data class Opaque(val expression: Expression) : DagNode
+sealed interface Subexpression : DagNode {
+    data class Ternary(val expression: TernaryOperation) : Subexpression
+    data class LogicalValue(val expression: BinaryOperation) : Subexpression
+    data class Call(val expression: FunctionCall) : Subexpression
+    data class NewObject(val expression: ObjectCreation) : Subexpression
+    data class NewList(val expression: ArrayLiteral) : Subexpression
+    data class FieldAccess(val expression: PropertyAccess) : Subexpression
+    data class ElementAccess(val expression: IndexAccess) : Subexpression
+}
 ```
 
-Una expresión que contiene un `Opaque` se construye **sin compartir** (decisión 36),
-por la misma razón que una llamada: entre una rama y la otra solo se ejecuta una, y un
-nodo compartido entre las dos no estaría calculado en la otra. Las llamadas a función
-y los accesos a campos y elementos, cuando lleguen sus fases, entran por el mismo
-nodo.
+En esta fase se traducen `Ternary` y `LogicalValue`. Los otros cinco siguen siendo un
+`TODO` hasta las fases de funciones y de objetos. `this` y la asignación a un campo o
+elemento dentro de una expresión no son subexpresiones: el GDA los deja como `TODO`, y en
+la fase de objetos `this` pasa a ser una hoja y la asignación una extensión de `Assign`.
+
+Como nunca se comparte, una `Subexpression` siempre tiene un solo lector, y el temporal
+que devuelve su traducción entra al pool con un solo uso.
+
+**Cuándo se comparte (decisión 53).** El GDA solo reutiliza cálculos en expresiones
+puras: variables, constantes y operaciones aritméticas, relacionales o de texto. Si la
+expresión contiene una `Subexpression` o una asignación anidada, se construye sin
+compartir. En `(a * b) + (c ? a * b : 0)`, la segunda multiplicación está en una rama que
+puede no ejecutarse, y reutilizarla sería incorrecto. Reemplaza a la lista de casos de
+`hasSideEffects`.
+
+**El orden de lectura (decisión 54).** Una variable a la izquierda de una operación se
+copia a un temporal si algún operando de su derecha contiene una asignación anidada o una
+`Subexpression`. En `x + f()`, si `f` modifica `x`, el intérprete suma el valor de antes
+de la llamada; sin la copia, el TAC leería `x` después:
+
+```
+t1 = x
+t2 = call f, 0
+t1 = t1 + t2
+```
+
+Extiende la regla que la Fase 2 ya aplica a `x + (x = 5)`.
 
 ### Aceptación
 
@@ -132,6 +166,12 @@ nodo.
 | `let b: boolean = x < y && z;` | la materialización con `true` y `false` |
 | `let m: integer = a > b ? a : b;` | las dos ramas copian al mismo temporal |
 | `a * b + (c ? a * b : 0)` | las dos `a * b` no se comparten |
+
+**Al implementarlo:** los casos de aceptación con `if` se prueban en el ticket 3.2,
+porque el `if` todavía no se traduce; aquí las condiciones se probaron a través del
+ternario y de `&&` y `||` como valor, que pasan por la misma `generateCondition`. Para no
+duplicar lógica, `ExpressionDag` expone `comparisonKind` y `relationalOf`, que usan tanto
+el GDA como las comparaciones con saltos.
 
 ---
 

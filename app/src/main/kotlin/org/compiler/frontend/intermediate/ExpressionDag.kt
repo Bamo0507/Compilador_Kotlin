@@ -16,6 +16,7 @@ import org.compiler.frontend.ast.models.TernaryOperation
 import org.compiler.frontend.ast.models.ThisReference
 import org.compiler.frontend.ast.models.UnaryOperation
 import org.compiler.frontend.ast.models.UnaryOperator
+import org.compiler.frontend.intermediate.DagNode.Subexpression
 import org.compiler.frontend.intermediate.models.Address
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Constant
@@ -43,10 +44,20 @@ sealed interface DagNode {
     // Nunca se comparte: dos asignaciones iguales son dos escrituras.
     data class Assign(val target: Name, val value: Int) : DagNode
 
-    // Lo que esta fase todavia no traduce, entero y sin abrir: una llamada (punto 9),
-    // `&&`, `||` y el ternario (punto 6), objetos y listas (punto 10). Nunca se
-    // comparte, y el generador lo convierte en un TODO al llegar a el.
-    data class Untranslated(val expression: Expression) : DagNode
+    // Un operando que no es una operacion aritmetica simple y necesita su propia
+    // traduccion: con saltos, con una llamada o con acceso a memoria. El GDA lo trata
+    // como una hoja que nunca se comparte, y la operacion de arriba solo recibe el
+    // temporal donde quedo su resultado. Un caso por construccion, para que el
+    // generador los nombre y el compilador obligue a traducir cada uno.
+    sealed interface Subexpression : DagNode {
+        data class Ternary(val expression: TernaryOperation) : Subexpression
+        data class LogicalValue(val expression: BinaryOperation) : Subexpression
+        data class Call(val expression: FunctionCall) : Subexpression
+        data class NewObject(val expression: ObjectCreation) : Subexpression
+        data class NewList(val expression: ArrayLiteral) : Subexpression
+        data class FieldAccess(val expression: PropertyAccess) : Subexpression
+        data class ElementAccess(val expression: IndexAccess) : Subexpression
+    }
 }
 
 // Lo que distingue a dos operaciones. Es la parte "op" de la llave <op, izq, der>.
@@ -86,39 +97,33 @@ class ExpressionDag private constructor(
     companion object {
 
         fun build(expression: Expression): ExpressionDag {
-            val builder = Builder(shareOperations = !hasSideEffects(expression))
+            val builder = Builder(shareOperations = isPure(expression))
             val root = builder.build(expression)
             return ExpressionDag(builder.nodes, root, builder.countParents(), builder.lines)
         }
 
         /**
-         * Decision 30: una llamada puede cambiar una global, y una asignacion anidada
-         * cambia una variable. En esos casos dos subexpresiones iguales NO son el
-         * mismo valor, y la tabla se apaga para toda la expresion.
+         * Solo una expresion pura comparte calculos: variables, constantes y
+         * operaciones aritmeticas, relacionales o de texto. Cualquier otra cosa puede
+         * cambiar un valor o no ejecutarse, y en ese caso dos subexpresiones iguales no
+         * son el mismo valor:
          *
-         *   a * b + f() + a * b    f puede modificar a o b
-         *   (x = 5) + x            la x de la derecha no es la de antes
+         *   a * b + f() + a * b         f puede modificar a o b
+         *   (x = 5) + x                 la x de la derecha no es la de antes
+         *   (a * b) + (c ? a * b : 0)   la rama puede no ejecutarse
          *
-         * Saber exactamente que nodos depende de lo que la llamada cambio es analisis
-         * de efectos. Apagar todo es una regla de una linea, y una expresion con
-         * llamadas rara vez repite subexpresiones.
+         * Saber exactamente que nodos se pueden compartir es analisis de efectos.
+         * Apagarlo para toda la expresion es una regla de una linea.
          */
-        fun hasSideEffects(expression: Expression): Boolean = when (expression) {
-            is FunctionCall, is ObjectCreation, is AssignmentExpression -> true
-            else -> childrenOf(expression).any { hasSideEffects(it) }
-        }
-
-        private fun childrenOf(expression: Expression): List<Expression> = when (expression) {
-            is Literal, is Identifier, is ThisReference -> emptyList()
-            is ArrayLiteral -> expression.elements
-            is UnaryOperation -> listOf(expression.operand)
-            is BinaryOperation -> listOf(expression.left, expression.right)
-            is TernaryOperation -> listOf(expression.condition, expression.ifTrue, expression.ifFalse)
-            is AssignmentExpression -> listOf(expression.target, expression.value)
-            is FunctionCall -> listOf(expression.callee) + expression.arguments
-            is IndexAccess -> listOf(expression.target, expression.index)
-            is PropertyAccess -> listOf(expression.target)
-            is ObjectCreation -> expression.arguments
+        fun isPure(expression: Expression): Boolean {
+            if (expression.constantValue != null) return true
+            return when (expression) {
+                is Literal, is Identifier -> true
+                is UnaryOperation -> isPure(expression.operand)
+                is BinaryOperation -> expression.operator.group != OperatorGroup.LOGICAL &&
+                    isPure(expression.left) && isPure(expression.right)
+                else -> false
+            }
         }
 
         // El tipo de los operandos de una operacion, que decide la instruccion de
@@ -131,6 +136,26 @@ class ExpressionDag private constructor(
 
             // Clases, listas y null: se comparan por direccion.
             else -> OperandKind.REFERENCE
+        }
+
+        // El tipo con el que se comparan dos operandos: entero con flotante compara
+        // como flotante. Cualquier otra mezcla ya la rechazo el TypeChecker, asi que
+        // basta con el de la izquierda. Lo usan el GDA y las condiciones con saltos.
+        fun comparisonKind(left: Expression, right: Expression): OperandKind {
+            val leftKind = kindOf(left.type)
+            val rightKind = kindOf(right.type)
+            val involvesFloat = leftKind == OperandKind.FLOAT || rightKind == OperandKind.FLOAT
+            return if (involvesFloat) OperandKind.FLOAT else leftKind
+        }
+
+        fun relationalOf(operator: BinaryOperator): RelationalOperator = when (operator) {
+            BinaryOperator.LESS -> RelationalOperator.LESS
+            BinaryOperator.LESS_EQUAL -> RelationalOperator.LESS_EQUAL
+            BinaryOperator.GREATER -> RelationalOperator.GREATER
+            BinaryOperator.GREATER_EQUAL -> RelationalOperator.GREATER_EQUAL
+            BinaryOperator.EQUAL -> RelationalOperator.EQUAL
+            BinaryOperator.NOT_EQUAL -> RelationalOperator.NOT_EQUAL
+            else -> error("'${operator.symbol}' no es relacional")
         }
     }
 
@@ -146,41 +171,51 @@ class ExpressionDag private constructor(
             val line = expression.location.line
 
             // 1. El TypeChecker ya plego el valor: una hoja, sin importar cuantos nodos
-            //    tenia debajo. `3 + 5` es la constante 8 (decision 32).
+            //    tenia debajo. `3 + 5` es la constante 8.
             expression.constantValue?.let { return leaf(Constant(it), line) }
 
             return when (expression) {
                 // 2. Las hojas. El literal `null` no tiene constantValue (es null), asi
                 //    que llega aqui.
                 is Literal -> leaf(Constant(expression.value), line)
-                is Identifier -> leaf(
-                    Name(requireNotNull(expression.resolvedSymbol) { "'${expression.name}' sin resolver" }),
-                    line
-                )
+                is Identifier -> {
+                    val symbol = requireNotNull(expression.resolvedSymbol) {
+                        "'${expression.name}' sin resolver"
+                    }
+                    leaf(Name(symbol), line)
+                }
 
                 // 3. Las operaciones: primero los hijos, de abajo hacia arriba.
                 is BinaryOperation -> binary(expression, line)
                 is UnaryOperation -> unary(expression, line)
 
                 is AssignmentExpression -> {
-                    val target = expression.target
-                    if (target !is Identifier) return untranslated(expression, line)
+                    val target = expression.target as? Identifier
+                        ?: TODO("asignacion a campos y elementos de lista")
 
                     val value = build(expression.value)
                     add(DagNode.Assign(Name(requireNotNull(target.resolvedSymbol)), value), line)
                 }
 
-                // Lo de las fases siguientes, entero.
-                is TernaryOperation, is FunctionCall, is ObjectCreation, is ArrayLiteral,
-                is IndexAccess, is PropertyAccess, is ThisReference -> untranslated(expression, line)
+                // 4. Lo que necesita su propia traduccion entra entero.
+                is TernaryOperation -> subexpression(Subexpression.Ternary(expression), line)
+                is FunctionCall -> subexpression(Subexpression.Call(expression), line)
+                is ObjectCreation -> subexpression(Subexpression.NewObject(expression), line)
+                is ArrayLiteral -> subexpression(Subexpression.NewList(expression), line)
+                is PropertyAccess -> subexpression(Subexpression.FieldAccess(expression), line)
+                is IndexAccess -> subexpression(Subexpression.ElementAccess(expression), line)
+
+                is ThisReference -> TODO("this")
             }
         }
 
         private fun binary(expression: BinaryOperation, line: Int): Int {
             val operator = expression.operator
 
-            // && y || son saltos, no operaciones: es el punto 6.
-            if (operator.group == OperatorGroup.LOGICAL) return untranslated(expression, line)
+            // && y || como valor necesitan saltos: no son una operacion.
+            if (operator.group == OperatorGroup.LOGICAL) {
+                return subexpression(Subexpression.LogicalValue(expression), line)
+            }
 
             // Una suma de strings es concatenacion: en la maquina no es una suma, sino
             // una rutina que reserva memoria.
@@ -194,7 +229,7 @@ class ExpressionDag private constructor(
             // comparacion, el de los operandos YA ensanchados (x < 2.5 compara floats).
             val kind = when (operator.group) {
                 OperatorGroup.ARITHMETIC -> kindOf(expression.type)
-                else -> widened(kindOf(expression.left.type), kindOf(expression.right.type))
+                else -> comparisonKind(expression.left, expression.right)
             }
 
             val left = convertedTo(kind, expression.left)
@@ -210,7 +245,8 @@ class ExpressionDag private constructor(
         private fun unary(expression: UnaryOperation, line: Int): Int {
             val operand = build(expression.operand)
             val operation = when (expression.operator) {
-                UnaryOperator.NEGATE -> DagOperation.Unary(TacUnaryOperator.NEGATE, kindOf(expression.type))
+                UnaryOperator.NEGATE ->
+                    DagOperation.Unary(TacUnaryOperator.NEGATE, kindOf(expression.type))
                 UnaryOperator.NOT -> DagOperation.Unary(TacUnaryOperator.NOT, OperandKind.BOOLEAN)
             }
             return operation(operation, listOf(operand), line)
@@ -220,10 +256,12 @@ class ExpressionDag private constructor(
         //    `x + 2.5` dos veces convierte x una sola vez.
         //
         //    Una constante entera no necesita instruccion: se convierte aqui mismo, con
-        //    el mismo criterio del plegado (decision 32).
+        //    el mismo criterio del plegado.
         private fun convertedTo(kind: OperandKind, operand: Expression): Int {
             val node = build(operand)
-            if (kind != OperandKind.FLOAT || kindOf(operand.type) != OperandKind.INTEGER) return node
+            val needsConversion =
+                kind == OperandKind.FLOAT && kindOf(operand.type) == OperandKind.INTEGER
+            if (!needsConversion) return node
 
             val child = nodes[node]
             if (child is DagNode.Leaf && child.address is Constant && child.address.value is Long) {
@@ -236,15 +274,16 @@ class ExpressionDag private constructor(
 
         // Las hojas se comparten en los dos modos: no generan instruccion, y leer `a`
         // dos veces es leer la misma direccion.
-        private fun leaf(address: Address, line: Int): Int = lookupOrAdd(DagNode.Leaf(address), line)
+        private fun leaf(address: Address, line: Int): Int =
+            lookupOrAdd(DagNode.Leaf(address), line)
 
         private fun operation(operation: DagOperation, operands: List<Int>, line: Int): Int {
             val node = DagNode.Operation(operation, operands)
             return if (shareOperations) lookupOrAdd(node, line) else add(node, line)
         }
 
-        private fun untranslated(expression: Expression, line: Int): Int =
-            add(DagNode.Untranslated(expression), line)
+        // Nunca se comparte: cada una es una traduccion aparte.
+        private fun subexpression(node: Subexpression, line: Int): Int = add(node, line)
 
         // El `new` que reutiliza: si la llave ya existe, devuelve ese numero de valor.
         private fun lookupOrAdd(node: DagNode, line: Int): Int =
@@ -262,7 +301,7 @@ class ExpressionDag private constructor(
                 when (node) {
                     is DagNode.Operation -> node.operands.forEach { counts[it]++ }
                     is DagNode.Assign -> counts[node.value]++
-                    is DagNode.Leaf, is DagNode.Untranslated -> Unit
+                    is DagNode.Leaf, is Subexpression -> Unit
                 }
             }
             return counts
@@ -270,9 +309,6 @@ class ExpressionDag private constructor(
 
         // Entero con flotante compara como flotante; cualquier otra mezcla ya la
         // rechazo el TypeChecker, asi que basta con el de la izquierda.
-        private fun widened(left: OperandKind, right: OperandKind): OperandKind =
-            if (left == OperandKind.FLOAT || right == OperandKind.FLOAT) OperandKind.FLOAT else left
-
         private fun arithmeticOf(operator: BinaryOperator): ArithmeticOperator = when (operator) {
             BinaryOperator.ADD -> ArithmeticOperator.ADD
             BinaryOperator.SUBTRACT -> ArithmeticOperator.SUBTRACT
@@ -280,16 +316,6 @@ class ExpressionDag private constructor(
             BinaryOperator.DIVIDE -> ArithmeticOperator.DIVIDE
             BinaryOperator.MODULO -> ArithmeticOperator.MODULO
             else -> error("'${operator.symbol}' no es aritmetico")
-        }
-
-        private fun relationalOf(operator: BinaryOperator): RelationalOperator = when (operator) {
-            BinaryOperator.LESS -> RelationalOperator.LESS
-            BinaryOperator.LESS_EQUAL -> RelationalOperator.LESS_EQUAL
-            BinaryOperator.GREATER -> RelationalOperator.GREATER
-            BinaryOperator.GREATER_EQUAL -> RelationalOperator.GREATER_EQUAL
-            BinaryOperator.EQUAL -> RelationalOperator.EQUAL
-            BinaryOperator.NOT_EQUAL -> RelationalOperator.NOT_EQUAL
-            else -> error("'${operator.symbol}' no es relacional")
         }
     }
 }

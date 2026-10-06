@@ -85,7 +85,7 @@ class AstBuilderExprTest {
 
     // ── Plegado a la izquierda ─────────────────────────────────────────────
 
-    // EL TEST MAS IMPORTANTE DEL TICKET. Si el plegado sale al reves, el arbol es
+    // EL TEST MAS IMPORTANTE DEL AstBuilder. Si el plegado sale al reves, el arbol es
     // 10-(3-2) y el programa calcula 9 en vez de 5, sin ningun error visible.
     @Test
     fun `la resta pliega a la izquierda`() {

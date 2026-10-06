@@ -1,4 +1,4 @@
-// Ticket 2.1: el pool de temporales con conteo de usos.
+// El pool de temporales con conteo de usos.
 //
 // Cada test simula a mano lo que hace el generador: pedir un temporal por resultado y
 // consumir cada operando al leerlo, SIEMPRE consumiendo antes de pedir el siguiente.
@@ -49,7 +49,7 @@ class TemporaryAllocatorTest {
     }
 
     // a + b * c - d: cada resultado muere al ser leido por el siguiente, asi que un
-    // solo nombre alcanza. Es el t1 = t1 * t2 del punto 5.
+    // solo nombre alcanza, el t1 = t1 * t2 clasico.
     @Test
     fun `una cadena que consume su resultado usa un solo temporal`() {
         val pool = TemporaryAllocator()
@@ -116,7 +116,7 @@ class TemporaryAllocatorTest {
         assertNotEquals(live, pool.newTemp(uses = 1))
     }
 
-    // EL BUG DEL CONTADOR del punto 5: un resultado queda vivo mientras se calculan dos
+    // EL BUG DEL CONTADOR mal ordenado: un resultado queda vivo mientras se calculan dos
     // temporales mas. Un contador que solo baja al liberar podria volver a entregar
     // t1 y pisarlo. El pool sabe que t1 sigue vivo.
     @Test

@@ -28,7 +28,7 @@ import org.compiler.models.LexemeLocation
 class DeclarationCollector(
     private val diagnostics: Diagnostics
 ) {
-    // La SALIDA de esta fase: el pipeline lo lee y se lo pasa al TypeChecker.
+    // La SALIDA de esta pasada: el pipeline lo lee y se lo pasa al TypeChecker.
     val globalScope = Scope(ScopeKind.GLOBAL, "global", parent = null)
 
     // El cursor del recorrido. Sube y baja por el arbol, no lo destruye.

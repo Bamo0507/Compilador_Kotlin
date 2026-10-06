@@ -145,7 +145,7 @@ class TypeCheckerStmtTest {
         assertError("function f(): integer { return \"a\"; }", "debe devolver")
     }
 
-    // Decision 15: sin anotar es void, no se infiere del cuerpo.
+    // Sin anotar es void: no se infiere del cuerpo.
     @Test
     fun `una funcion sin tipo de retorno es void`() {
         assertValid("function f() { print(1); }")

@@ -1,4 +1,4 @@
-// Ticket 2.2: el GDA de una expresion.
+// El GDA de una expresion.
 //
 // Las expresiones salen de un programa real, ya analizado: el GDA necesita el AST
 // DECORADO (tipos, constantes plegadas, simbolos resueltos), igual que en el
@@ -35,14 +35,16 @@ class ExpressionDagTest {
 
     // La expresion del inicializador de `let r = <expression>;`, ya analizada.
     private fun analyzed(expression: String, type: String = "integer"): Expression {
-        val result = CompilerPipeline.compile("$variables\nlet r: $type = $expression;", execute = false)
+        val result =
+            CompilerPipeline.compile("$variables\nlet r: $type = $expression;", execute = false)
         assertTrue(result.errors.isEmpty(), "Errores: ${result.errors.map { it.message }}")
 
         val declaration = result.ast!!.statements.last()
         return assertIs<VariableDeclaration>(declaration).initializer!!
     }
 
-    private fun dag(expression: String, type: String = "integer") = ExpressionDag.build(analyzed(expression, type))
+    private fun dag(expression: String, type: String = "integer") =
+        ExpressionDag.build(analyzed(expression, type))
 
     private fun ExpressionDag.leaf(name: String): Int =
         nodes.indexOfFirst { it is DagNode.Leaf && (it.address as? Name)?.symbol?.name == name }
@@ -93,7 +95,7 @@ class ExpressionDagTest {
 
     // ── Constantes y conversiones ──────────────────────────────────────────
 
-    // El TypeChecker ya plego el valor: una hoja, no una suma (decision 32).
+    // El TypeChecker ya plego el valor: una hoja, no una suma.
     @Test
     fun `una expresion constante es una sola hoja`() {
         val dag = dag("3 + 5")
@@ -110,7 +112,10 @@ class ExpressionDagTest {
         assertTrue(conversion >= 0, "falta el nodo inttofloat sobre x")
 
         val sum = assertIs<DagNode.Operation>(dag.nodes[dag.root])
-        assertEquals(DagOperation.Arithmetic(ArithmeticOperator.ADD, OperandKind.FLOAT), sum.operation)
+        assertEquals(
+            DagOperation.Arithmetic(ArithmeticOperator.ADD, OperandKind.FLOAT),
+            sum.operation
+        )
         assertEquals(conversion, sum.operands.first())
     }
 
@@ -131,7 +136,7 @@ class ExpressionDagTest {
         assertTrue(dag.nodes.none { (it as? DagNode.Operation)?.operation == toFloat })
     }
 
-    // ── Cuando NO se comparte (decision 30) ────────────────────────────────
+    // ── Cuando NO se comparte ─────────────────────────────────────────────
 
     // g puede modificar a o b: las dos a * b no son el mismo valor.
     @Test
@@ -159,26 +164,29 @@ class ExpressionDagTest {
     fun `sin compartir operaciones las hojas se siguen compartiendo`() {
         val dag = dag("a * b + g() + a * b")
 
-        val leavesOfA = dag.nodes.count { it is DagNode.Leaf && (it.address as? Name)?.symbol?.name == "a" }
+        val leavesOfA = dag.nodes.count {
+            it is DagNode.Leaf && (it.address as? Name)?.symbol?.name == "a"
+        }
         assertEquals(1, leavesOfA)
         assertEquals(2, dag.parentCount[dag.leaf("a")])
     }
 
     @Test
-    fun `solo las llamadas y las asignaciones apagan la tabla`() {
-        assertTrue(ExpressionDag.hasSideEffects(analyzed("a + g()")))
-        assertTrue(ExpressionDag.hasSideEffects(analyzed("(x = 1) * 2")))
-        assertFalse(ExpressionDag.hasSideEffects(analyzed("a + b * (c - d)")))
+    fun `solo una expresion pura comparte calculos`() {
+        assertTrue(ExpressionDag.isPure(analyzed("a + b * (c - d)")))
+        assertFalse(ExpressionDag.isPure(analyzed("a + g()")))
+        assertFalse(ExpressionDag.isPure(analyzed("(x = 1) * 2")))
+        assertFalse(ExpressionDag.isPure(analyzed("a * b + (a < b ? a * b : 0)")))
     }
 
-    // ── Lo que esta fase no traduce ────────────────────────────────────────
+    // ── Las subexpresiones ─────────────────────────────────────────────────
 
-    // && necesita saltos (punto 6): queda entero, como un solo nodo sin abrir.
+    // && necesita saltos: entra entero, como una sola subexpresion.
     @Test
-    fun `lo que necesita saltos queda como un nodo sin traducir`() {
+    fun `lo que necesita su propia traduccion entra como subexpresion`() {
         val dag = dag("a < b && c < d", type = "boolean")
 
-        assertIs<DagNode.Untranslated>(dag.nodes[dag.root])
+        assertIs<DagNode.Subexpression.LogicalValue>(dag.nodes[dag.root])
         assertEquals(1, dag.nodes.size)
     }
 }

@@ -17,7 +17,20 @@ enum class RelationalOperator(val symbol: String) {
     GREATER(">"),
     GREATER_EQUAL(">="),
     EQUAL("=="),
-    NOT_EQUAL("!=")
+    NOT_EQUAL("!=");
+
+    // La relacion contraria. La usa la caida: si el lado verdadero sigue de largo, se
+    // salta al falso con la relacion invertida. Supone que no hay NaN, porque con NaN
+    // `!(a < b)` no es lo mismo que `a >= b`.
+    val inverted: RelationalOperator
+        get() = when (this) {
+            LESS -> GREATER_EQUAL
+            LESS_EQUAL -> GREATER
+            GREATER -> LESS_EQUAL
+            GREATER_EQUAL -> LESS
+            EQUAL -> NOT_EQUAL
+            NOT_EQUAL -> EQUAL
+        }
 }
 
 // Con prefijo porque el AST ya tiene un UnaryOperator. INT_TO_FLOAT esta aqui porque

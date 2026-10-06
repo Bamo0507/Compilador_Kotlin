@@ -73,7 +73,7 @@ class FlowAnalyzerTest {
         assertError("return 1;", "solo se puede usar dentro de una función")
     }
 
-    // Decision 5: no hay break de switch, asi que fuera de un bucle es error.
+    // No hay break de switch, porque no hay fall-through: asi que fuera de un bucle es error.
     @Test
     fun `break en un switch fuera de un bucle`() {
         assertError("let x: integer = 1; switch (x) { case 1: break; }", "dentro de un bucle")

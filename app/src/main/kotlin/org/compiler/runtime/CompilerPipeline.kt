@@ -73,7 +73,7 @@ object CompilerPipeline {
     // Lo que el generador todavia no traduce (un `while`, una llamada) es un TODO, que
     // lanza NotImplementedError. Se atrapa SOLO ese: el programa es valido y el IDE no
     // debe caerse, pero cualquier otra excepcion es un bug del generador y tiene que
-    // verse. Estas ramas desaparecen con sus fases.
+    // verse.
     private fun generateIntermediateCode(ast: Program): TacProgram? =
         try {
             TacGenerator().generate(ast)

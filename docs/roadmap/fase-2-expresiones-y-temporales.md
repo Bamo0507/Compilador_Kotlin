@@ -21,7 +21,7 @@ Dragon Book 6.1, 6.4 y 6.5.
 
 ## Ticket 2.1: `TemporaryAllocator`, el pool con conteo de usos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -106,7 +106,7 @@ punto 5.
 
 ## Ticket 2.2: `ExpressionDag`, el GDA de una expresión
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -207,7 +207,7 @@ llamadas rara vez repite subexpresiones.
 
 ## Ticket 2.3: `TacGenerator` y la etapa G del pipeline
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2, 2.1, 2.2
 
 **Archivos:**
@@ -320,7 +320,7 @@ quede ningún `TODO`.
 
 ## Ticket 2.4: El documento, secciones 8 a 10
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.3, 1.3
 
 **Archivos:**
@@ -350,6 +350,28 @@ quede ningún `TODO`.
 - **Se conserva la copia final (decisión 33).** `x = a + b` genera `t1 = a + b` y
   `x = t1`, como la diapositiva 24 (`a = t5`). Escribir directo `x = a + b` ahorraría
   una instrucción, pero es una optimización que la teoría no muestra.
+
+---
+
+## Lo que cambió al implementar
+
+La fase se implementó como estaba planeada, con cuatro diferencias:
+
+- **El chequeo de división solo se emite para enteros (decisión 51).** En flotantes,
+  dividir entre cero da infinito, que es un valor legítimo, y es lo mismo que hace el
+  intérprete.
+- **Las asignaciones anidadas tienen su propio nodo en el GDA, `Assign` (decisión 52).**
+  Nunca se comparte, y su valor es la variable asignada. Al implementarlo apareció un caso
+  que el plan no vio: en `x + (x = 5)`, la `x` de la izquierda es una hoja que no genera
+  instrucción, así que se leería después de la asignación. El generador la copia antes a
+  un temporal, y el resultado coincide con el intérprete.
+- **Lo que todavía no se traduce entra al GDA como un nodo `Untranslated`**, que el
+  generador convierte en un `TODO`. Cumple el papel que el ticket 3.1 le asigna al nodo
+  `Opaque`. En la Fase 3 se convierte en la jerarquía `Subexpression` (decisión 36).
+- **`VariableDeclaration` guarda su `Symbol`**, que lo llena el `TypeChecker` al
+  declararla. Así el generador escribe en la variable sin volver a buscar su nombre, igual
+  que `Identifier` guarda su `resolvedSymbol`. Los campos de clase no lo reciben, porque
+  los declara la Pasada 1: la fase de objetos los busca en el ámbito de la clase.
 
 ---
 

@@ -1,6 +1,8 @@
 package org.compiler.frontend.intermediate
 
 import org.compiler.frontend.ast.models.Assignment
+import org.compiler.frontend.ast.models.BinaryOperation
+import org.compiler.frontend.ast.models.BinaryOperator
 import org.compiler.frontend.ast.models.Block
 import org.compiler.frontend.ast.models.Break
 import org.compiler.frontend.ast.models.ClassDeclaration
@@ -13,18 +15,26 @@ import org.compiler.frontend.ast.models.ForEach
 import org.compiler.frontend.ast.models.FunctionDeclaration
 import org.compiler.frontend.ast.models.Identifier
 import org.compiler.frontend.ast.models.If
+import org.compiler.frontend.ast.models.OperatorGroup
 import org.compiler.frontend.ast.models.Program
 import org.compiler.frontend.ast.models.Statement
 import org.compiler.frontend.ast.models.Switch
+import org.compiler.frontend.ast.models.TernaryOperation
 import org.compiler.frontend.ast.models.TryCatch
+import org.compiler.frontend.ast.models.UnaryOperation
+import org.compiler.frontend.ast.models.UnaryOperator
 import org.compiler.frontend.ast.models.VariableDeclaration
 import org.compiler.frontend.ast.models.While
+import org.compiler.frontend.intermediate.DagNode.Subexpression
 import org.compiler.frontend.intermediate.models.Address
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Concat
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
+import org.compiler.frontend.intermediate.models.Goto
+import org.compiler.frontend.intermediate.models.IfFalseGoto
+import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
@@ -35,6 +45,7 @@ import org.compiler.frontend.intermediate.models.Quadruple
 import org.compiler.frontend.intermediate.models.Relational
 import org.compiler.frontend.intermediate.models.RelationalOperator
 import org.compiler.frontend.intermediate.models.TacProgram
+import org.compiler.frontend.intermediate.models.TacUnaryOperator
 import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.Unary
@@ -54,7 +65,7 @@ import org.compiler.frontend.ast.models.Return as ReturnStatement
  * sentencias no devuelven nada; las expresiones devuelven la Address donde quedo su
  * valor. Toda expresion pasa por su GDA, y todo temporal por el pool.
  *
- * Lo que esta fase todavia no traduce es un TODO con el punto que lo cubre. El
+ * Lo que el generador todavia no traduce es un TODO que nombra la construccion. El
  * pipeline atrapa el NotImplementedError y deja el TAC en null, asi un programa con
  * un `while` no tumba el IDE.
  */
@@ -87,10 +98,10 @@ class TacGenerator {
             is Block -> stmt.statements.forEach { generateStatement(it) }
 
             is If, is While, is DoWhile, is For, is ForEach, is Switch,
-            is Break, is Continue -> TODO("control de flujo (punto 6)")
-            is TryCatch -> TODO("try/catch (punto 6)")
-            is FunctionDeclaration, is ReturnStatement -> TODO("funciones y llamadas (punto 9)")
-            is ClassDeclaration -> TODO("clases y objetos (punto 10)")
+            is Break, is Continue -> TODO("control de flujo")
+            is TryCatch -> TODO("try/catch")
+            is FunctionDeclaration, is ReturnStatement -> TODO("funciones y llamadas")
+            is ClassDeclaration -> TODO("clases y objetos")
         }
 
         // El invariante del pool: entre sentencias no queda ningun temporal vivo. Si
@@ -102,13 +113,15 @@ class TacGenerator {
     }
 
     // `let x = e;` -> el codigo de e, y despues `x = <direccion de e>`. La copia final
-    // se conserva aunque cueste una instruccion (decision 33): es la forma de la
+    // se conserva aunque cueste una instruccion: es la forma de la
     // diapositiva 24, y escribir directo en x es una optimizacion que la teoria no
     // muestra.
     //
     // `let x: integer;` -> `x = 0`: el cero de su tipo, el mismo que usa el interprete.
     private fun generateVariableDeclaration(decl: VariableDeclaration) {
-        val symbol = requireNotNull(decl.symbol) { "'${decl.name}' sin Symbol: ¿corrio el TypeChecker?" }
+        val symbol = requireNotNull(decl.symbol) {
+            "'${decl.name}' sin Symbol: ¿corrio el TypeChecker?"
+        }
         val target = Name(symbol)
 
         val initializer = decl.initializer
@@ -122,7 +135,7 @@ class TacGenerator {
 
     private fun generateAssignment(stmt: Assignment) {
         val target = stmt.target as? Identifier
-            ?: TODO("asignacion a campos y elementos de lista (punto 10)")
+            ?: TODO("asignacion a campos y elementos de lista")
 
         copyInto(Name(symbolOf(target)), generateExpression(stmt.value))
     }
@@ -133,7 +146,7 @@ class TacGenerator {
         temporaries.consume(value)
     }
 
-    private fun copyInto(target: Name, value: Address) {
+    private fun copyInto(target: Address, value: Address) {
         instructions += Copy(target, value)
         temporaries.consume(value)
     }
@@ -185,7 +198,7 @@ class TacGenerator {
                     dagNode.target
                 }
 
-                is DagNode.Untranslated -> TODO(untranslatedReason(dagNode.expression))
+                is Subexpression -> generateSubexpression(dagNode)
             }
 
             emitted[node] = address
@@ -201,8 +214,9 @@ class TacGenerator {
      * Con una asignacion anidada hay un caso fino: en `x + (x = 5)` la x de la
      * izquierda vale lo que valia ANTES de la asignacion, porque se evalua primero.
      * Pero una hoja no genera instruccion: se lee recien cuando se emite la suma, y
-     * para entonces la asignacion ya corrio. Por eso, si el operando derecho escribe
-     * en la variable de la izquierda, la izquierda se copia antes a un temporal.
+     * para entonces la asignacion ya corrio. Por eso, si el operando derecho puede
+     * modificar la variable de la izquierda (una asignacion o una subexpresion, como
+     * una llamada), la izquierda se copia antes a un temporal.
      */
     private fun readOperands(
         operands: List<Int>,
@@ -214,7 +228,7 @@ class TacGenerator {
             val address = emit(operand)
 
             val later = operands.drop(position + 1)
-            if (address is Name && later.any { assignsTo(dag, it, address.symbol) }) {
+            if (address is Name && later.any { mayModify(dag, it, address.symbol) }) {
                 val snapshot = temporaries.newTemp(uses = 1)
                 instructions += Copy(snapshot, address)
                 addresses += snapshot
@@ -225,14 +239,23 @@ class TacGenerator {
         return addresses
     }
 
-    private fun assignsTo(dag: ExpressionDag, node: Int, symbol: Symbol): Boolean =
+    // Si este nodo puede cambiar la variable. Una subexpresion se considera que si: una
+    // llamada puede modificar una global, y un ternario puede tener una asignacion en
+    // una rama. Revisar su contenido seria analisis de efectos.
+    private fun mayModify(dag: ExpressionDag, node: Int, symbol: Symbol): Boolean =
         when (val dagNode = dag.nodes[node]) {
-            is DagNode.Assign -> dagNode.target.symbol === symbol || assignsTo(dag, dagNode.value, symbol)
-            is DagNode.Operation -> dagNode.operands.any { assignsTo(dag, it, symbol) }
-            is DagNode.Leaf, is DagNode.Untranslated -> false
+            is DagNode.Assign ->
+                dagNode.target.symbol === symbol || mayModify(dag, dagNode.value, symbol)
+            is DagNode.Operation -> dagNode.operands.any { mayModify(dag, it, symbol) }
+            is Subexpression -> true
+            is DagNode.Leaf -> false
         }
 
-    private fun quadrupleOf(operation: DagOperation, result: Temporary, operands: List<Address>): Quadruple =
+    private fun quadrupleOf(
+        operation: DagOperation,
+        result: Temporary,
+        operands: List<Address>
+    ): Quadruple =
         when (operation) {
             is DagOperation.Arithmetic ->
                 Arithmetic(result, operands[0], operation.operator, operands[1], operation.kind)
@@ -243,7 +266,190 @@ class TacGenerator {
         }
 
     // ══════════════════════════════════════════════════════════════════════
-    //  El chequeo de division entre cero (decision 29)
+    //  Subexpresiones: lo que el GDA no descompone
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Cada una se traduce con su propia funcion, y devuelve la direccion donde quedo su
+    // valor. Como nunca se comparte, su resultado tiene un solo lector.
+    private fun generateSubexpression(subexpression: Subexpression): Address =
+        when (subexpression) {
+            is Subexpression.Ternary -> generateTernary(subexpression.expression)
+            is Subexpression.LogicalValue -> generateLogicalValue(subexpression.expression)
+            is Subexpression.Call -> TODO("llamadas a funciones")
+            is Subexpression.NewObject -> TODO("creacion de objetos")
+            is Subexpression.NewList -> TODO("creacion de listas")
+            is Subexpression.FieldAccess -> TODO("acceso a campos")
+            is Subexpression.ElementAccess -> TODO("acceso a elementos de lista")
+        }
+
+    // c ? x : y. El temporal del resultado se pide ANTES de los saltos, para que los
+    // temporales de la condicion y de las ramas queden por encima, y cada rama copia su
+    // valor en el. Si el ternario es float, una rama entera se convierte.
+    private fun generateTernary(expression: TernaryOperation): Address {
+        val result = temporaries.newTemp(uses = 1)
+        val elseLabel = newLabel()
+        val endLabel = newLabel()
+        val kind = ExpressionDag.kindOf(expression.type)
+
+        generateCondition(expression.condition, null, elseLabel)
+        copyInto(result, convertedTo(kind, expression.ifTrue))
+        instructions += Goto(endLabel)
+
+        instructions += LabelDefinition(elseLabel)
+        copyInto(result, convertedTo(kind, expression.ifFalse))
+        instructions += LabelDefinition(endLabel)
+
+        return result
+    }
+
+    // `let b = x < y && z`: && y || solo existen como saltos, asi que se generan los
+    // saltos y despues se escribe el valor.
+    private fun generateLogicalValue(expression: BinaryOperation): Address {
+        val result = temporaries.newTemp(uses = 1)
+        val falseLabel = newLabel()
+        val endLabel = newLabel()
+
+        generateCondition(expression, null, falseLabel)
+        instructions += Copy(result, Constant(true))
+        instructions += Goto(endLabel)
+
+        instructions += LabelDefinition(falseLabel)
+        instructions += Copy(result, Constant(false))
+        instructions += LabelDefinition(endLabel)
+
+        return result
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Condiciones: codigo de saltos
+    // ══════════════════════════════════════════════════════════════════════
+
+    /**
+     * Genera saltos a trueLabel si la condicion es verdadera y a falseLabel si es
+     * falsa. Una etiqueta null significa caer: seguir con la instruccion siguiente.
+     *
+     * Con caida, cada condicion solo salta hacia el lado que no sigue, invirtiendo la
+     * relacion si hace falta: `if a >= b goto Lfin` en vez de `if a < b goto L1` mas un
+     * `goto Lfin`.
+     */
+    private fun generateCondition(condition: Expression, trueLabel: Label?, falseLabel: Label?) {
+        // Plegada por el TypeChecker: `while (true)` no compara nada.
+        val constant = condition.constantValue
+        if (constant is Boolean) {
+            jumpTo(if (constant) trueLabel else falseLabel)
+            return
+        }
+
+        when {
+            // !B no genera nada propio: es B con las etiquetas intercambiadas.
+            condition is UnaryOperation && condition.operator == UnaryOperator.NOT ->
+                generateCondition(condition.operand, falseLabel, trueLabel)
+
+            condition is BinaryOperation && condition.operator == BinaryOperator.AND ->
+                generateAnd(condition, trueLabel, falseLabel)
+
+            condition is BinaryOperation && condition.operator == BinaryOperator.OR ->
+                generateOr(condition, trueLabel, falseLabel)
+
+            condition is BinaryOperation && isComparison(condition.operator) ->
+                generateComparison(condition, trueLabel, falseLabel)
+
+            else -> generateBooleanTest(condition, trueLabel, falseLabel)
+        }
+    }
+
+    // Si B1 es falsa, B2 ni se evalua: salta directo al lado falso. Si el lado falso
+    // cae, hace falta una etiqueta propia para saltarse B2.
+    private fun generateAnd(condition: BinaryOperation, trueLabel: Label?, falseLabel: Label?) {
+        val falseTarget = falseLabel ?: newLabel()
+        generateCondition(condition.left, null, falseTarget)
+        generateCondition(condition.right, trueLabel, falseLabel)
+        if (falseLabel == null) instructions += LabelDefinition(falseTarget)
+    }
+
+    // Si B1 es verdadera, B2 ni se evalua: salta directo al lado verdadero.
+    private fun generateOr(condition: BinaryOperation, trueLabel: Label?, falseLabel: Label?) {
+        val trueTarget = trueLabel ?: newLabel()
+        generateCondition(condition.left, trueTarget, null)
+        generateCondition(condition.right, trueLabel, falseLabel)
+        if (trueLabel == null) instructions += LabelDefinition(trueTarget)
+    }
+
+    private fun generateComparison(
+        condition: BinaryOperation,
+        trueLabel: Label?,
+        falseLabel: Label?
+    ) {
+        val kind = ExpressionDag.comparisonKind(condition.left, condition.right)
+        val left = readBefore(convertedTo(kind, condition.left), condition.right)
+        val right = convertedTo(kind, condition.right)
+        val operator = ExpressionDag.relationalOf(condition.operator)
+
+        when {
+            trueLabel != null -> {
+                instructions += IfRelationalGoto(left, operator, right, kind, trueLabel)
+                jumpTo(falseLabel)
+            }
+            falseLabel != null ->
+                instructions += IfRelationalGoto(left, operator.inverted, right, kind, falseLabel)
+        }
+
+        temporaries.consume(left)
+        temporaries.consume(right)
+    }
+
+    // Una variable, una llamada o cualquier otro valor booleano: `if (bandera)`.
+    private fun generateBooleanTest(condition: Expression, trueLabel: Label?, falseLabel: Label?) {
+        val value = generateExpression(condition)
+
+        when {
+            trueLabel != null -> {
+                instructions += IfGoto(value, trueLabel)
+                jumpTo(falseLabel)
+            }
+            falseLabel != null -> instructions += IfFalseGoto(value, falseLabel)
+        }
+
+        temporaries.consume(value)
+    }
+
+    private fun jumpTo(label: Label?) {
+        if (label != null) instructions += Goto(label)
+    }
+
+    private fun isComparison(operator: BinaryOperator): Boolean =
+        operator.group == OperatorGroup.RELATIONAL || operator.group == OperatorGroup.EQUALITY
+
+    // Un operando de una comparacion, convertido a flotante si el otro lo es. Una
+    // constante entera se convierte aqui mismo, sin instruccion.
+    private fun convertedTo(kind: OperandKind, operand: Expression): Address {
+        val address = generateExpression(operand)
+        val needsConversion =
+            kind == OperandKind.FLOAT && ExpressionDag.kindOf(operand.type) == OperandKind.INTEGER
+        if (!needsConversion) return address
+
+        val value = (address as? Constant)?.value
+        if (value is Long) return Constant(value.toDouble())
+
+        temporaries.consume(address)
+        val converted = temporaries.newTemp(uses = 1)
+        instructions += Unary(converted, TacUnaryOperator.INT_TO_FLOAT, address, OperandKind.FLOAT)
+        return converted
+    }
+
+    // En `x < f()`, la x se lee ANTES de la llamada, porque se evalua primero. Una
+    // variable no genera instruccion y se leeria despues, asi que se copia a un
+    // temporal si lo que sigue puede modificarla.
+    private fun readBefore(address: Address, later: Expression): Address {
+        if (address !is Name || ExpressionDag.isPure(later)) return address
+
+        val snapshot = temporaries.newTemp(uses = 1)
+        instructions += Copy(snapshot, address)
+        return snapshot
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  El chequeo de division entre cero
     // ══════════════════════════════════════════════════════════════════════
 
     // Solo la division ENTERA: en flotantes IEEE 754, dividir entre 0.0 da Infinity,
@@ -252,10 +458,13 @@ class TacGenerator {
     // Un divisor constante no lo necesita: el cero constante ya lo rechazo el
     // TypeChecker, asi que cualquier otra constante es segura.
     private fun needsZeroCheck(operation: DagOperation, operands: List<Address>): Boolean {
-        if (operation !is DagOperation.Arithmetic || operation.kind != OperandKind.INTEGER) return false
-        if (operation.operator != ArithmeticOperator.DIVIDE && operation.operator != ArithmeticOperator.MODULO) {
-            return false
-        }
+        if (operation !is DagOperation.Arithmetic) return false
+        if (operation.kind != OperandKind.INTEGER) return false
+
+        val isDivision = operation.operator == ArithmeticOperator.DIVIDE ||
+            operation.operator == ArithmeticOperator.MODULO
+        if (!isDivision) return false
+
         return operands[1] !is Constant
     }
 
@@ -266,7 +475,9 @@ class TacGenerator {
     // En linea, junto a la division, para que el mensaje lleve la linea del fuente.
     private fun emitZeroCheck(divisor: Address, line: Int) {
         val safe = newLabel()
-        instructions += IfRelationalGoto(divisor, RelationalOperator.NOT_EQUAL, Constant(0L), OperandKind.INTEGER, safe)
+        instructions += IfRelationalGoto(
+            divisor, RelationalOperator.NOT_EQUAL, Constant(0L), OperandKind.INTEGER, safe
+        )
         instructions += Throw(Constant("División entre cero (línea $line)"))
         instructions += LabelDefinition(safe)
     }
@@ -292,11 +503,4 @@ class TacGenerator {
         else -> null
     }
 
-    private fun untranslatedReason(expression: Expression): String = when (expression) {
-        is org.compiler.frontend.ast.models.FunctionCall,
-        is org.compiler.frontend.ast.models.ObjectCreation -> "llamadas a funciones y constructores (punto 9)"
-        is org.compiler.frontend.ast.models.BinaryOperation,
-        is org.compiler.frontend.ast.models.TernaryOperation -> "&&, || y el operador ternario (punto 6)"
-        else -> "objetos, listas y this (punto 10)"
-    }
 }
