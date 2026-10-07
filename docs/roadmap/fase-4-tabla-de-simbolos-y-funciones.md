@@ -26,7 +26,7 @@ bytes y la pila se alinea a 8 en cada llamada (decisión 42).
 
 ## Ticket 4.1: Las funciones solo se llaman
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.2
 
 **Archivos:**
@@ -63,6 +63,13 @@ private var checkingCallee = false
 | `print(perro.hablar);` sin paréntesis | **error** |
 | `f * 2` con `f` una función | **error**: ahora lo reporta esta regla, antes que la del operador |
 | `funciones_closures.cps` | sigue válido: solo llama a la función anidada |
+
+**Al implementarlo:** la bandera solo se prende cuando el callee es directamente un
+nombre o un acceso a un método, y `checkIdentifier` y `checkPropertyAccess` la apagan al
+leerla, para que no se filtre hacia sus subexpresiones. Los tests quedaron en
+`TypeCheckerStmtTest`, que tiene el helper de programas completos que necesitan las
+funciones anidadas. `multiplicar_funciones.cps`, de la batería anterior, ahora reporta
+este error en lugar del del operador, y se actualizó su anotación.
 
 ---
 

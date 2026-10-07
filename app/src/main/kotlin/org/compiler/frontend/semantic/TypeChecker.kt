@@ -86,6 +86,10 @@ class TypeChecker(
     // asignacion. Ver checkAssignmentRules.
     private var checkingAssignmentTarget = false
 
+    // Prendido solo mientras se verifica el nombre o el acceso que esta justo antes de
+    // los parentesis de una llamada: es el unico lugar donde una funcion es legal.
+    private var checkingCallee = false
+
     // El tipo de retorno de la funcion en la que estoy.
     //
     // Va en un campo porque el Scope no lo guarda: ese dato vive en el Symbol de la
@@ -222,6 +226,9 @@ class TypeChecker(
     // guarda en el nodo, cuenta el uso, detecta captura, valida
     // que ya tenga valor, y propaga la constante.
     private fun checkIdentifier(expr: Identifier): TypedValue {
+        val isCallee = checkingCallee
+        checkingCallee = false
+
         val symbol = currentScope.lookup(expr.name)
         if (symbol == null) {
             // Un miembro de la clase solo se alcanza con `this.`: si el nombre existe
@@ -235,6 +242,13 @@ class TypeChecker(
         // Se guarda para que ninguna fase posterior tenga que
         // volver a resolver este nombre.
         expr.resolvedSymbol = symbol
+
+        // Una funcion solo se llama: guardarla para llamarla despues podria dejarla
+        // apuntando a un registro de activacion que ya no existe.
+        if (symbol.kind == DeclarationKind.FUNCTION && !isCallee) {
+            reportFunctionAsValue(expr, expr.name)
+            return decorate(expr, TypedValue(ErrorType))
+        }
 
         // Los contadores de vivacidad se llevan aqui y solo
         // aqui: el reporte de vivacidad no recorre el AST.
@@ -375,7 +389,15 @@ class TypeChecker(
     // perro.hablar() es FunctionCall(callee = PropertyAccess),
     // asi que el callee ya trae su FunctionType.
     private fun checkFunctionCall(expr: FunctionCall): TypedValue {
-        val calleeType = checkExpression(expr.callee).type
+        // Solo un nombre o un acceso directo pueden ser una funcion legal. En
+        // `lista[0]()` el elemento de la lista no es una funcion, y la bandera queda
+        // apagada para no filtrarse hacia adentro.
+        checkingCallee = expr.callee is Identifier || expr.callee is PropertyAccess
+        val calleeType = try {
+            checkExpression(expr.callee).type
+        } finally {
+            checkingCallee = false
+        }
 
         if (calleeType == ErrorType) {
             // Los argumentos se verifican igual: si no, quedarian
@@ -426,9 +448,12 @@ class TypeChecker(
     // sale al ambito exterior: un campo heredado si, una
     // variable global llamada igual no.
     private fun checkPropertyAccess(expr: PropertyAccess): TypedValue {
-        // En `obj.campo = 5` se escribe el campo, pero el objeto SI se lee.
+        // En `obj.campo = 5` se escribe el campo, pero el objeto SI se lee. Lo mismo con
+        // `obj.metodo()`: el metodo es el callee, el objeto no.
         val isWrite = checkingAssignmentTarget
         checkingAssignmentTarget = false
+        val isCallee = checkingCallee
+        checkingCallee = false
         val targetType = checkExpression(expr.target).type
         if (targetType == ErrorType) return decorate(expr, TypedValue(ErrorType))
 
@@ -442,6 +467,11 @@ class TypeChecker(
         if (member == null) {
             report(expr, "La clase '${targetType.className}' no tiene un miembro " +
                 "llamado '${expr.propertyName}'")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        if (member.kind == DeclarationKind.FUNCTION && !isCallee) {
+            reportFunctionAsValue(expr, "${describeCallee(expr.target)}.${expr.propertyName}")
             return decorate(expr, TypedValue(ErrorType))
         }
 
@@ -986,6 +1016,10 @@ class TypeChecker(
         expr.type = value.type
         expr.constantValue = value.constant
         return value
+    }
+
+    private fun reportFunctionAsValue(node: Node, name: String) {
+        report(node, "'$name' es una función: solo se puede llamar, no usarse como valor")
     }
 
     private fun report(node: Node, message: String) {

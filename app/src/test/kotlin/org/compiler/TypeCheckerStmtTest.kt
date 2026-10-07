@@ -300,6 +300,34 @@ class TypeCheckerStmtTest {
         assertTrue(r.messages.isEmpty(), "no deberia haber errores: ${r.messages}")
     }
 
+    // ── Funciones como valores ─────────────────────────────────────────────
+
+    // Una funcion solo se llama: guardarla para llamarla despues podria dejarla
+    // apuntando a un registro de activacion que ya no existe.
+    @Test
+    fun `una funcion solo se puede llamar`() {
+        val sum = "function sumar(a: integer, b: integer): integer { return a + b; }"
+        assertValid("$sum let r: integer = sumar(2, 3);")
+        assertValid("$sum print(sumar(1, 2) * 10);")
+        assertValid(
+            "function externa(): integer { function interna(): integer { return 1; } " +
+                "return interna(); }"
+        )
+
+        assertError("$sum let g = sumar;", "solo se puede llamar")
+        assertError(
+            "function plantilla(): integer { return 0; } let guardada = plantilla; " +
+                "function externa() { function interna(): integer { return 1; } " +
+                "guardada = interna; }",
+            "solo se puede llamar"
+        )
+        assertError(
+            "class Perro { function hablar(): string { return \"guau\"; } } " +
+                "let p: Perro = new Perro(); let h = p.hablar;",
+            "solo se puede llamar"
+        )
+    }
+
     // ── print ──────────────────────────────────────────────────────────────
 
     @Test
