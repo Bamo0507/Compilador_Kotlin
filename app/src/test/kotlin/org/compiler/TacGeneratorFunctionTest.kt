@@ -5,6 +5,7 @@ import org.compiler.frontend.intermediate.TacPrinter
 import org.compiler.frontend.intermediate.models.FunctionBegin
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.runtime.CompilerPipeline
+import org.compiler.samples.SamplePrograms
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -132,5 +133,77 @@ class TacGeneratorFunctionTest {
 
         val record = tacProgram.activationRecords.single { it.function.name == "f" }
         assertEquals("t1", record.fields.last().name)
+    }
+
+    // ── Funciones anidadas y el enlace de acceso ───────────────────────────
+
+    private val siblings =
+        "function externa(): integer {\n" +
+            "  let cuenta: integer = 41;\n" +
+            "  function sumar(): integer { return cuenta + 1; }\n" +
+            "  function ayudar(): integer { return sumar(); }\n" +
+            "  return ayudar();\n" +
+            "}\n" +
+            "print(externa());"
+
+    // cuenta vive en el registro de externa: sumar sube un enlace de acceso.
+    @Test
+    fun `una funcion anidada lee una variable de su padre con un salto`() {
+        assertTrue("t1 = cuenta^1 + 1" in tac(siblings))
+    }
+
+    // Desde externa, que contiene a ayudar, no hay que subir; entre hermanas, uno. Las
+    // funciones del nivel superior no usan el enlace.
+    @Test
+    fun `el call lleva los saltos para encontrar a quien contiene a la funcion`() {
+        val lines = tac(siblings)
+
+        assertTrue("t1 = call externa.ayudar, 0, ^0" in lines)
+        assertTrue("t1 = call externa.sumar, 0, ^1" in lines)
+        assertTrue("t1 = call externa, 0" in lines)
+    }
+
+    @Test
+    fun `una variable dos niveles arriba se lee con dos saltos`() {
+        val lines = tac(
+            "function a(): integer {\n" +
+                "  let base: integer = 10;\n" +
+                "  function b(): integer {\n" +
+                "    function c(): integer { return base * 2; }\n" +
+                "    return c();\n" +
+                "  }\n" +
+                "  return b();\n" +
+                "}\n" +
+                "print(a());"
+        )
+
+        assertTrue("t1 = base^2 * 2" in lines)
+    }
+
+    // Una funcion anidada que se llama a si misma esta un nivel abajo de quien la
+    // contiene: sube uno para pasar el mismo enlace que recibio.
+    @Test
+    fun `una funcion anidada recursiva se llama con un salto`() {
+        val lines = tac(
+            "function externa(n: integer): integer {\n" +
+                "  function cuenta(k: integer): integer {\n" +
+                "    if (k <= 0) { return n; }\n" +
+                "    return cuenta(k - 1);\n" +
+                "  }\n" +
+                "  return cuenta(3);\n" +
+                "}\n" +
+                "print(externa(7));"
+        )
+
+        assertTrue("return n^1" in lines)
+        assertTrue("t1 = call externa.cuenta, 1, ^1" in lines)
+    }
+
+    @Test
+    fun `el programa de closures de la bateria genera TAC`() {
+        val program = assertNotNull(SamplePrograms.byId("validos/funciones_closures"))
+        val result = CompilerPipeline.compile(program.source, execute = false)
+
+        assertNotNull(result.tac)
     }
 }

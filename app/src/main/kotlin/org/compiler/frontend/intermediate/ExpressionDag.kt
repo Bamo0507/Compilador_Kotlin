@@ -28,6 +28,7 @@ import org.compiler.frontend.semantic.symbols.BooleanType
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.IntegerType
 import org.compiler.frontend.semantic.symbols.StringType
+import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.frontend.semantic.symbols.Type
 
 // El numero de valor de un nodo es su indice en `ExpressionDag.nodes`.
@@ -96,8 +97,13 @@ class ExpressionDag private constructor(
 
     companion object {
 
-        fun build(expression: Expression): ExpressionDag {
-            val builder = Builder(shareOperations = isPure(expression))
+        // nameOf construye la direccion de una variable: el generador la usa para
+        // agregar los saltos del enlace de acceso.
+        fun build(
+            expression: Expression,
+            nameOf: (Symbol) -> Name = { Name(it) }
+        ): ExpressionDag {
+            val builder = Builder(shareOperations = isPure(expression), nameOf)
             val root = builder.build(expression)
             return ExpressionDag(builder.nodes, root, builder.countParents(), builder.lines)
         }
@@ -159,7 +165,10 @@ class ExpressionDag private constructor(
         }
     }
 
-    private class Builder(private val shareOperations: Boolean) {
+    private class Builder(
+        private val shareOperations: Boolean,
+        private val nameOf: (Symbol) -> Name
+    ) {
 
         val nodes = mutableListOf<DagNode>()
         val lines = mutableListOf<Int>()
@@ -182,7 +191,7 @@ class ExpressionDag private constructor(
                     val symbol = requireNotNull(expression.resolvedSymbol) {
                         "'${expression.name}' sin resolver"
                     }
-                    leaf(Name(symbol), line)
+                    leaf(nameOf(symbol), line)
                 }
 
                 // 3. Las operaciones: primero los hijos, de abajo hacia arriba.
@@ -194,7 +203,7 @@ class ExpressionDag private constructor(
                         ?: TODO("asignacion a campos y elementos de lista")
 
                     val value = build(expression.value)
-                    add(DagNode.Assign(Name(requireNotNull(target.resolvedSymbol)), value), line)
+                    add(DagNode.Assign(nameOf(requireNotNull(target.resolvedSymbol)), value), line)
                 }
 
                 // 4. Lo que necesita su propia traduccion entra entero.

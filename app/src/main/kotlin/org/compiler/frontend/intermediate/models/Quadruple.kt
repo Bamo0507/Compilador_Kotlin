@@ -90,10 +90,15 @@ data class FunctionEnd(val function: FunctionLabel) : Quadruple
 data class Param(val value: Address) : Quadruple
 
 // call f, n    /    x = call f, n. Sin resultado si la funcion es void.
+//
+// accessHops: cuantos enlaces sube quien llama para encontrar el registro de la funcion
+// que contiene a la llamada, que es el enlace de acceso que recibe. Null para las
+// funciones del nivel superior, que no lo usan.
 data class Call(
     val result: Address?,
     val function: FunctionLabel,
-    val argumentCount: Int
+    val argumentCount: Int,
+    val accessHops: Int? = null
 ) : Quadruple
 
 // return    /    return x

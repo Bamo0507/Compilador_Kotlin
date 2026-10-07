@@ -310,7 +310,7 @@ usar una clase.
 
 ## Ticket 4.4: Funciones anidadas y el enlace de acceso
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.3
 
 **Archivos:**
@@ -394,6 +394,12 @@ end_func externa.ayudar
 | Una función anidada recursiva | `^1` |
 | Una función del nivel superior | su `call` no lleva saltos |
 | `funciones_closures.cps` | genera TAC completo |
+
+**Al implementarlo:** todas las direcciones de variables se construyen en una sola
+función del generador, `nameOf`, que calcula los saltos a partir de la profundidad de la
+función actual. El GDA la recibe como parámetro, con `Name(it)` por defecto para no
+cambiar sus tests. En la vista de cuádruplos, los saltos del `call` van junto al número de
+argumentos.
 
 ---
 

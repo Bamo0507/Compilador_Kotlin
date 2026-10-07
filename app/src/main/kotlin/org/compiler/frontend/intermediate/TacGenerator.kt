@@ -65,6 +65,7 @@ import org.compiler.frontend.semantic.symbols.BooleanType
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
+import org.compiler.frontend.semantic.symbols.StorageLocation
 import org.compiler.frontend.semantic.symbols.StringType
 import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.frontend.semantic.symbols.Type
@@ -105,6 +106,13 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // llamada puede aparecer antes que la declaracion.
     private val functionLabels = IdentityHashMap<Symbol, FunctionLabel>()
 
+    // Cuantas funciones contienen a cada funcion, contandose a si misma: 1 para una del
+    // nivel superior. Es lo que decide los saltos del enlace de acceso en una llamada.
+    private val functionDepths = IdentityHashMap<Symbol, Int>()
+
+    // La profundidad de la funcion que se esta generando: 0 en el main.
+    private var currentDepth = 0
+
     // A donde saltan break y continue dentro de un bucle, y cuantos try habia abiertos
     // al entrar: la diferencia con los de ahora es cuantos endtry hay que emitir.
     private data class LoopLabels(
@@ -129,7 +137,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         // El codigo del nivel superior es el main implicito. Las funciones que declara
         // quedan pendientes, y cada una agrega las suyas al generarse.
-        generateFunction(storageLayout.main, program.statements, returnType = null)
+        generateFunction(storageLayout.main, program.statements, returnType = null, depth = 0)
         while (pendingFunctions.isNotEmpty()) {
             val declaration = pendingFunctions.removeFirst()
             val scope = requireNotNull(declaration.scope) {
@@ -139,7 +147,8 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             generateFunction(
                 storageLayout.functions.getValue(scope),
                 declaration.body.statements,
-                returnType
+                returnType,
+                scope.functionDepth()
             )
         }
 
@@ -155,13 +164,15 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     private fun generateFunction(
         record: ActivationRecordLayout,
         body: List<Statement>,
-        returnType: Type?
+        returnType: Type?,
+        depth: Int
     ) {
         instructions = mutableListOf()
         temporaries = TemporaryAllocator()
         loops.clear()
         openTries = 0
         currentReturnType = returnType
+        currentDepth = depth
 
         body.forEach { statement ->
             generateStatement(statement)
@@ -206,6 +217,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
                     val symbol = statement.symbol
                     if (scope != null && symbol != null) {
                         functionLabels[symbol] = storageLayout.functions.getValue(scope).function
+                        functionDepths[symbol] = scope.functionDepth()
                     }
                     collectFunctionLabels(statement.body.statements)
                 }
@@ -282,7 +294,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val symbol = requireNotNull(decl.symbol) {
             "'${decl.name}' sin Symbol: ¿corrio el TypeChecker?"
         }
-        val target = Name(symbol)
+        val target = nameOf(symbol)
 
         val initializer = decl.initializer
         if (initializer == null) {
@@ -297,7 +309,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val target = stmt.target as? Identifier
             ?: TODO("asignacion a campos y elementos de lista")
 
-        copyInto(Name(symbolOf(target)), generateExpression(stmt.value))
+        copyInto(nameOf(symbolOf(target)), generateExpression(stmt.value))
     }
 
     private fun generatePrint(stmt: PrintStatement) {
@@ -490,7 +502,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val handlerLabel = newLabel()
         val endLabel = newLabel()
 
-        instructions += TryBegin(handlerLabel, Name(catchSymbol))
+        instructions += TryBegin(handlerLabel, nameOf(catchSymbol))
         openTries += 1
         generateBlock(stmt.tryBlock)
         openTries -= 1
@@ -522,7 +534,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // `readers` es cuantas veces se va a leer el resultado: casi siempre una, salvo el
     // sujeto de un switch, que se compara una vez por case.
     private fun generateExpression(expr: Expression, readers: Int = 1): Address {
-        val dag = ExpressionDag.build(expr)
+        val dag = ExpressionDag.build(expr, ::nameOf)
         val emitted = HashMap<Int, Address>()
 
         fun usesOf(node: Int): Int = dag.parentCount[node] + if (node == dag.root) readers else 0
@@ -667,13 +679,31 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             temporaries.consume(argument)
         }
 
+        val accessHops = accessHopsTo(function)
         if (!wantsResult) {
-            instructions += Call(null, label, arguments.size)
+            instructions += Call(null, label, arguments.size, accessHops)
             return null
         }
         val result = temporaries.newTemp(uses = 1)
-        instructions += Call(result, label, arguments.size)
+        instructions += Call(result, label, arguments.size, accessHops)
         return result
+    }
+
+    // Una variable vista desde la funcion actual. Si vive en el registro de otra
+    // funcion que la contiene, lleva cuantos enlaces de acceso hay que subir. Las
+    // globales viven en datos estaticos y no suben nada.
+    private fun nameOf(symbol: Symbol): Name {
+        if (symbol.storage !is StorageLocation.Frame) return Name(symbol)
+        return Name(symbol, hops = currentDepth - symbol.declarationFunctionDepth)
+    }
+
+    // Quien llama le pasa a la funcion el registro de la que la contiene. Si la llamada
+    // es desde esa misma funcion, son 0 saltos; si es desde una hermana o desde si
+    // misma, 1. Una funcion del nivel superior no usa el enlace.
+    private fun accessHopsTo(function: Symbol): Int? {
+        val calleeDepth = checkNotNull(functionDepths[function])
+        if (calleeDepth == 1) return null
+        return currentDepth - calleeDepth + 1
     }
 
     // return x: si sale de un try, primero quita su manejador, uno por cada try abierto

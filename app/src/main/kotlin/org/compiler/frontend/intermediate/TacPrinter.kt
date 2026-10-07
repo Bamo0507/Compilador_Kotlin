@@ -83,18 +83,22 @@ object TacPrinter {
     }
 
     private fun callText(call: Call): String {
-        val text = "call ${call.function.name}, ${call.argumentCount}"
+        val text = "call ${call.function.name}, ${call.argumentCount}" +
+            (call.accessHops?.let { ", ^$it" } ?: "")
         return call.result?.let { "${address(it)} = $text" } ?: text
     }
 
     fun address(address: Address): String = when (address) {
         // Con sufijo solo si otra variable con el mismo nombre se confundiria con esta.
-        is Name -> address.symbol.tacName ?: address.symbol.name
+        is Name -> (address.symbol.tacName ?: address.symbol.name) + hopsSuffix(address.hops)
         is Temporary -> "t${address.index}"
         is Constant -> constant(address.value)
     }
 
     fun label(label: Label): String = "L${label.index}"
+
+    // `cuenta^1`: sube un enlace de acceso. Sin saltos no se escribe nada.
+    private fun hopsSuffix(hops: Int): String = if (hops > 0) "^$hops" else ""
 
     private fun constant(value: Any?): String = when (value) {
         null -> "null"
@@ -151,7 +155,8 @@ object TacPrinter {
         is FunctionEnd -> QuadrupleRow("end_func", quadruple.function.name, "", "")
         is Param -> QuadrupleRow("param", address(quadruple.value), "", "")
         is Call -> QuadrupleRow(
-            "call", quadruple.function.name, quadruple.argumentCount.toString(),
+            "call", quadruple.function.name,
+            quadruple.argumentCount.toString() + (quadruple.accessHops?.let { ", ^$it" } ?: ""),
             quadruple.result?.let { address(it) } ?: ""
         )
         is Return -> QuadrupleRow("return", quadruple.value?.let { address(it) } ?: "", "", "")

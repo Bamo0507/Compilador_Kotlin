@@ -7,7 +7,10 @@ sealed interface Address
 
 // Una variable del programa fuente. Guarda el Symbol y no el nombre: dos variables
 // llamadas `x` en ambitos distintos son direcciones distintas.
-data class Name(val symbol: Symbol) : Address
+//
+// hops: cuantos enlaces de acceso hay que subir para llegar al registro donde vive.
+// 0 es el registro propio; una funcion anidada que lee una local de su padre usa 1.
+data class Name(val symbol: Symbol, val hops: Int = 0) : Address
 
 // Long, Double, String o Boolean; null para el literal `null`.
 data class Constant(val value: Any?) : Address
