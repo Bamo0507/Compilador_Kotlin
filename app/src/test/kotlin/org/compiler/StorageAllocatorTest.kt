@@ -117,7 +117,11 @@ class StorageAllocatorTest {
         assertEquals("x@2", global.children.single().symbol("x").tacName)
 
         val tac = TacPrinter.print(assertNotNull(result.tac).instructions).lines().map { it.trim() }
-        assertEquals(listOf("x = 1", "x@2 = 5", "print_i x@2", "print_i x"), tac)
+        assertEquals(
+            listOf("begin_func \$main, 16", "x = 1", "x@2 = 5", "print_i x@2", "print_i x",
+                "end_func \$main"),
+            tac
+        )
     }
 
     // Viven en registros distintos: no se pueden confundir.

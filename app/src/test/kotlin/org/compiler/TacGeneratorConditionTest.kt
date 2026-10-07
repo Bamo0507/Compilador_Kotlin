@@ -30,7 +30,10 @@ class TacGeneratorConditionTest {
         assertTrue(result.errors.isEmpty(), "Errores: ${result.errors.map { it.message }}")
 
         val program = assertNotNull(result.tac, "El TAC salio null para:\n$source")
-        return TacPrinter.print(program.instructions).lines().map { it.trim() }
+        // Sin el begin_func y el end_func del main: lo que se prueba es su cuerpo.
+        return TacPrinter.print(program.instructions).lines()
+            .filterNot { it.startsWith("begin_func \$main") || it.startsWith("end_func \$main") }
+            .map { it.trim() }
     }
 
     // ── La relacion invertida ──────────────────────────────────────────────

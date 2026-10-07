@@ -4,6 +4,7 @@ import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.AstBuilder
 import org.compiler.frontend.ast.models.Program
 import org.compiler.frontend.intermediate.StorageAllocator
+import org.compiler.frontend.intermediate.StorageLayout
 import org.compiler.frontend.intermediate.TacGenerator
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.semantic.DeclarationCollector
@@ -60,7 +61,7 @@ object CompilerPipeline {
         // su lugar en memoria, y despues el generador lo usa.
         val storageLayout =
             if (!diagnostics.hasErrors) StorageAllocator().allocate(collector.globalScope) else null
-        val tac = if (storageLayout != null) generateIntermediateCode(ast) else null
+        val tac = storageLayout?.let { generateIntermediateCode(ast, it) }
 
         return CompilationResult(
             source = source,
@@ -79,9 +80,9 @@ object CompilerPipeline {
     // lanza NotImplementedError. Se atrapa SOLO ese: el programa es valido y el IDE no
     // debe caerse, pero cualquier otra excepcion es un bug del generador y tiene que
     // verse.
-    private fun generateIntermediateCode(ast: Program): TacProgram? =
+    private fun generateIntermediateCode(ast: Program, storageLayout: StorageLayout): TacProgram? =
         try {
-            TacGenerator().generate(ast)
+            TacGenerator(storageLayout).generate(ast)
         } catch (pending: NotImplementedError) {
             null
         }

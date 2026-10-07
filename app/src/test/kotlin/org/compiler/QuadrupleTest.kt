@@ -6,6 +6,8 @@ import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.Concat
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
+import org.compiler.frontend.intermediate.models.FunctionBegin
+import org.compiler.frontend.intermediate.models.FunctionEnd
 import org.compiler.frontend.intermediate.models.FunctionLabel
 import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
@@ -53,6 +55,8 @@ class QuadrupleTest {
         is IfGoto -> "IfGoto"
         is IfFalseGoto -> "IfFalseGoto"
         is IfRelationalGoto -> "IfRelationalGoto"
+        is FunctionBegin -> "FunctionBegin"
+        is FunctionEnd -> "FunctionEnd"
         is Param -> "Param"
         is Call -> "Call"
         is Return -> "Return"
@@ -73,7 +77,7 @@ class QuadrupleTest {
     )
 
     @Test
-    fun `existen las 19 familias de cuadruplos`() {
+    fun `existen las 21 familias de cuadruplos`() {
         val t1 = Temporary(1)
         val one = Constant(1L)
         val label = Label(1)
@@ -89,6 +93,8 @@ class QuadrupleTest {
             IfGoto(t1, label),
             IfFalseGoto(t1, label),
             IfRelationalGoto(t1, RelationalOperator.LESS, one, OperandKind.INTEGER, label),
+            FunctionBegin(FunctionLabel("f"), 16),
+            FunctionEnd(FunctionLabel("f")),
             Param(t1),
             Call(t1, FunctionLabel("f"), 1),
             Return(t1),
@@ -100,7 +106,7 @@ class QuadrupleTest {
             Throw(Constant("error"))
         )
 
-        assertEquals(19, oneOfEach.map { familyName(it) }.toSet().size)
+        assertEquals(21, oneOfEach.map { familyName(it) }.toSet().size)
     }
 
     // && y || son saltos en el TAC, no operaciones: no hay valor de enum para ellos.

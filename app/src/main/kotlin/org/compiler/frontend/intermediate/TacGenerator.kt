@@ -1,5 +1,6 @@
 package org.compiler.frontend.intermediate
 
+import java.util.IdentityHashMap
 import org.compiler.frontend.ast.models.Assignment
 import org.compiler.frontend.ast.models.BinaryOperation
 import org.compiler.frontend.ast.models.BinaryOperator
@@ -12,6 +13,7 @@ import org.compiler.frontend.ast.models.Expression
 import org.compiler.frontend.ast.models.ExpressionStatement
 import org.compiler.frontend.ast.models.For
 import org.compiler.frontend.ast.models.ForEach
+import org.compiler.frontend.ast.models.FunctionCall
 import org.compiler.frontend.ast.models.FunctionDeclaration
 import org.compiler.frontend.ast.models.Identifier
 import org.compiler.frontend.ast.models.If
@@ -26,12 +28,18 @@ import org.compiler.frontend.ast.models.UnaryOperator
 import org.compiler.frontend.ast.models.VariableDeclaration
 import org.compiler.frontend.ast.models.While
 import org.compiler.frontend.intermediate.DagNode.Subexpression
+import org.compiler.frontend.intermediate.models.ActivationRecordField
+import org.compiler.frontend.intermediate.models.ActivationRecordLayout
 import org.compiler.frontend.intermediate.models.Address
 import org.compiler.frontend.intermediate.models.Arithmetic
+import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Concat
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
+import org.compiler.frontend.intermediate.models.FunctionBegin
+import org.compiler.frontend.intermediate.models.FunctionEnd
+import org.compiler.frontend.intermediate.models.FunctionLabel
 import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
 import org.compiler.frontend.intermediate.models.IfGoto
@@ -40,10 +48,12 @@ import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
 import org.compiler.frontend.intermediate.models.Name
 import org.compiler.frontend.intermediate.models.OperandKind
+import org.compiler.frontend.intermediate.models.Param
 import org.compiler.frontend.intermediate.models.Print
 import org.compiler.frontend.intermediate.models.Quadruple
 import org.compiler.frontend.intermediate.models.Relational
 import org.compiler.frontend.intermediate.models.RelationalOperator
+import org.compiler.frontend.intermediate.models.Return
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.intermediate.models.TacUnaryOperator
 import org.compiler.frontend.intermediate.models.TryBegin
@@ -53,6 +63,7 @@ import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.Unary
 import org.compiler.frontend.semantic.symbols.BooleanType
 import org.compiler.frontend.semantic.symbols.FloatType
+import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
 import org.compiler.frontend.semantic.symbols.StringType
 import org.compiler.frontend.semantic.symbols.Symbol
@@ -71,11 +82,28 @@ import org.compiler.frontend.ast.models.Return as ReturnStatement
  * pipeline atrapa el NotImplementedError y deja el TAC en null, asi un programa con
  * un `while` no tumba el IDE.
  */
-class TacGenerator {
+class TacGenerator(private val storageLayout: StorageLayout) {
 
-    private val instructions = mutableListOf<Quadruple>()
-    private val temporaries = TemporaryAllocator()
+    // Lo que se va emitiendo de la funcion actual, y su pool. Cada funcion arranca con
+    // los suyos: el t1 de una funcion vive en su registro y no choca con el de otra.
+    private var instructions = mutableListOf<Quadruple>()
+    private var temporaries = TemporaryAllocator()
+
+    // Las etiquetas son unicas en todo el programa, no por funcion.
     private var nextLabel = 1
+
+    // El TAC completo, funcion tras funcion, y sus registros finales.
+    private val output = mutableListOf<Quadruple>()
+    private val activationRecords = mutableListOf<ActivationRecordLayout>()
+    private var totalTemporaries = 0
+
+    // Las funciones que faltan por generar. Una funcion no se genera donde se declara,
+    // sino despues de la que la contiene: su codigo no puede quedar en medio del otro.
+    private val pendingFunctions = ArrayDeque<FunctionDeclaration>()
+
+    // La etiqueta de cada funcion, por su Symbol. Se arma antes de generar, porque una
+    // llamada puede aparecer antes que la declaracion.
+    private val functionLabels = IdentityHashMap<Symbol, FunctionLabel>()
 
     // A donde saltan break y continue dentro de un bucle, y cuantos try habia abiertos
     // al entrar: la diferencia con los de ahora es cuantos endtry hay que emitir.
@@ -92,21 +120,115 @@ class TacGenerator {
     // tiene que quitar su manejador antes de saltar.
     private var openTries = 0
 
+    // El tipo que devuelve la funcion actual: un return entero en una funcion float se
+    // convierte. Null en el main, que no devuelve nada.
+    private var currentReturnType: Type? = null
+
     fun generate(program: Program): TacProgram {
-        program.statements.forEach { statement ->
+        collectFunctionLabels(program.statements)
+
+        // El codigo del nivel superior es el main implicito. Las funciones que declara
+        // quedan pendientes, y cada una agrega las suyas al generarse.
+        generateFunction(storageLayout.main, program.statements, returnType = null)
+        while (pendingFunctions.isNotEmpty()) {
+            val declaration = pendingFunctions.removeFirst()
+            val scope = requireNotNull(declaration.scope) {
+                "'${declaration.name}' sin ambito: ¿corrio el TypeChecker?"
+            }
+            val returnType = (declaration.symbol?.type as? FunctionType)?.returns
+            generateFunction(
+                storageLayout.functions.getValue(scope),
+                declaration.body.statements,
+                returnType
+            )
+        }
+
+        return TacProgram(output.toList(), totalTemporaries, activationRecords.toList())
+    }
+
+    //  begin_func f, 24
+    //      <cuerpo>
+    //  end_func f
+    //
+    // El tamano de begin_func es el registro que armo el StorageAllocator mas el
+    // espacio de los temporales, que recien aqui se sabe cuantos son.
+    private fun generateFunction(
+        record: ActivationRecordLayout,
+        body: List<Statement>,
+        returnType: Type?
+    ) {
+        instructions = mutableListOf()
+        temporaries = TemporaryAllocator()
+        loops.clear()
+        openTries = 0
+        currentReturnType = returnType
+
+        body.forEach { statement ->
             generateStatement(statement)
 
-            // El invariante del pool: entre sentencias del nivel superior no queda
-            // ningun temporal vivo. Si queda uno, el generador perdio una lectura y el
-            // TAC estaria mal: es un bug del compilador, y es mejor que salte aqui que
-            // en el assembler. Solo en el nivel superior, porque dentro de un `switch`
-            // el sujeto sigue vivo a proposito mientras corren los cuerpos de los case.
+            // El invariante del pool: entre sentencias del cuerpo no queda ningun
+            // temporal vivo. Si queda uno, el generador perdio una lectura y el TAC
+            // estaria mal: es un bug del compilador, y es mejor que salte aqui que en el
+            // assembler. Solo en este nivel, porque dentro de un `switch` el sujeto
+            // sigue vivo a proposito mientras corren los cuerpos de los case.
             check(!temporaries.hasLiveTemporaries) {
                 "Quedaron temporales vivos al terminar la sentencia de la linea " +
                     "${statement.location.line}"
             }
         }
-        return TacProgram(instructions.toList(), temporaries.temporaryCount)
+
+        val finalRecord = withTemporaries(record, temporaries.temporaryCount)
+        output += FunctionBegin(record.function, finalRecord.size)
+        output += instructions
+        output += FunctionEnd(record.function)
+
+        activationRecords += finalRecord
+        totalTemporaries += temporaries.temporaryCount
+    }
+
+    // Los temporales van al final del registro, 8 bytes cada uno. El registro ya mide un
+    // multiplo de 8, asi que no hace falta relleno.
+    private fun withTemporaries(record: ActivationRecordLayout, count: Int): ActivationRecordLayout {
+        val size = StorageAllocator.TEMPORARY_SIZE
+        val temporaryFields = (1..count).map { index ->
+            ActivationRecordField("t$index", record.size + (index - 1) * size, size)
+        }
+        return record.copy(fields = record.fields + temporaryFields, size = record.size + count * size)
+    }
+
+    // Recorre todo el programa buscando declaraciones de funciones, incluidas las
+    // anidadas en cuerpos, bloques y bucles.
+    private fun collectFunctionLabels(statements: List<Statement>) {
+        statements.forEach { statement ->
+            when (statement) {
+                is FunctionDeclaration -> {
+                    val scope = statement.scope
+                    val symbol = statement.symbol
+                    if (scope != null && symbol != null) {
+                        functionLabels[symbol] = storageLayout.functions.getValue(scope).function
+                    }
+                    collectFunctionLabels(statement.body.statements)
+                }
+                is Block -> collectFunctionLabels(statement.statements)
+                is If -> {
+                    collectFunctionLabels(statement.thenBranch.statements)
+                    statement.elseBranch?.let { collectFunctionLabels(it.statements) }
+                }
+                is While -> collectFunctionLabels(statement.body.statements)
+                is DoWhile -> collectFunctionLabels(statement.body.statements)
+                is For -> collectFunctionLabels(statement.body.statements)
+                is ForEach -> collectFunctionLabels(statement.body.statements)
+                is TryCatch -> {
+                    collectFunctionLabels(statement.tryBlock.statements)
+                    collectFunctionLabels(statement.catchBlock.statements)
+                }
+                is Switch -> {
+                    statement.cases.forEach { collectFunctionLabels(it.body) }
+                    statement.defaultBody?.let { collectFunctionLabels(it) }
+                }
+                else -> Unit
+            }
+        }
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -120,7 +242,15 @@ class TacGenerator {
             is PrintStatement -> generatePrint(stmt)
 
             // `f();` o `x + 1;`: el valor se calcula y se descarta.
-            is ExpressionStatement -> temporaries.consume(generateExpression(stmt.expr))
+            // Una llamada como sentencia descarta su valor: `call f, n` sin resultado.
+            is ExpressionStatement -> {
+                val call = stmt.expr as? FunctionCall
+                if (call != null) {
+                    generateCall(call, wantsResult = false)
+                } else {
+                    temporaries.consume(generateExpression(stmt.expr))
+                }
+            }
 
             // El bloque no genera nada propio: las variables ya son Name con su
             // Symbol, asi que dos `x` de bloques distintos ya son direcciones distintas.
@@ -135,7 +265,9 @@ class TacGenerator {
             is Switch -> generateSwitch(stmt)
             is ForEach -> TODO("foreach")
             is TryCatch -> generateTryCatch(stmt)
-            is FunctionDeclaration, is ReturnStatement -> TODO("funciones y llamadas")
+            // La declaracion no genera codigo aqui: queda pendiente y se emite aparte.
+            is FunctionDeclaration -> pendingFunctions.addLast(stmt)
+            is ReturnStatement -> generateReturn(stmt)
             is ClassDeclaration -> TODO("clases y objetos")
         }
     }
@@ -501,12 +633,61 @@ class TacGenerator {
         when (subexpression) {
             is Subexpression.Ternary -> generateTernary(subexpression.expression)
             is Subexpression.LogicalValue -> generateLogicalValue(subexpression.expression)
-            is Subexpression.Call -> TODO("llamadas a funciones")
+            is Subexpression.Call -> checkNotNull(generateCall(subexpression.expression, true))
             is Subexpression.NewObject -> TODO("creacion de objetos")
             is Subexpression.NewList -> TODO("creacion de listas")
             is Subexpression.FieldAccess -> TODO("acceso a campos")
             is Subexpression.ElementAccess -> TODO("acceso a elementos de lista")
         }
+
+    //      param a1
+    //      ...
+    //      param an
+    //      t = call f, n
+    //
+    // Primero se calculan TODOS los argumentos y despues van los param: asi, en f(g(x)),
+    // los param de g no quedan intercalados con los de f. Cada argumento se convierte al
+    // tipo de su parametro, y una variable se copia antes si un argumento posterior
+    // podria modificarla.
+    private fun generateCall(call: FunctionCall, wantsResult: Boolean): Address? {
+        val callee = call.callee as? Identifier ?: TODO("llamadas a metodos")
+        val function = symbolOf(callee)
+        val label = checkNotNull(functionLabels[function]) { "'${callee.name}' sin etiqueta" }
+        val parameterTypes = (function.type as FunctionType).parameters
+
+        val arguments = call.arguments.mapIndexed { index, argument ->
+            val kind = ExpressionDag.kindOf(parameterTypes[index])
+            val address = convertedTo(kind, argument)
+            val later = call.arguments.drop(index + 1)
+            if (later.all { ExpressionDag.isPure(it) }) address else snapshotIfName(address)
+        }
+
+        arguments.forEach { argument ->
+            instructions += Param(argument)
+            temporaries.consume(argument)
+        }
+
+        if (!wantsResult) {
+            instructions += Call(null, label, arguments.size)
+            return null
+        }
+        val result = temporaries.newTemp(uses = 1)
+        instructions += Call(result, label, arguments.size)
+        return result
+    }
+
+    // return x: si sale de un try, primero quita su manejador, uno por cada try abierto
+    // en esta funcion.
+    private fun generateReturn(stmt: ReturnStatement) {
+        val returnType = currentReturnType
+        val value = stmt.value?.let { expression ->
+            convertedTo(ExpressionDag.kindOf(returnType), expression)
+        }
+
+        repeat(openTries) { instructions += TryEnd }
+        instructions += Return(value)
+        value?.let { temporaries.consume(it) }
+    }
 
     // c ? x : y. El temporal del resultado se pide ANTES de los saltos, para que los
     // temporales de la condicion y de las ramas queden por encima, y cada rama copia su
@@ -682,8 +863,11 @@ class TacGenerator {
     // En `x < f()`, la x se lee ANTES de la llamada, porque se evalua primero. Una
     // variable no genera instruccion y se leeria despues, asi que se copia a un
     // temporal si lo que sigue puede modificarla.
-    private fun readBefore(address: Address, later: Expression): Address {
-        if (address !is Name || ExpressionDag.isPure(later)) return address
+    private fun readBefore(address: Address, later: Expression): Address =
+        if (ExpressionDag.isPure(later)) address else snapshotIfName(address)
+
+    private fun snapshotIfName(address: Address): Address {
+        if (address !is Name) return address
 
         val snapshot = temporaries.newTemp(uses = 1)
         instructions += Copy(snapshot, address)

@@ -834,7 +834,9 @@ class TypeChecker(
         val previousScope = currentScope
         val previousReturnType = currentReturnType
 
+        decl.symbol = currentScope.lookupLocal(decl.name)
         currentScope = currentScope.openChild(ScopeKind.FUNCTION, decl.name)
+        decl.scope = currentScope
         currentReturnType = functionType?.returns ?: VoidType
 
         decl.parameters.forEachIndexed { index, parameter ->

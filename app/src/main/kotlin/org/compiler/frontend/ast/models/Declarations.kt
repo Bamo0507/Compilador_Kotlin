@@ -1,5 +1,6 @@
 package org.compiler.frontend.ast.models
 
+import org.compiler.frontend.semantic.symbols.Scope
 import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.models.LexemeLocation
 
@@ -30,7 +31,14 @@ data class FunctionDeclaration(
 
     val body: Block,
     override val location: LexemeLocation
-) : Statement
+) : Statement {
+
+    // El Symbol de la funcion y el ambito de su cuerpo, que los deja el TypeChecker. El
+    // generador de TAC los usa para saber la etiqueta de cada llamada y encontrar el
+    // registro de activacion de la funcion.
+    var symbol: Symbol? = null
+    var scope: Scope? = null
+}
 
 data class Parameter(
     val name: String,

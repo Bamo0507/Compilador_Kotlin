@@ -34,7 +34,11 @@ class TacGeneratorExprTest {
         assertTrue(result.errors.isEmpty(), "Errores: ${result.errors.map { it.message }}")
 
         val program = assertNotNull(result.tac, "El TAC salio null para:\n$code")
-        return TacPrinter.print(program.instructions).lines().drop(names.size).map { it.trim() }
+        // Sin el begin_func y el end_func del main: lo que se prueba es su cuerpo.
+        return TacPrinter.print(program.instructions).lines()
+            .filterNot { it.startsWith("begin_func \$main") || it.startsWith("end_func \$main") }
+            .drop(names.size)
+            .map { it.trim() }
     }
 
     private fun temporaryCount(code: String): Int {
@@ -231,7 +235,7 @@ class TacGeneratorExprTest {
     // TAC en null: el IDE no se cae con un programa que todavia no se puede traducir.
     @Test
     fun `un programa con algo que aun no se traduce deja el TAC en null sin lanzar`() {
-        val result = compile("function f(): integer { return 1; }\nlet v: integer = f();")
+        val result = compile("class A { }\nlet a: A = new A();")
 
         assertTrue(result.errors.isEmpty())
         assertNull(result.tac)

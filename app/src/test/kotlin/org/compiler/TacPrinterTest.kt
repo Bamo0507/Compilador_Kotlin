@@ -7,6 +7,8 @@ import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.Concat
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
+import org.compiler.frontend.intermediate.models.FunctionBegin
+import org.compiler.frontend.intermediate.models.FunctionEnd
 import org.compiler.frontend.intermediate.models.FunctionLabel
 import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
@@ -114,6 +116,13 @@ class TacPrinterTest {
         assertLine("    call saludar, 0", Call(null, FunctionLabel("saludar"), 0))
         assertLine("    return t1", Return(t1))
         assertLine("    return", Return(null))
+    }
+
+    // El inicio y el fin de una funcion van pegados al margen, como las etiquetas.
+    @Test
+    fun `begin_func y end_func marcan el registro de cada funcion`() {
+        assertLine("begin_func factorial, 32", FunctionBegin(FunctionLabel("factorial"), 32))
+        assertLine("end_func factorial", FunctionEnd(FunctionLabel("factorial")))
     }
 
     @Test

@@ -77,6 +77,15 @@ data class IfRelationalGoto(
     val label: Label
 ) : Quadruple
 
+// begin_func f, 24: aqui empieza f, y su registro de activacion mide 24 bytes.
+data class FunctionBegin(
+    val function: FunctionLabel,
+    val frameSize: Int
+) : Quadruple
+
+// end_func f: llegar aqui es retornar sin valor.
+data class FunctionEnd(val function: FunctionLabel) : Quadruple
+
 // param x
 data class Param(val value: Address) : Quadruple
 

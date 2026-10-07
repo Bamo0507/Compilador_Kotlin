@@ -215,7 +215,7 @@ IDE pasó a `Ubicación` como cambio mínimo; la tabla completa es del ticket 4.
 
 ## Ticket 4.3: La traducción de funciones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.2, 3.4
 
 **Archivos:**
@@ -258,14 +258,15 @@ begin_func $main, 24
     print_i t1
 end_func $main
 
-begin_func factorial, 32
+begin_func factorial, 40
     if n > 1 goto L1
     return 1
 L1:
-    t1 = n - 1
-    param t1
-    t1 = call factorial, 1
-    t1 = n * t1
+    t1 = n
+    t2 = n - 1
+    param t2
+    t2 = call factorial, 1
+    t1 = t1 * t2
     return t1
 end_func factorial
 ```
@@ -292,6 +293,18 @@ end_func factorial
 | Una función `void` llamada como sentencia | `call f, 0`, sin resultado |
 | `return` dentro de un `try` | un `endtry` antes del `return` |
 | `begin_func` de cada función | su tamaño coincide con su `ActivationRecordLayout` |
+
+**Al implementarlo:** el TAC de `factorial` lleva una copia `t1 = n` antes de la
+llamada recursiva: `n` está a la izquierda de una llamada que podría modificarla, y la
+decisión 54 la copia. Por eso el registro mide 40, con dos temporales. El generador recibe
+el `StorageLayout` y devuelve en `TacProgram.activationRecords` los registros finales, ya
+con sus temporales, para la tabla del IDE. `FunctionDeclaration` ganó `symbol` y `scope`,
+que llena el `TypeChecker`. Las funciones se emiten después de `$main` en el orden en que
+se encuentran, así que una anidada queda después de todas las del nivel superior. Una
+llamada como sentencia emite `call f, n` sin resultado aunque la función devuelva algo,
+porque el valor se descarta. Los helpers de los tests de generación ignoran el
+`begin_func` y el `end_func` del `main`, y el test de "algo que aún no se traduce" pasó a
+usar una clase.
 
 ---
 

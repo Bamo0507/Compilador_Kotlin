@@ -6,6 +6,8 @@ import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.Concat
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
+import org.compiler.frontend.intermediate.models.FunctionBegin
+import org.compiler.frontend.intermediate.models.FunctionEnd
 import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
 import org.compiler.frontend.intermediate.models.IfGoto
@@ -44,6 +46,7 @@ object TacPrinter {
     // destinos de los saltos se encuentren de un vistazo.
     fun line(quadruple: Quadruple): String = when (quadruple) {
         is LabelDefinition -> "${label(quadruple.label)}:"
+        is FunctionBegin, is FunctionEnd -> instruction(quadruple)
         else -> INDENT + instruction(quadruple)
     }
 
@@ -64,6 +67,8 @@ object TacPrinter {
         is IfRelationalGoto -> "if ${address(quadruple.left)} " +
             "${quadruple.operator.symbol}${quadruple.kind.suffix} ${address(quadruple.right)} " +
             "goto ${label(quadruple.label)}"
+        is FunctionBegin -> "begin_func ${quadruple.function.name}, ${quadruple.frameSize}"
+        is FunctionEnd -> "end_func ${quadruple.function.name}"
         is Param -> "param ${address(quadruple.value)}"
         is Call -> callText(quadruple)
         is Return -> quadruple.value?.let { "return ${address(it)}" } ?: "return"
@@ -140,6 +145,10 @@ object TacPrinter {
             "if" + quadruple.operator.symbol + quadruple.kind.suffix,
             address(quadruple.left), address(quadruple.right), label(quadruple.label)
         )
+        is FunctionBegin -> QuadrupleRow(
+            "begin_func", quadruple.function.name, quadruple.frameSize.toString(), ""
+        )
+        is FunctionEnd -> QuadrupleRow("end_func", quadruple.function.name, "", "")
         is Param -> QuadrupleRow("param", address(quadruple.value), "", "")
         is Call -> QuadrupleRow(
             "call", quadruple.function.name, quadruple.argumentCount.toString(),
