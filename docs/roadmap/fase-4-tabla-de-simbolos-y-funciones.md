@@ -405,7 +405,7 @@ argumentos.
 
 ## Ticket 4.5: La tabla de símbolos extendida en el IDE
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.3
 
 **Archivos:**
@@ -436,11 +436,18 @@ activación)"*.
 - El relleno de alineación aparece en el registro.
 - Una global muestra zona estática.
 
+**Al implementarlo:** zona y desplazamiento quedaron en una sola columna, *Ubicación*
+("estático 8", "pila 12"), y el nombre en el TAC en otra. El `main` no se agregó al árbol:
+su registro y el tamaño de la zona estática aparecen al seleccionar `global`, que es
+donde vive su código. `CompilationResult` no cambió, porque ya traía el TAC y la
+distribución de memoria. El registro mostrado es el del TAC, con temporales; si no hubo
+TAC, el del asignador. Con errores, las columnas nuevas muestran un guion.
+
 ---
 
 ## Ticket 4.6: El documento, secciones de memoria y funciones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.4, 3.5
 
 **Archivos:**
@@ -462,6 +469,11 @@ activación)"*.
 - Los ejemplos son salida real del generador, incluido el registro de activación.
 - La sección 19 muestra la expansión de `cuenta^2` a instrucciones que siguen el
   enlace.
+
+**Al implementarlo:** las secciones van en prosa, sin bloques de código, igual que la 11
+a la 14: los ejemplos son los números reales del generador contados en el texto, y la
+expansión de la sección 19 se describe como los tres accesos que hace, con sus
+desplazamientos.
 
 ---
 

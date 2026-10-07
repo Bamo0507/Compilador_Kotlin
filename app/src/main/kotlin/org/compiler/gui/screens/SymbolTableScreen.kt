@@ -31,13 +31,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.compiler.frontend.semantic.symbols.DeclarationKind
+import org.compiler.frontend.intermediate.StorageAllocator
+import org.compiler.frontend.intermediate.models.ActivationRecordLayout
 import org.compiler.frontend.semantic.symbols.Scope
+import org.compiler.frontend.semantic.symbols.ScopeKind
 import org.compiler.frontend.semantic.symbols.StorageLocation
+import org.compiler.gui.components.ActivationRecordView
 import org.compiler.gui.components.GarbageCollectorReportView
 import org.compiler.gui.components.ScopeTreeView
 import org.compiler.gui.components.kindLabelOf
 import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.gui.state.AppState
+import org.compiler.runtime.models.CompilationResult
 
 private enum class SymbolView(val label: String) {
     SYMBOLS("Tabla de símbolos"),
@@ -105,7 +110,13 @@ fun SymbolTableScreen(
                         .weight(0.65f)
                         .fillMaxHeight()
                 ) {
-                    SymbolTable(scope = selectedScope, emptyMessage = emptyMessage)
+                    SymbolTable(
+                        scope = selectedScope,
+                        emptyMessage = emptyMessage,
+                        record = selectedScope?.let { activationRecordOf(it, result) },
+                        staticSize = result?.storageLayout?.staticSize
+                            ?.takeIf { selectedScope?.kind == ScopeKind.GLOBAL }
+                    )
                 }
             }
 
@@ -127,7 +138,9 @@ fun SymbolTableScreen(
 @Composable
 private fun SymbolTable(
     scope: Scope?,
-    emptyMessage: String
+    emptyMessage: String,
+    record: ActivationRecordLayout?,
+    staticSize: Int?
 ) {
     if (scope == null) {
         Message(emptyMessage)
@@ -137,27 +150,47 @@ private fun SymbolTable(
     val own = scope.localSymbols()
     val inherited = inheritedSymbolsOf(scope)
 
-    if (own.isEmpty() && inherited.isEmpty()) {
-        Message("Este ámbito no declara símbolos.")
-        return
-    }
-
     Column(
         modifier = Modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
             .horizontalScroll(rememberScrollState())
     ) {
-        SymbolHeaderRow()
-        HorizontalDivider()
+        if (own.isEmpty() && inherited.isEmpty()) {
+            Message("Este ámbito no declara símbolos.")
+        } else {
+            SymbolHeaderRow()
+            HorizontalDivider()
 
-        own.forEach { symbol -> SymbolRow(symbol) }
+            own.forEach { symbol -> SymbolRow(symbol) }
 
-        if (inherited.isNotEmpty()) {
-            SectionLabel("Heredados")
-            inherited.forEach { entry -> SymbolRow(entry.symbol, inheritedFrom = entry.className) }
+            if (inherited.isNotEmpty()) {
+                SectionLabel("Heredados")
+                inherited.forEach { entry ->
+                    SymbolRow(entry.symbol, inheritedFrom = entry.className)
+                }
+            }
         }
+
+        // El codigo del nivel superior es el main implicito: sus datos se ven al
+        // seleccionar global, junto con la zona estatica donde viven las globales.
+        staticSize?.let { SectionLabel("Zona estática: $it bytes") }
+        record?.let { ActivationRecordView(it) }
     }
+}
+
+// El registro de una funcion, o el del main si es el ambito global. Se prefiere el del
+// TAC, que ya incluye los temporales; si el programa no genero TAC, el que armo el
+// StorageAllocator.
+private fun activationRecordOf(scope: Scope, result: CompilationResult?): ActivationRecordLayout? {
+    val layout = result?.storageLayout ?: return null
+    val planned = when (scope.kind) {
+        ScopeKind.GLOBAL -> layout.main
+        ScopeKind.FUNCTION -> layout.functions[scope]
+        else -> null
+    } ?: return null
+
+    return result.tac?.activationRecords?.firstOrNull { it.function == planned.function } ?: planned
 }
 
 @Composable
@@ -171,6 +204,8 @@ private fun SymbolHeaderRow() {
         HeaderCell("Categoría", CATEGORY_WIDTH)
         HeaderCell("Tipo", TYPE_WIDTH)
         HeaderCell("Ubicación", LOCATION_WIDTH)
+        HeaderCell("Tamaño", NUMBER_WIDTH)
+        HeaderCell("En el TAC", NAME_WIDTH)
         HeaderCell("Línea", NUMBER_WIDTH)
     }
 }
@@ -194,6 +229,8 @@ private fun SymbolRow(symbol: Symbol, inheritedFrom: String? = null) {
         BodyCell(symbol.type.name, TYPE_WIDTH, monospace = true)
 
         BodyCell(storageLabel(symbol), LOCATION_WIDTH)
+        BodyCell(sizeLabel(symbol), NUMBER_WIDTH)
+        BodyCell(symbol.tacName ?: "", NAME_WIDTH, monospace = true)
         BodyCell(symbol.location.line.toString(), NUMBER_WIDTH)
     }
 }
@@ -205,6 +242,11 @@ private fun storageLabel(symbol: Symbol): String = when (val storage = symbol.st
     is StorageLocation.Frame -> "pila ${storage.offset}"
     null -> "—"
 }
+
+// Cuanto ocupa en memoria. Solo los simbolos con ubicacion: funciones y clases son
+// codigo, no datos.
+private fun sizeLabel(symbol: Symbol): String =
+    if (symbol.storage == null) "—" else StorageAllocator.sizeOf(symbol.type).toString()
 
 private fun categoryLabel(symbol: Symbol): String = when {
     symbol.kind == DeclarationKind.FUNCTION && symbol.isMember -> "Método"

@@ -652,6 +652,173 @@ break o continue quita un manejador por cada bloque que abandona antes de saltar
 cambio, un break dentro del catch no quita ninguno, porque el error que llevó hasta ahí
 ya quitó el manejador.
 
+## 15. Memoria en ejecución
+
+Hasta este punto, las direcciones del código intermedio son nombres, pero para poder
+llegar a assembler hace falta saber dónde vive cada uno en memoria. Siguiendo al Dragon
+Book, la memoria de un programa en ejecución se divide en cuatro zonas. La primera es el
+código, donde están las instrucciones de cada función; la segunda son los datos
+estáticos, cuyo tamaño se conoce al compilar y que existen durante toda la ejecución; la
+tercera es la pila, donde cada llamada a una función reserva su propio espacio y lo
+libera al retornar; y la cuarta es el montículo, donde se crean los valores cuyo tamaño o
+tiempo de vida no se conoce al compilar.
+
+La diferencia importante es entre lo estático y lo dinámico. Lo estático se decide una
+sola vez, al compilar, de tal forma que una variable global siempre está en el mismo
+lugar. Lo dinámico, en cambio, depende de la ejecución: una función recursiva como el
+factorial puede tener varias llamadas vivas a la vez, y cada una necesita su propia copia
+de sus parámetros, por lo que no es posible darles una dirección fija.
+
+En Compiscript, cada cosa queda en una zona de forma bastante directa. Las funciones y
+las clases son código, no datos, así que no ocupan lugar en las otras zonas. Las
+variables declaradas en el nivel superior viven en los datos estáticos. Los parámetros,
+las locales y los temporales de una función viven en la pila, dentro del espacio de la
+llamada que los creó. Por último, los objetos, las listas y los textos viven en el
+montículo, y una variable de esos tipos solo guarda una referencia hacia ellos. Cabe
+mencionar que una variable declarada dentro de un bloque del nivel superior no es global,
+ya que deja de existir al cerrar el bloque, así que vive en la pila, en el espacio del
+programa principal.
+
+## 16. Tamaños y alineación
+
+Para poder calcular dónde empieza cada variable, primero hay que saber cuánto mide. Un
+entero ocupa 4 bytes, acorde a los 32 bits que se establecieron en los supuestos; un
+flotante ocupa 8, porque es de doble precisión, igual que en el intérprete; y un
+booleano ocupa 1. Las referencias a objetos, listas y textos ocupan 4 bytes, que es lo
+que mide una dirección en ARM de 32 bits, la arquitectura de la fase de assembler.
+
+Los temporales son un caso aparte, ya que cada uno ocupa 8 bytes sin importar el tipo de
+lo que guarde. Esto se debe a que el pool de temporales reutiliza los nombres sin mirar
+el tipo, de tal forma que un mismo temporal puede guardar un entero y, más adelante, un
+flotante, por lo que su espacio tiene que alcanzar para el más grande.
+
+Adicional, se aplica la alineación natural del Dragon Book: cada valor empieza en un
+desplazamiento que es múltiplo de su tamaño, porque así el procesador puede leerlo con
+una sola instrucción. Cuando el siguiente desplazamiento libre no cumple esto, se deja un
+hueco de relleno. Por ejemplo, en una función que recibe primero un booleano y después un
+flotante, el booleano ocupa el byte 0, pero el flotante no puede empezar en el 1, sino
+que empieza en el 8, y los siete bytes de en medio quedan como relleno. Por otro lado, el
+espacio de cada llamada se redondea al final a un múltiplo de 8, que es la alineación que
+pide la pila en ARM de 32 bits. Considero que el costo de estos huecos es pequeño
+comparado con la ventaja de que cada acceso sea directo.
+
+Los datos estáticos siguen la misma regla. Por ejemplo, un programa con una global
+entera y después una global flotante pone la entera en el desplazamiento 0 y la flotante
+en el 8, de tal forma que la zona estática mide 16 bytes.
+
+## 17. Registro de activación
+
+El espacio que cada llamada reserva en la pila se conoce como registro de activación, y
+guarda todo lo que esa llamada necesita para poder ejecutarse y regresar. Siguiendo el
+orden de la teoría, cada registro tiene primero los parámetros, luego el valor devuelto,
+si la función devuelve algo, y después tres campos de control: el enlace de control, que
+apunta al registro de quien hizo la llamada; el enlace de acceso, que apunta al registro
+de la función que contiene a esta en el código fuente; y la dirección de retorno, que
+indica a qué instrucción regresar. A continuación van las variables locales, y por último
+los temporales.
+
+Los desplazamientos se cuentan desde el inicio del registro y siempre son positivos. Por
+ejemplo, en una función que recibe un booleano y un flotante, declara una local entera y
+devuelve un flotante, el booleano queda en el byte 0, el flotante en el 8, el valor
+devuelto en el 16, los enlaces de control y de acceso en el 24 y el 28, la dirección de
+retorno en el 32 y la local en el 36. Hasta ahí el registro mide 40 bytes, y como esa
+función usa un temporal, el registro final mide 48. En el caso del factorial, el
+parámetro entero queda en el byte 0, el valor devuelto en el 4, los tres campos de
+control del 8 al 16, y con sus dos temporales el registro mide 40 bytes.
+
+Los temporales se agregan al final porque su cantidad solo se conoce después de generar
+el código de la función. Es por esto que el tamaño de cada registro se calcula en dos
+partes: primero se asigna el espacio de los parámetros y las locales, y después el
+generador suma un espacio de 8 bytes por cada temporal que usó la función.
+
+Cabe mencionar dos supuestos de esta forma de registro. El primero es que el enlace de
+acceso está en todos los registros, aunque solo lo usen las funciones anidadas, ya que
+considero que una sola forma de registro es más simple de explicar y de traducir, a
+cambio de 4 bytes. El segundo es que, del estado de la máquina que se guarda al llamar,
+solo se reserva la dirección de retorno, porque qué registros del procesador hay que
+salvar depende de cómo los use la fase de assembler, así que esa parte le corresponde a
+ella. Adicional, el código del nivel superior se trata como una función principal
+implícita, con su propio registro, que tiene los tres campos de control y las variables
+de los bloques del nivel superior.
+
+## 18. Secuencia de llamadas
+
+La secuencia de llamadas es el trabajo que hay que hacer para pasar el control de una
+función a otra y regresar, y se reparte entre quien llama y la función llamada. En el
+código intermedio cada parte de ese trabajo está representada por una instrucción, y la
+fase de assembler es la que la convierte en los pasos concretos.
+
+Primero, quien llama calcula todos los argumentos y después los entrega uno por uno con
+una instrucción de parámetro, que representa escribirlos en el espacio de parámetros del
+registro nuevo. Es importante que todos los argumentos se calculen antes de entregar el
+primero, porque si un argumento es a su vez una llamada, sus parámetros no deben
+mezclarse con los de la llamada de afuera. Luego, la instrucción de llamada indica la
+función y cuántos argumentos recibe, y representa guardar el enlace de control, el
+enlace de acceso y la dirección de retorno, y saltar al inicio de la función.
+
+Después, la instrucción que abre la función lleva el tamaño de su registro, y representa
+reservar ese espacio en la pila. Al final, la instrucción de retorno representa dejar el
+valor en el campo del valor devuelto, liberar el registro y regresar a la dirección
+guardada, de tal forma que quien llamó recibe el resultado en un temporal. Por último, la
+instrucción que cierra la función cubre el caso de una función sin valor que llega al
+final de su cuerpo sin retornar, y en ese caso se comporta como un retorno sin valor.
+
+Por ejemplo, al imprimir el factorial de 5, el programa principal entrega el 5 como
+parámetro, llama al factorial con un argumento y guarda el resultado en un temporal. A su
+vez, el factorial, antes de llamarse a sí mismo, copia su parámetro a un temporal, ya
+que está a la izquierda de una llamada que podría modificarlo, y después calcula el
+argumento restándole uno. Cabe mencionar que cada función tiene sus propios temporales,
+de tal forma que el primer temporal del factorial y el del programa principal no chocan,
+porque viven en registros distintos.
+
+## 19. Funciones anidadas
+
+Una función declarada dentro de otra puede leer las variables de la que la contiene,
+pero esas variables no están en su registro, sino en el de la función de afuera. Para
+poder encontrarlas se usa el enlace de acceso, que apunta al registro de la función que
+la contiene en el código fuente, a diferencia del enlace de control, que apunta a quien
+hizo la llamada. Los dos no siempre coinciden: en una función recursiva anidada, quien
+llama es la misma función, pero quien la contiene sigue siendo la de afuera.
+
+En el código intermedio, una variable que vive en otro registro lleva el número de
+saltos que hay que dar por la cadena de enlaces de acceso para llegar a él, y una
+variable propia no lleva ninguno. Por ejemplo, si la función a declara una variable
+cuenta, y dentro de ella está la función b, y dentro de b la función c, cuando c lee
+cuenta lo hace con dos saltos, ya que cuenta está dos niveles arriba. Bajo esta idea, la
+fase de assembler expande esa lectura en instrucciones explícitas: primero se lee el
+enlace de acceso del registro de c, que está en el desplazamiento 8 y apunta al registro
+de b; luego se lee el enlace de acceso del registro de b, también en el desplazamiento 8,
+que apunta al registro de a; y finalmente se lee cuenta en el desplazamiento 16 del
+registro de a.
+
+La llamada también tiene que saber qué enlace de acceso darle a la función nueva, y para
+eso lleva su propio número de saltos. Si una función llama a otra declarada directamente
+dentro de ella, el enlace es su propio registro, así que la llamada lleva cero saltos;
+si llama a una hermana, ambas están contenidas en la misma función, así que hay que subir
+uno; y una función anidada que se llama a sí misma también sube uno, para pasar el mismo
+enlace que recibió. Las funciones del nivel superior no usan el enlace, por lo que sus
+llamadas no llevan saltos. Por último, el nombre de una función anidada en el código
+intermedio es el camino de las funciones que la contienen, de tal forma que la función c
+del ejemplo se llama a.b.c, y dos funciones anidadas con el mismo nombre dentro de
+funciones distintas no se confunden.
+
+## 20. Nombres en el código intermedio
+
+Como el código intermedio se imprime como texto, dos variables distintas con el mismo
+nombre podrían verse iguales. Internamente esto no es un problema, porque cada dirección
+guarda el símbolo y no solo su nombre, pero al leer el código sí lo es. Es por esto que,
+cuando dos variables chocan, la primera en declararse conserva su nombre y las demás
+llevan como sufijo una arroba y la línea de su declaración, más la columna si comparten
+línea.
+
+Dos variables chocan solo si se llaman igual y además viven en el mismo registro de
+activación, o si una es global y la otra local. Por ejemplo, en un programa con una
+global x en la línea 1 y una x local en un bloque de la línea 2, la global se imprime
+como x y la local como x@2. En cambio, el parámetro n del factorial y el de una función
+de Fibonacci no chocan, porque viven en registros distintos y nunca se confunden.
+Tampoco choca una local de una función anidada con la de la función que la contiene,
+porque los saltos del enlace de acceso ya las distinguen.
+
 ## Supuestos
 
 - Una instrucción tiene como máximo un operador del lado derecho.
@@ -671,3 +838,8 @@ ya quitó el manejador.
   derecha.
 - Invertir una relación supone que no hay valores NaN.
 - Las etiquetas de los ciclos se emiten aunque ningún salto las use.
+- Una función solo se llama; no se guarda en una variable ni se pasa como argumento.
+- Las locales de bloques hermanos no comparten espacio en el registro, aunque nunca
+  vivan a la vez.
+- Los desplazamientos son positivos desde el inicio del registro, y la fase de
+  assembler puede reubicarlos según cómo organice la pila.
