@@ -83,7 +83,8 @@ object TacPrinter {
     }
 
     fun address(address: Address): String = when (address) {
-        is Name -> address.symbol.name
+        // Con sufijo solo si otra variable con el mismo nombre se confundiria con esta.
+        is Name -> address.symbol.tacName ?: address.symbol.name
         is Temporary -> "t${address.index}"
         is Constant -> constant(address.value)
     }

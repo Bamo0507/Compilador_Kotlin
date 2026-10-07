@@ -30,7 +30,6 @@ class TypeResolverTest {
                 type = ClassType("Perro"),
                 location = location,
                 scopeName = "global",
-                offset = 0,
                 memberScope = global.openChild(ScopeKind.CLASS, "Perro")
             )
         )
@@ -90,8 +89,7 @@ class TypeResolverTest {
                 kind = DeclarationKind.VARIABLE,
                 type = IntegerType,
                 location = location,
-                scopeName = "global",
-                offset = 0
+                scopeName = "global"
             )
         )
         val diagnostics = Diagnostics()

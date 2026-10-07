@@ -48,7 +48,6 @@ class TypeCheckerExprTest {
             type = type,
             location = LexemeLocation(1, 1),
             scopeName = "global",
-            offset = 0,
             initialized = initialized
         ))
     }

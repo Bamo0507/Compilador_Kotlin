@@ -109,12 +109,11 @@ class DeclarationCollectorTest {
         val name = animal.lookupLocal("nombre")!!
         assertEquals(StringType, name.type)
         assertTrue(name.isMember)
-        assertEquals(0, name.offset)
 
         val speak = animal.lookupLocal("hablar")!!
         assertEquals(FunctionType(emptyList(), StringType), speak.type)
         assertTrue(speak.isMember)
-        assertEquals(1, speak.offset)
+        assertEquals(listOf("nombre", "hablar"), animal.localSymbols().map { it.name })
     }
 
     // La herencia ENLAZA, no copia: `nombre` sigue viviendo en el ambito de Animal.

@@ -3,6 +3,7 @@ package org.compiler.runtime
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.AstBuilder
 import org.compiler.frontend.ast.models.Program
+import org.compiler.frontend.intermediate.StorageAllocator
 import org.compiler.frontend.intermediate.TacGenerator
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.semantic.DeclarationCollector
@@ -54,9 +55,12 @@ object CompilerPipeline {
         val execution =
             if (execute && !diagnostics.hasErrors) Interpreter().run(ast) else null
 
-        // Etapa G: codigo intermedio, solo si no quedo ningun error. Corre aparte de la
-        // ejecucion: una no depende de la otra.
-        val tac = if (!diagnostics.hasErrors) generateIntermediateCode(ast) else null
+        // Etapa G: memoria y codigo intermedio, solo si no quedo ningun error. Corre
+        // aparte de la ejecucion: una no depende de la otra. Primero cada simbolo recibe
+        // su lugar en memoria, y despues el generador lo usa.
+        val storageLayout =
+            if (!diagnostics.hasErrors) StorageAllocator().allocate(collector.globalScope) else null
+        val tac = if (storageLayout != null) generateIntermediateCode(ast) else null
 
         return CompilationResult(
             source = source,
@@ -66,7 +70,8 @@ object CompilerPipeline {
             garbageCollectorReport = garbageCollectorReport,
             errors = diagnostics.all(),
             execution = execution,
-            tac = tac
+            tac = tac,
+            storageLayout = storageLayout
         )
     }
 

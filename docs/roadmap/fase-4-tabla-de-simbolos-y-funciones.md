@@ -75,7 +75,7 @@ este error en lugar del del operador, y se actualizó su anotación.
 
 ## Ticket 4.2: Tamaños, zonas y desplazamientos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.1
 
 **Archivos:**
@@ -201,6 +201,15 @@ anidada tampoco choca con la de su padre, porque los saltos ya las distinguen: `
 | Un registro de activación | su tamaño es múltiplo de 8 |
 | Global `x` y local `x` en una función | `x` y `x@3` |
 | `n` en `factorial` y en `fibonacci` | los dos `n`, sin sufijo |
+
+**Al implementarlo:** `StorageLocation` vive en `frontend/semantic/symbols/` y no en el
+paquete del generador: `Symbol` la guarda, y si viviera en el generador la dependencia
+entre los dos paquetes iría en ambos sentidos. Por la misma razón `Scope` no guarda su
+`ActivationRecordLayout`: el `StorageAllocator` devuelve un `StorageLayout` con la zona
+estática, el `main` implícito y el registro de cada función, indexado por su ámbito, y el
+pipeline lo deja en `CompilationResult.storageLayout`. El nombre con sufijo de la decisión
+41 quedó en `Symbol.tacName`, y el printer lo usa. La columna `Offset` de la tabla del
+IDE pasó a `Ubicación` como cambio mínimo; la tabla completa es del ticket 4.5.
 
 ---
 

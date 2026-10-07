@@ -843,7 +843,6 @@ class TypeChecker(
                 kind = DeclarationKind.PARAMETER,
                 type = functionType?.parameters?.getOrNull(index) ?: ErrorType,
                 location = parameter.location,
-                offset = index,
                 initialized = true
             )
         }
@@ -905,7 +904,6 @@ class TypeChecker(
         kind: DeclarationKind,
         type: Type,
         location: LexemeLocation,
-        offset: Int = 0,
         initialized: Boolean = false,
         constantValue: Any? = null
     ) {
@@ -916,7 +914,6 @@ class TypeChecker(
                 type = type,
                 location = location,
                 scopeName = currentScope.name,
-                offset = offset,
                 initialized = initialized,
                 constantValue = constantValue
             ),

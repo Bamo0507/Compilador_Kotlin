@@ -228,8 +228,7 @@ class TypeCheckerStmtTest {
         assertNotNull(a)
         assertEquals(DeclarationKind.PARAMETER, a.kind)
         assertEquals(IntegerType, a.type)
-        assertEquals(0, a.offset)
-        assertEquals(1, sum.lookupLocal("b")!!.offset)
+        assertEquals(listOf("a", "b"), sum.localSymbols().map { it.name })
     }
 
     // Una clase produce UN solo Scope: checkClassDeclaration lo recupera, no lo abre.

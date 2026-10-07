@@ -80,7 +80,6 @@ class DeclarationCollector(
                     type = ClassType(decl.name),
                     location = decl.location,
                     scopeName = globalScope.name,
-                    offset = 0,
                     memberScope = classScope
                 ),
                 diagnostics
@@ -133,8 +132,7 @@ class DeclarationCollector(
                 kind = DeclarationKind.FUNCTION,
                 type = FunctionType(parameterTypes, returnType),
                 location = decl.location,
-                scopeName = currentScope.name,
-                offset = 0
+                scopeName = currentScope.name
             ),
             diagnostics
         )
@@ -172,7 +170,6 @@ class DeclarationCollector(
                 type = fieldType ?: ErrorType,
                 location = decl.location,
                 scopeName = currentScope.name,
-                offset = 0,
                 initialized = decl.initializer != null
             ),
             diagnostics

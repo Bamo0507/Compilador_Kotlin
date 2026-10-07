@@ -4,6 +4,7 @@ import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.models.Program
 import org.compiler.frontend.ast.models.TreeNodeView
+import org.compiler.frontend.intermediate.StorageLayout
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.semantic.models.GarbageCollectorReport
 import org.compiler.frontend.semantic.symbols.Scope
@@ -29,7 +30,11 @@ data class CompilationResult(
 
     // Etapa G: el codigo de tres direcciones. null si el programa tiene errores, o si
     // usa algo que el generador todavia no traduce.
-    val tac: TacProgram? = null
+    val tac: TacProgram? = null,
+
+    // Zonas, desplazamientos y registros de activacion: la tabla de simbolos extendida.
+    // null en los mismos casos que el TAC.
+    val storageLayout: StorageLayout? = null
 ) {
     val hasErrors: Boolean get() = errors.isNotEmpty()
 

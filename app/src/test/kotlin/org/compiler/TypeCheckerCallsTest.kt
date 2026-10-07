@@ -48,7 +48,6 @@ class TypeCheckerCallsTest {
             type = type,
             location = LexemeLocation(1, 1),
             scopeName = scope.name,
-            offset = 0,
             initialized = true
         ))
     }

@@ -26,8 +26,6 @@ data class Symbol(
     // Declarado dentro de una clase. Lo pone Scope.declare.
     val isMember: Boolean = false,
 
-    // Posicion dentro de su ambito. Indice de ranura, no de bytes.
-    val offset: Int,
 
     // Cuantos ambitos de funcion habia encima al declararlo. Lo pone Scope.declare.
     val declarationFunctionDepth: Int = 0,
@@ -42,5 +40,13 @@ data class Symbol(
 
     var useCount: Int = 0,
     var lastUseLine: Int? = null,
-    var usedInNestedFunction: Boolean = false
+    var usedInNestedFunction: Boolean = false,
+
+    // Donde vive en memoria: datos estaticos o el registro de activacion de su
+    // funcion. Lo pone el StorageAllocator, despues del analisis semantico.
+    var storage: StorageLocation? = null,
+
+    // Como se escribe en el TAC si otra variable con el mismo nombre se confundiria con
+    // ella: `x@3`. Null es el nombre a secas. Lo pone el StorageAllocator.
+    var tacName: String? = null
 )

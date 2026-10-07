@@ -28,15 +28,13 @@ class Scope(
     }
 
     // Linked para conservar el orden de declaracion: importa para la GUI y para los
-    // offsets.
+    // desplazamientos en memoria.
     private val symbols = linkedMapOf<String, Symbol>()
 
     private val childScopes = mutableListOf<Scope>()
 
     // Vista de solo lectura. Nadie de afuera agrega hijos.
     val children: List<Scope> get() = childScopes
-
-    private var nextOffset = 0
 
     fun openChild(kind: ScopeKind, name: String): Scope {
         val child = Scope(kind, name, parent = this)
@@ -52,14 +50,12 @@ class Scope(
         val previous = symbols[symbol.name]
         if (previous != null) return DeclareResult.AlreadyDeclared(previous)
 
-        // El ambito completa los tres datos que solo el conoce, para que ningun
+        // El ambito completa los dos datos que solo el conoce, para que ningun
         // llamador pueda equivocarse en ellos.
         symbols[symbol.name] = symbol.copy(
-            offset = nextOffset,
             isMember = kind == ScopeKind.CLASS,
             declarationFunctionDepth = functionDepth()
         )
-        nextOffset += 1
         return DeclareResult.Ok
     }
 

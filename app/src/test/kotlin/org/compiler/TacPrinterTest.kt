@@ -48,8 +48,7 @@ class TacPrinterTest {
             kind = DeclarationKind.VARIABLE,
             type = IntegerType,
             location = LexemeLocation(1, 1),
-            scopeName = "global",
-            offset = 0
+            scopeName = "global"
         )
     )
 

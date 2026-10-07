@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.Scope
+import org.compiler.frontend.semantic.symbols.StorageLocation
 import org.compiler.gui.components.GarbageCollectorReportView
 import org.compiler.gui.components.ScopeTreeView
 import org.compiler.gui.components.kindLabelOf
@@ -169,7 +170,7 @@ private fun SymbolHeaderRow() {
         HeaderCell("Nombre", NAME_WIDTH)
         HeaderCell("Categoría", CATEGORY_WIDTH)
         HeaderCell("Tipo", TYPE_WIDTH)
-        HeaderCell("Offset", NUMBER_WIDTH)
+        HeaderCell("Ubicación", LOCATION_WIDTH)
         HeaderCell("Línea", NUMBER_WIDTH)
     }
 }
@@ -178,7 +179,7 @@ private fun SymbolHeaderRow() {
 private fun SymbolRow(symbol: Symbol, inheritedFrom: String? = null) {
     val category = categoryLabel(symbol) + (inheritedFrom?.let { " (de $it)" } ?: "")
     val description = "${symbol.name}, $category, tipo ${symbol.type.name}, " +
-        "offset ${symbol.offset}, línea ${symbol.location.line}"
+        "ubicación ${storageLabel(symbol)}, línea ${symbol.location.line}"
 
     Row(
         modifier = Modifier
@@ -192,9 +193,17 @@ private fun SymbolRow(symbol: Symbol, inheritedFrom: String? = null) {
 
         BodyCell(symbol.type.name, TYPE_WIDTH, monospace = true)
 
-        BodyCell(symbol.offset.toString(), NUMBER_WIDTH)
+        BodyCell(storageLabel(symbol), LOCATION_WIDTH)
         BodyCell(symbol.location.line.toString(), NUMBER_WIDTH)
     }
+}
+
+// Donde vive el simbolo en memoria. Funciones y clases no ocupan datos, y sin un
+// programa que compile no hay ubicaciones calculadas.
+private fun storageLabel(symbol: Symbol): String = when (val storage = symbol.storage) {
+    is StorageLocation.Static -> "estático ${storage.offset}"
+    is StorageLocation.Frame -> "pila ${storage.offset}"
+    null -> "—"
 }
 
 private fun categoryLabel(symbol: Symbol): String = when {
@@ -302,3 +311,4 @@ private val NAME_WIDTH = 150.dp
 private val CATEGORY_WIDTH = 150.dp
 private val TYPE_WIDTH = 200.dp
 private val NUMBER_WIDTH = 70.dp
+private val LOCATION_WIDTH = 100.dp

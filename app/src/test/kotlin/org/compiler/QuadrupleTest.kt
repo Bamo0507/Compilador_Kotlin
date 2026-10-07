@@ -69,8 +69,7 @@ class QuadrupleTest {
         kind = DeclarationKind.VARIABLE,
         type = IntegerType,
         location = LexemeLocation(line, 1),
-        scopeName = scopeName,
-        offset = 0
+        scopeName = scopeName
     )
 
     @Test
