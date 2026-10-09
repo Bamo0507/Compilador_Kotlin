@@ -231,14 +231,14 @@ class TacGeneratorExprTest {
         assertNotNull(compile("let a: integer = 1;\nprint(a);").tac)
     }
 
-    // Lo que el generador aun no traduce es un TODO. El pipeline lo atrapa y deja el
-    // TAC en null: el IDE no se cae con un programa que todavia no se puede traducir.
+    // Desde la Fase 5 todo programa valido se traduce: las clases, que eran lo ultimo
+    // pendiente, ya generan su TAC.
     @Test
-    fun `un programa con algo que aun no se traduce deja el TAC en null sin lanzar`() {
+    fun `un programa con clases tambien trae su TAC`() {
         val result = compile("class A { }\nlet a: A = new A();")
 
         assertTrue(result.errors.isEmpty())
-        assertNull(result.tac)
+        assertNotNull(result.tac)
     }
 
     @Test

@@ -18,6 +18,10 @@ data class Constant(val value: Any?) : Address
 // Inventado por el compilador para guardar un resultado intermedio.
 data class Temporary(val index: Int) : Address
 
+// La direccion de la tabla de metodos de una clase, que vive en datos estaticos:
+// `vtable.Perro`. Es lo que `new` escribe en la casilla 0 del objeto.
+data class VirtualTableAddress(val className: String) : Address
+
 // El destino de un salto. No es un Address: nunca se lee ni se escribe como valor.
 data class Label(val index: Int)
 

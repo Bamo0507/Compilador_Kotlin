@@ -1,6 +1,7 @@
 package org.compiler.frontend.intermediate
 
 import org.compiler.frontend.intermediate.models.Address
+import org.compiler.frontend.intermediate.models.Allocate
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.Concat
@@ -12,6 +13,7 @@ import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
 import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
+import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.IndexedLoad
 import org.compiler.frontend.intermediate.models.IndexedStore
 import org.compiler.frontend.intermediate.models.Label
@@ -30,6 +32,8 @@ import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.TryBegin
 import org.compiler.frontend.intermediate.models.TryEnd
 import org.compiler.frontend.intermediate.models.Unary
+import org.compiler.frontend.intermediate.models.VirtualTableAddress
+import org.compiler.frontend.intermediate.models.VirtualTableDefinition
 
 /**
  * La sintaxis textual del TAC. Esta aparte del modelo porque como se escribe una
@@ -46,7 +50,7 @@ object TacPrinter {
     // destinos de los saltos se encuentren de un vistazo.
     fun line(quadruple: Quadruple): String = when (quadruple) {
         is LabelDefinition -> "${label(quadruple.label)}:"
-        is FunctionBegin, is FunctionEnd -> instruction(quadruple)
+        is FunctionBegin, is FunctionEnd, is VirtualTableDefinition -> instruction(quadruple)
         else -> INDENT + instruction(quadruple)
     }
 
@@ -80,6 +84,10 @@ object TacPrinter {
         is TryBegin -> "try ${label(quadruple.handler)}, ${address(quadruple.exceptionVariable)}"
         TryEnd -> "endtry"
         is Throw -> "throw ${address(quadruple.message)}"
+        is Allocate -> "${address(quadruple.result)} = alloc ${address(quadruple.size)}"
+        is IndirectCall -> indirectCallText(quadruple)
+        is VirtualTableDefinition -> "vtable ${quadruple.className}:" +
+            quadruple.methods.joinToString(",") { " ${it.name}" }
     }
 
     private fun callText(call: Call): String {
@@ -88,11 +96,17 @@ object TacPrinter {
         return call.result?.let { "${address(it)} = $text" } ?: text
     }
 
+    private fun indirectCallText(call: IndirectCall): String {
+        val text = "call ${address(call.target)}, ${call.argumentCount}"
+        return call.result?.let { "${address(it)} = $text" } ?: text
+    }
+
     fun address(address: Address): String = when (address) {
         // Con sufijo solo si otra variable con el mismo nombre se confundiria con esta.
         is Name -> (address.symbol.tacName ?: address.symbol.name) + hopsSuffix(address.hops)
         is Temporary -> "t${address.index}"
         is Constant -> constant(address.value)
+        is VirtualTableAddress -> "vtable.${address.className}"
     }
 
     fun label(label: Label): String = "L${label.index}"
@@ -172,6 +186,14 @@ object TacPrinter {
         )
         TryEnd -> QuadrupleRow("endtry", "", "", "")
         is Throw -> QuadrupleRow("throw", address(quadruple.message), "", "")
+        is Allocate -> QuadrupleRow("alloc", address(quadruple.size), "", address(quadruple.result))
+        is IndirectCall -> QuadrupleRow(
+            "call", address(quadruple.target), quadruple.argumentCount.toString(),
+            quadruple.result?.let { address(it) } ?: ""
+        )
+        is VirtualTableDefinition -> QuadrupleRow(
+            "vtable", quadruple.className, quadruple.methods.joinToString(", ") { it.name }, ""
+        )
     }
 
     // En la tabla el menos unario se escribe `minus`, como en el Dragon Book: en la

@@ -19,7 +19,7 @@ el Dragon Book: es la técnica estándar de Java y C++ (decisión 43).
 
 ## Ticket 5.1: La disposición de clases en memoria
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.2
 
 **Archivos:**
@@ -91,7 +91,7 @@ de cada campo, incluidos los heredados, el tamaño del objeto y su tabla de mét
 
 ## Ticket 5.2: Las instrucciones de objetos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2, 5.1
 
 **Archivos:**
@@ -134,7 +134,7 @@ estáticos, no código, y la fase de assembler las va a traducir a su sección d
 
 ## Ticket 5.3: Objetos, `this` y métodos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.2, 4.4
 
 **Archivos:**
@@ -234,7 +234,7 @@ parámetros.
 
 ## Ticket 5.4: Listas y `foreach`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.2
 
 **Archivos:**
@@ -323,7 +323,7 @@ Fase 3.
 
 ## Ticket 5.5: Los chequeos de índice y de `null`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.3, 5.4
 
 **Archivos:**
@@ -367,7 +367,7 @@ conserva la del largo.
 
 ## Ticket 5.6: El documento, secciones de objetos, listas y montículo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.5, 4.6
 
 **Archivos:**

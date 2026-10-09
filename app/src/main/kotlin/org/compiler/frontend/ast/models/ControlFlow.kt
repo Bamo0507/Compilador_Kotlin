@@ -1,5 +1,6 @@
 package org.compiler.frontend.ast.models
 
+import org.compiler.frontend.semantic.symbols.Scope
 import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.models.LexemeLocation
 
@@ -42,7 +43,12 @@ data class ForEach(
     val iterable: Expression,
     val body: Block,
     override val location: LexemeLocation
-) : Statement
+) : Statement {
+
+    // El ambito del bucle, que lo deja el TypeChecker. Ahi estan la variable del bucle
+    // y, despues del StorageAllocator, sus locales ocultas `$lista` y `$i`.
+    var scope: Scope? = null
+}
 
 // switch (x) { case 1: ... default: ... }
 data class Switch(

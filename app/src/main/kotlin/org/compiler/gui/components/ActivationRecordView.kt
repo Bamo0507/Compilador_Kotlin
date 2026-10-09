@@ -16,7 +16,10 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import org.compiler.frontend.intermediate.models.ActivationRecordField
 import org.compiler.frontend.intermediate.models.ActivationRecordLayout
+import org.compiler.frontend.intermediate.models.ClassLayout
+import org.compiler.frontend.intermediate.models.FunctionLabel
 
 // Un renglon de la vista: un campo del registro, o el relleno que deja la alineacion
 // entre dos campos o al final.
@@ -42,17 +45,33 @@ internal fun rowsOf(record: ActivationRecordLayout): List<RecordRow> {
     return rows
 }
 
+// Un objeto se muestra con la misma vista que un registro: casillas con desplazamiento
+// y tamaño, y el relleno de la alineacion.
+internal fun objectRecordOf(layout: ClassLayout): ActivationRecordLayout =
+    ActivationRecordLayout(FunctionLabel(layout.className), layout.fields, layout.size)
+
+// La tabla de metodos tambien: una entrada de 4 bytes por metodo, en su posicion.
+internal fun methodTableOf(layout: ClassLayout): ActivationRecordLayout =
+    ActivationRecordLayout(
+        FunctionLabel(layout.className),
+        layout.methods.mapIndexed { slot, method -> ActivationRecordField(method.name, slot * 4, 4) },
+        layout.methods.size * 4
+    )
+
 /**
  * La forma de un registro de activacion: que campo va en que desplazamiento y cuanto
  * mide la hoja completa. Es la diapositiva 21 con numeros.
  */
 @Composable
-fun ActivationRecordView(record: ActivationRecordLayout) {
+fun ActivationRecordView(
+    record: ActivationRecordLayout,
+    title: String = "Registro de activación de ${record.function.name}: ${record.size} bytes"
+) {
     val colors = MaterialTheme.colorScheme
 
     Column {
         Text(
-            text = "Registro de activación de ${record.function.name}: ${record.size} bytes",
+            text = title,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
             color = colors.onSurfaceVariant,

@@ -33,12 +33,15 @@ import androidx.compose.ui.unit.dp
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.intermediate.StorageAllocator
 import org.compiler.frontend.intermediate.models.ActivationRecordLayout
+import org.compiler.frontend.intermediate.models.ClassLayout
 import org.compiler.frontend.semantic.symbols.Scope
 import org.compiler.frontend.semantic.symbols.ScopeKind
 import org.compiler.frontend.semantic.symbols.StorageLocation
 import org.compiler.gui.components.ActivationRecordView
 import org.compiler.gui.components.GarbageCollectorReportView
 import org.compiler.gui.components.ScopeTreeView
+import org.compiler.gui.components.methodTableOf
+import org.compiler.gui.components.objectRecordOf
 import org.compiler.gui.components.kindLabelOf
 import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.gui.state.AppState
@@ -114,6 +117,8 @@ fun SymbolTableScreen(
                         scope = selectedScope,
                         emptyMessage = emptyMessage,
                         record = selectedScope?.let { activationRecordOf(it, result) },
+                        // Solo si el programa llego a la asignacion de memoria.
+                        classLayout = selectedScope?.classLayout?.takeIf { result?.storageLayout != null },
                         staticSize = result?.storageLayout?.staticSize
                             ?.takeIf { selectedScope?.kind == ScopeKind.GLOBAL }
                     )
@@ -140,6 +145,7 @@ private fun SymbolTable(
     scope: Scope?,
     emptyMessage: String,
     record: ActivationRecordLayout?,
+    classLayout: ClassLayout?,
     staticSize: Int?
 ) {
     if (scope == null) {
@@ -176,6 +182,23 @@ private fun SymbolTable(
         // seleccionar global, junto con la zona estatica donde viven las globales.
         staticSize?.let { SectionLabel("Zona estática: $it bytes") }
         record?.let { ActivationRecordView(it) }
+
+        // Una clase: como queda el objeto en memoria, con los campos heredados primero,
+        // y su tabla de metodos.
+        classLayout?.let { layout ->
+            ActivationRecordView(
+                record = objectRecordOf(layout),
+                title = "Objeto ${layout.className}: ${layout.size} bytes"
+            )
+            if (layout.methods.isEmpty()) {
+                SectionLabel("Tabla de métodos de ${layout.className}: vacía")
+            } else {
+                ActivationRecordView(
+                    record = methodTableOf(layout),
+                    title = "Tabla de métodos de ${layout.className}: ${layout.methods.size} entradas"
+                )
+            }
+        }
     }
 }
 
@@ -240,6 +263,7 @@ private fun SymbolRow(symbol: Symbol, inheritedFrom: String? = null) {
 private fun storageLabel(symbol: Symbol): String = when (val storage = symbol.storage) {
     is StorageLocation.Static -> "estático ${storage.offset}"
     is StorageLocation.Frame -> "pila ${storage.offset}"
+    is StorageLocation.Field -> "objeto ${storage.offset}"
     null -> "—"
 }
 

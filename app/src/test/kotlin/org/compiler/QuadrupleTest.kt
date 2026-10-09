@@ -1,5 +1,6 @@
 package org.compiler
 
+import org.compiler.frontend.intermediate.models.Allocate
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Call
@@ -15,6 +16,7 @@ import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
 import org.compiler.frontend.intermediate.models.IndexedLoad
 import org.compiler.frontend.intermediate.models.IndexedStore
+import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
 import org.compiler.frontend.intermediate.models.Name
@@ -31,6 +33,7 @@ import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.TryBegin
 import org.compiler.frontend.intermediate.models.TryEnd
 import org.compiler.frontend.intermediate.models.Unary
+import org.compiler.frontend.intermediate.models.VirtualTableDefinition
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.IntegerType
 import org.compiler.frontend.semantic.symbols.Symbol
@@ -66,6 +69,9 @@ class QuadrupleTest {
         is TryBegin -> "TryBegin"
         TryEnd -> "TryEnd"
         is Throw -> "Throw"
+        is Allocate -> "Allocate"
+        is IndirectCall -> "IndirectCall"
+        is VirtualTableDefinition -> "VirtualTableDefinition"
     }
 
     private fun symbol(name: String, scopeName: String, line: Int) = Symbol(
@@ -77,7 +83,7 @@ class QuadrupleTest {
     )
 
     @Test
-    fun `existen las 21 familias de cuadruplos`() {
+    fun `existen las 24 familias de cuadruplos`() {
         val t1 = Temporary(1)
         val one = Constant(1L)
         val label = Label(1)
@@ -103,10 +109,13 @@ class QuadrupleTest {
             Print(t1, OperandKind.INTEGER),
             TryBegin(label, t1),
             TryEnd,
-            Throw(Constant("error"))
+            Throw(Constant("error")),
+            Allocate(t1, Constant(12L)),
+            IndirectCall(t1, t1, 1),
+            VirtualTableDefinition("Perro", listOf(FunctionLabel("Perro.hablar")))
         )
 
-        assertEquals(21, oneOfEach.map { familyName(it) }.toSet().size)
+        assertEquals(24, oneOfEach.map { familyName(it) }.toSet().size)
     }
 
     // && y || son saltos en el TAC, no operaciones: no hay valor de enum para ellos.

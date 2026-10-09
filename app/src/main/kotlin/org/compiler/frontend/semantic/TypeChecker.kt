@@ -44,6 +44,7 @@ import org.compiler.frontend.semantic.symbols.ClassType
 import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.ErrorType
+import org.compiler.frontend.semantic.symbols.FOREACH_SCOPE_PREFIX
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
@@ -621,7 +622,8 @@ class TypeChecker(
             }
         }
 
-        withScope(ScopeKind.LOOP, "foreach@${stmt.location.line}") {
+        withScope(ScopeKind.LOOP, "$FOREACH_SCOPE_PREFIX${stmt.location.line}") {
+            stmt.scope = currentScope
             declare(
                 name = stmt.variableName,
                 kind = DeclarationKind.VARIABLE,

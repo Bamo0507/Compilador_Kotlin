@@ -2,12 +2,15 @@ package org.compiler.frontend.intermediate
 
 import org.compiler.frontend.intermediate.models.ActivationRecordField
 import org.compiler.frontend.intermediate.models.ActivationRecordLayout
+import org.compiler.frontend.intermediate.models.ClassLayout
 import org.compiler.frontend.intermediate.models.FunctionLabel
 import org.compiler.frontend.semantic.symbols.ArrayType
 import org.compiler.frontend.semantic.symbols.BooleanType
+import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
 import org.compiler.frontend.semantic.symbols.ClassType
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.ErrorType
+import org.compiler.frontend.semantic.symbols.FOREACH_SCOPE_PREFIX
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
@@ -19,14 +22,34 @@ import org.compiler.frontend.semantic.symbols.StringType
 import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.frontend.semantic.symbols.Type
 import org.compiler.frontend.semantic.symbols.VoidType
+import org.compiler.models.LexemeLocation
 
 // Donde quedo todo: la zona estatica, el main implicito y el registro de cada funcion,
 // indexado por su ambito.
 data class StorageLayout(
     val staticSize: Int,
     val main: ActivationRecordLayout,
-    val functions: Map<Scope, ActivationRecordLayout>
+    val functions: Map<Scope, ActivationRecordLayout>,
+
+    // El ambito de cada clase por su nombre, en orden de declaracion. Su forma en
+    // memoria esta en `Scope.classLayout`.
+    val classes: Map<String, Scope> = emptyMap(),
+
+    // El registro de la rutina `$init` de cada clase, por el nombre de la clase.
+    val initializers: Map<String, ActivationRecordLayout> = emptyMap(),
+
+    // El parametro escondido `this` de cada metodo, constructor y `$init`, por la
+    // etiqueta de su funcion.
+    val thisParameters: Map<FunctionLabel, Symbol> = emptyMap(),
+
+    // Las dos locales ocultas de cada foreach, por el ambito del bucle.
+    val forEachLocals: Map<Scope, ForEachLocals> = emptyMap()
 )
+
+// `$lista` guarda la lista que se recorre, evaluada una sola vez, y `$i` el indice.
+// No pueden ser temporales: viven todo el bucle, y el pool recicla los temporales al
+// terminar cada sentencia.
+data class ForEachLocals(val list: Symbol, val index: Symbol)
 
 /**
  * Le da a cada simbolo su lugar en memoria y arma el registro de activacion de cada
@@ -37,15 +60,117 @@ data class StorageLayout(
  */
 class StorageAllocator {
 
+    // Lo que se descubre al armar los registros: los `this` y las locales ocultas.
+    private val thisParameters = linkedMapOf<FunctionLabel, Symbol>()
+    private val forEachLocals = linkedMapOf<Scope, ForEachLocals>()
+
     fun allocate(globalScope: Scope): StorageLayout {
+        thisParameters.clear()
+        forEachLocals.clear()
+
         val staticSize = allocateGlobals(globalScope)
+
+        // Las clases antes que las funciones: un metodo necesita saber de que clase es
+        // su `this`, y el generador, la forma de cada objeto.
+        val classes = linkedMapOf<String, Scope>()
+        globalScope.children.filter { it.kind == ScopeKind.CLASS }.forEach { classScope ->
+            layoutOf(classScope)
+            classes[classScope.name] = classScope
+        }
+        val initializers = linkedMapOf<String, ActivationRecordLayout>()
+        classes.values.forEach { initializers[it.name] = allocateInitializer(it) }
+
         val main = allocateMain(globalScope)
 
         val functions = linkedMapOf<Scope, ActivationRecordLayout>()
         functionScopesOf(globalScope).forEach { functions[it] = allocateFunction(it) }
 
         assignTacNames(globalScope, functions.keys)
-        return StorageLayout(staticSize, main, functions)
+        return StorageLayout(
+            staticSize, main, functions, classes, initializers,
+            thisParameters.toMap(), forEachLocals.toMap()
+        )
+    }
+
+    // ── Las clases: la forma del objeto y su tabla de metodos ──────────────
+
+    /**
+     * La casilla 0 es la tabla de metodos, en todas las clases. Despues van los campos
+     * heredados, en el desplazamiento que tenian en la superclase, y despues los
+     * propios con la alineacion natural. El tamaño se redondea a la alineacion mas
+     * grande de sus campos, como un struct de C.
+     *
+     * En la tabla, un metodo heredado conserva la posicion que tenia en la del padre,
+     * uno que sobrescribe reemplaza esa entrada, y uno nuevo va al final.
+     */
+    private fun layoutOf(classScope: Scope): ClassLayout {
+        classScope.classLayout?.let { return it }
+        val parent = classScope.superclass?.let { layoutOf(it) }
+
+        val fields = parent?.fields?.toMutableList()
+            ?: mutableListOf(ActivationRecordField(VIRTUAL_TABLE_SLOT, 0, POINTER_SIZE))
+        var offset = parent?.size ?: POINTER_SIZE
+
+        classScope.localSymbols().filter { it.isField() }.forEach { field ->
+            val size = sizeOf(field.type)
+            offset = align(offset, size)
+            field.storage = StorageLocation.Field(offset)
+            fields += ActivationRecordField(field.name, offset, size)
+            offset += size
+        }
+
+        val methods = parent?.methods?.toMutableList() ?: mutableListOf()
+        classScope.localSymbols()
+            .filter { it.kind == DeclarationKind.FUNCTION && it.name != CONSTRUCTOR_NAME }
+            .forEach { method ->
+                val label = methodLabel(classScope, method.name)
+                val inherited = methods.indexOfFirst { it.name.substringAfterLast('.') == method.name }
+                if (inherited >= 0) methods[inherited] = label else methods += label
+            }
+
+        val alignment = maxOf(POINTER_SIZE, fields.maxOf { it.size })
+        val layout = ClassLayout(classScope.name, align(offset, alignment), methods, fields)
+        classScope.classLayout = layout
+        return layout
+    }
+
+    private fun methodLabel(classScope: Scope, methodName: String): FunctionLabel =
+        classScope.children
+            .firstOrNull { it.kind == ScopeKind.FUNCTION && it.name == methodName }
+            ?.let { labelOf(it) }
+            ?: FunctionLabel("${classScope.name}.$methodName")
+
+    // `Perro.$init`: solo recibe `this`, y no tiene locales. Sus temporales los agrega
+    // el generador, como en cualquier funcion.
+    private fun allocateInitializer(classScope: Scope): ActivationRecordLayout {
+        val label = FunctionLabel("${classScope.name}.$INIT_NAME")
+        val record = RecordBuilder()
+        record.place(thisParameterOf(classScope, label, INIT_NAME, classScope.functionDepth() + 1, null))
+        record.placeLinks()
+        return record.build(label)
+    }
+
+    // `this` es un parametro mas, el primero: desplazamiento 0. Es un Symbol sintetico
+    // que no se declara en ningun ambito, porque nadie lo busca por nombre: el AST ya
+    // dice donde aparece `this`.
+    private fun thisParameterOf(
+        classScope: Scope,
+        label: FunctionLabel,
+        scopeName: String,
+        functionDepth: Int,
+        location: LexemeLocation?
+    ): Symbol {
+        val symbol = Symbol(
+            name = THIS_NAME,
+            kind = DeclarationKind.PARAMETER,
+            type = ClassType(classScope.name),
+            location = location ?: LexemeLocation(0, 0),
+            scopeName = scopeName,
+            declarationFunctionDepth = functionDepth,
+            initialized = true
+        )
+        thisParameters[label] = symbol
+        return symbol
     }
 
     // ── Las globales: datos estaticos ──────────────────────────────────────
@@ -81,6 +206,16 @@ class StorageAllocator {
     // cuantos hicieron falta.
     private fun allocateFunction(functionScope: Scope): ActivationRecordLayout {
         val record = RecordBuilder()
+        val label = labelOf(functionScope)
+
+        // Un metodo o un constructor recibe el objeto como primer parametro escondido.
+        val classScope = functionScope.parent?.takeIf { it.kind == ScopeKind.CLASS }
+        if (classScope != null) {
+            val location = classScope.lookupLocal(functionScope.name)?.location
+            record.place(
+                thisParameterOf(classScope, label, functionScope.name, functionScope.functionDepth(), location)
+            )
+        }
 
         val (parameters, locals) = functionScope.localSymbols()
             .filter { it.occupiesMemory() }
@@ -97,7 +232,7 @@ class StorageAllocator {
             .filter { it.kind == ScopeKind.BLOCK || it.kind == ScopeKind.LOOP }
             .forEach { record.placeLocals(it) }
 
-        return record.build(labelOf(functionScope))
+        return record.build(label)
     }
 
     // La firma vive en el ambito que contiene a la funcion, no en el suyo.
@@ -149,7 +284,8 @@ class StorageAllocator {
     // Todas las variables que viven en el registro de este ambito: las suyas y las de
     // sus bloques, sin entrar a funciones anidadas.
     private fun symbolsOfRecord(scope: Scope): List<Symbol> =
-        scope.localSymbols().filter { it.occupiesMemory() } +
+        hiddenLocalsOf(scope) +
+            scope.localSymbols().filter { it.occupiesMemory() } +
             scope.children
                 .filter { it.kind == ScopeKind.BLOCK || it.kind == ScopeKind.LOOP }
                 .flatMap { symbolsOfRecord(it) }
@@ -171,9 +307,12 @@ class StorageAllocator {
             }
     }
 
+    private fun hiddenLocalsOf(scope: Scope): List<Symbol> =
+        forEachLocals[scope]?.let { listOf(it.list, it.index) } ?: emptyList()
+
     // ── El registro, campo por campo ───────────────────────────────────────
 
-    private class RecordBuilder {
+    private inner class RecordBuilder {
         private var offset = 0
         private val fields = mutableListOf<ActivationRecordField>()
 
@@ -202,10 +341,37 @@ class StorageAllocator {
         // Un bloque no tiene registro propio: sus variables entran al de la funcion.
         // Los bloques hermanos no comparten espacio, aunque nunca vivan a la vez.
         fun placeLocals(scope: Scope) {
+            if (scope.kind == ScopeKind.LOOP && scope.name.startsWith(FOREACH_SCOPE_PREFIX)) {
+                placeForEachLocals(scope)
+            }
             scope.localSymbols().filter { it.occupiesMemory() }.forEach { place(it) }
             scope.children
                 .filter { it.kind == ScopeKind.BLOCK || it.kind == ScopeKind.LOOP }
                 .forEach { placeLocals(it) }
+        }
+
+        // `$lista` y `$i`, antes de la variable del bucle. Llevan la ubicacion de esa
+        // variable, que es la del foreach: si una funcion tiene dos foreach, el segundo
+        // se imprime `$i@7`, con la misma regla que dos variables con el mismo nombre.
+        private fun placeForEachLocals(scope: Scope) {
+            val variable = scope.localSymbols().firstOrNull() ?: return
+            fun hidden(name: String, type: Type) = Symbol(
+                name = name,
+                kind = DeclarationKind.VARIABLE,
+                type = type,
+                location = variable.location,
+                scopeName = scope.name,
+                declarationFunctionDepth = variable.declarationFunctionDepth,
+                initialized = true
+            )
+
+            val locals = ForEachLocals(
+                list = hidden(HIDDEN_LIST_NAME, ArrayType(variable.type)),
+                index = hidden(HIDDEN_INDEX_NAME, IntegerType)
+            )
+            place(locals.list)
+            place(locals.index)
+            forEachLocals[scope] = locals
         }
 
         fun build(label: FunctionLabel): ActivationRecordLayout =
@@ -214,6 +380,13 @@ class StorageAllocator {
 
     companion object {
         const val MAIN_LABEL = "\$main"
+        const val INIT_NAME = "\$init"
+        const val THIS_NAME = "this"
+        const val HIDDEN_LIST_NAME = "\$lista"
+        const val HIDDEN_INDEX_NAME = "\$i"
+
+        // El nombre de la casilla 0 de todo objeto.
+        const val VIRTUAL_TABLE_SLOT = "tabla de métodos"
 
         // ARM de 32 bits: una direccion mide 4 bytes y la pila se alinea a 8.
         const val POINTER_SIZE = 4
@@ -241,6 +414,9 @@ class StorageAllocator {
 
         // Las funciones y las clases son codigo, no datos; los campos viven dentro del
         // objeto, en el monticulo.
+        private fun Symbol.isField(): Boolean =
+            (kind == DeclarationKind.VARIABLE || kind == DeclarationKind.CONSTANT) && isMember
+
         private fun Symbol.occupiesMemory(): Boolean =
             (kind == DeclarationKind.VARIABLE || kind == DeclarationKind.CONSTANT ||
                 kind == DeclarationKind.PARAMETER) && !isMember

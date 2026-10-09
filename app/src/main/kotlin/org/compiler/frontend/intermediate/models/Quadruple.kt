@@ -136,3 +136,19 @@ data object TryEnd : Quadruple
 
 // throw x
 data class Throw(val message: Address) : Quadruple
+
+data class Allocate(
+    val result: Address,
+    val size: Address
+) : Quadruple
+
+data class IndirectCall(
+    val result: Address?,
+    val target: Address,
+    val argumentCount: Int
+) : Quadruple
+
+data class VirtualTableDefinition(
+    val className: String,
+    val methods: List<FunctionLabel>
+) : Quadruple

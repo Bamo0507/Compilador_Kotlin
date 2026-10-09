@@ -1,6 +1,7 @@
 package org.compiler
 
 import org.compiler.frontend.intermediate.TacPrinter
+import org.compiler.frontend.intermediate.models.Allocate
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Call
@@ -16,6 +17,7 @@ import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
 import org.compiler.frontend.intermediate.models.IndexedLoad
 import org.compiler.frontend.intermediate.models.IndexedStore
+import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
 import org.compiler.frontend.intermediate.models.Name
@@ -33,6 +35,8 @@ import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.TryBegin
 import org.compiler.frontend.intermediate.models.TryEnd
 import org.compiler.frontend.intermediate.models.Unary
+import org.compiler.frontend.intermediate.models.VirtualTableAddress
+import org.compiler.frontend.intermediate.models.VirtualTableDefinition
 import org.compiler.frontend.intermediate.toRow
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.IntegerType
@@ -129,6 +133,44 @@ class TacPrinterTest {
     fun `la copia indexada`() {
         assertLine("    t2 = a[t1]", IndexedLoad(t2, a, t1))
         assertLine("    a[t1] = 5", IndexedStore(a, t1, Constant(5L)))
+    }
+
+    // ── Las familias de objetos (Fase 5) ───────────────────────────────────
+
+    @Test
+    fun `alloc pide bytes al monticulo`() {
+        assertLine("    t1 = alloc 12", Allocate(t1, Constant(12L)))
+    }
+
+    // La llamada indirecta nombra el temporal con la direccion, no una etiqueta.
+    @Test
+    fun `la llamada indirecta con y sin resultado`() {
+        assertLine("    t3 = call t2, 1", IndirectCall(Temporary(3), t2, 1))
+        assertLine("    call t2, 2", IndirectCall(null, t2, 2))
+    }
+
+    // La tabla es un dato estatico: va al margen, como begin_func.
+    @Test
+    fun `la tabla de metodos y su direccion`() {
+        assertLine(
+            "vtable Perro: Perro.hablar, Animal.comer",
+            VirtualTableDefinition("Perro", listOf(FunctionLabel("Perro.hablar"), FunctionLabel("Animal.comer")))
+        )
+        assertLine("vtable Vacia:", VirtualTableDefinition("Vacia", emptyList()))
+        assertLine("    t1[0] = vtable.Perro", IndexedStore(t1, Constant(0L), VirtualTableAddress("Perro")))
+    }
+
+    @Test
+    fun `las familias de objetos tienen su fila de cuatro columnas`() {
+        assertEquals(QuadrupleRow("alloc", "12", "", "t1"), Allocate(t1, Constant(12L)).toRow())
+        assertEquals(QuadrupleRow("call", "t2", "1", "t3"), IndirectCall(Temporary(3), t2, 1).toRow())
+        assertEquals(QuadrupleRow("call", "t2", "1", ""), IndirectCall(null, t2, 1).toRow())
+        assertEquals(
+            QuadrupleRow("vtable", "Perro", "Perro.hablar, Animal.comer", ""),
+            VirtualTableDefinition(
+                "Perro", listOf(FunctionLabel("Perro.hablar"), FunctionLabel("Animal.comer"))
+            ).toRow()
+        )
     }
 
     @Test

@@ -38,6 +38,16 @@ class ValidProgramsTest {
             }
         }
 
+    // Desde la Fase 5 todo programa valido se traduce: ninguno se queda sin TAC.
+    @TestFactory
+    fun `cada programa valido genera TAC`(): List<DynamicTest> =
+        programsOf(SampleGroup.VALID).map { sample ->
+            DynamicTest.dynamicTest(sample.name) {
+                val result = CompilerPipeline.compile(sample.source, execute = false)
+                assertNotNull(result.tac, "${sample.id} no generó TAC")
+            }
+        }
+
     // La salida esperada va en el archivo, en lineas `// SALIDA:`. Un programa sin
     // esas lineas solo tiene que compilar; uno con ellas ademas tiene que imprimir
     // exactamente eso, en ese orden.

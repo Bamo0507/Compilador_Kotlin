@@ -1,7 +1,9 @@
 package org.compiler.frontend.intermediate
 
 import java.util.IdentityHashMap
+import org.compiler.frontend.ast.models.ArrayLiteral
 import org.compiler.frontend.ast.models.Assignment
+import org.compiler.frontend.ast.models.AssignmentExpression
 import org.compiler.frontend.ast.models.BinaryOperation
 import org.compiler.frontend.ast.models.BinaryOperator
 import org.compiler.frontend.ast.models.Block
@@ -17,11 +19,15 @@ import org.compiler.frontend.ast.models.FunctionCall
 import org.compiler.frontend.ast.models.FunctionDeclaration
 import org.compiler.frontend.ast.models.Identifier
 import org.compiler.frontend.ast.models.If
+import org.compiler.frontend.ast.models.IndexAccess
+import org.compiler.frontend.ast.models.ObjectCreation
 import org.compiler.frontend.ast.models.OperatorGroup
 import org.compiler.frontend.ast.models.Program
+import org.compiler.frontend.ast.models.PropertyAccess
 import org.compiler.frontend.ast.models.Statement
 import org.compiler.frontend.ast.models.Switch
 import org.compiler.frontend.ast.models.TernaryOperation
+import org.compiler.frontend.ast.models.ThisReference
 import org.compiler.frontend.ast.models.TryCatch
 import org.compiler.frontend.ast.models.UnaryOperation
 import org.compiler.frontend.ast.models.UnaryOperator
@@ -31,6 +37,7 @@ import org.compiler.frontend.intermediate.DagNode.Subexpression
 import org.compiler.frontend.intermediate.models.ActivationRecordField
 import org.compiler.frontend.intermediate.models.ActivationRecordLayout
 import org.compiler.frontend.intermediate.models.Address
+import org.compiler.frontend.intermediate.models.Allocate
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
@@ -44,6 +51,9 @@ import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
 import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
+import org.compiler.frontend.intermediate.models.IndexedLoad
+import org.compiler.frontend.intermediate.models.IndexedStore
+import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
 import org.compiler.frontend.intermediate.models.Name
@@ -61,10 +71,17 @@ import org.compiler.frontend.intermediate.models.TryEnd
 import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.Unary
+import org.compiler.frontend.intermediate.models.VirtualTableAddress
+import org.compiler.frontend.intermediate.models.VirtualTableDefinition
+import org.compiler.frontend.semantic.symbols.ArrayType
 import org.compiler.frontend.semantic.symbols.BooleanType
+import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
+import org.compiler.frontend.semantic.symbols.ClassType
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
+import org.compiler.frontend.semantic.symbols.Scope
+import org.compiler.frontend.semantic.symbols.ScopeKind
 import org.compiler.frontend.semantic.symbols.StorageLocation
 import org.compiler.frontend.semantic.symbols.StringType
 import org.compiler.frontend.semantic.symbols.Symbol
@@ -79,9 +96,9 @@ import org.compiler.frontend.ast.models.Return as ReturnStatement
  * sentencias no devuelven nada; las expresiones devuelven la Address donde quedo su
  * valor. Toda expresion pasa por su GDA, y todo temporal por el pool.
  *
- * Lo que el generador todavia no traduce es un TODO que nombra la construccion. El
- * pipeline atrapa el NotImplementedError y deja el TAC en null, asi un programa con
- * un `while` no tumba el IDE.
+ * Desde la Fase 5 todo programa valido se traduce. El pipeline sigue atrapando el
+ * NotImplementedError por si una construccion nueva del lenguaje llega antes que su
+ * traduccion: el IDE deja el TAC en null en vez de caerse.
  */
 class TacGenerator(private val storageLayout: StorageLayout) {
 
@@ -100,7 +117,17 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
     // Las funciones que faltan por generar. Una funcion no se genera donde se declara,
     // sino despues de la que la contiene: su codigo no puede quedar en medio del otro.
-    private val pendingFunctions = ArrayDeque<FunctionDeclaration>()
+    // Una clase deja pendientes su `$init` y sus metodos.
+    private sealed interface PendingFunction {
+        data class Declared(val declaration: FunctionDeclaration) : PendingFunction
+        data class Initializer(val declaration: ClassDeclaration) : PendingFunction
+    }
+    private val pendingFunctions = ArrayDeque<PendingFunction>()
+
+    // El `this` de la funcion que se esta generando: el suyo si es un metodo, un
+    // constructor o un `$init`; el del metodo que la contiene si es una funcion anidada
+    // en un metodo. Null fuera de las clases.
+    private var currentThis: Symbol? = null
 
     // La etiqueta de cada funcion, por su Symbol. Se arma antes de generar, porque una
     // llamada puede aparecer antes que la declaracion.
@@ -135,24 +162,47 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     fun generate(program: Program): TacProgram {
         collectFunctionLabels(program.statements)
 
+        // Las tablas de metodos van primero: son datos estaticos, no codigo (decision
+        // 46). Una por clase, aunque no tenga metodos: todo objeto apunta a una.
+        storageLayout.classes.values.forEach { classScope ->
+            val layout = layoutOf(classScope)
+            output += VirtualTableDefinition(layout.className, layout.methods)
+        }
+
         // El codigo del nivel superior es el main implicito. Las funciones que declara
         // quedan pendientes, y cada una agrega las suyas al generarse.
-        generateFunction(storageLayout.main, program.statements, returnType = null, depth = 0)
+        generateFunction(storageLayout.main, returnType = null, depth = 0, thisParameter = null) {
+            generateStatements(program.statements)
+        }
         while (pendingFunctions.isNotEmpty()) {
-            val declaration = pendingFunctions.removeFirst()
-            val scope = requireNotNull(declaration.scope) {
-                "'${declaration.name}' sin ambito: ¿corrio el TypeChecker?"
+            when (val pending = pendingFunctions.removeFirst()) {
+                is PendingFunction.Declared -> generateDeclaredFunction(pending.declaration)
+                is PendingFunction.Initializer -> generateInitializer(pending.declaration)
             }
-            val returnType = (declaration.symbol?.type as? FunctionType)?.returns
-            generateFunction(
-                storageLayout.functions.getValue(scope),
-                declaration.body.statements,
-                returnType,
-                scope.functionDepth()
-            )
         }
 
         return TacProgram(output.toList(), totalTemporaries, activationRecords.toList())
+    }
+
+    private fun generateDeclaredFunction(declaration: FunctionDeclaration) {
+        val scope = requireNotNull(declaration.scope) {
+            "'${declaration.name}' sin ambito: ¿corrio el TypeChecker?"
+        }
+        val returnType = (declaration.symbol?.type as? FunctionType)?.returns
+        val record = storageLayout.functions.getValue(scope)
+
+        generateFunction(record, returnType, scope.functionDepth(), thisParameterOf(scope)) {
+            generateStatements(declaration.body.statements)
+        }
+    }
+
+    // El `this` que ve una funcion: el del metodo que la contiene, ella incluida.
+    private fun thisParameterOf(functionScope: Scope): Symbol? {
+        val method = generateSequence(functionScope) { it.parent }
+            .firstOrNull { it.kind == ScopeKind.FUNCTION && it.parent?.kind == ScopeKind.CLASS }
+            ?: return null
+        val label = storageLayout.functions.getValue(method).function
+        return storageLayout.thisParameters[label]
     }
 
     //  begin_func f, 24
@@ -163,9 +213,10 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // espacio de los temporales, que recien aqui se sabe cuantos son.
     private fun generateFunction(
         record: ActivationRecordLayout,
-        body: List<Statement>,
         returnType: Type?,
-        depth: Int
+        depth: Int,
+        thisParameter: Symbol?,
+        body: () -> Unit
     ) {
         instructions = mutableListOf()
         temporaries = TemporaryAllocator()
@@ -173,20 +224,9 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         openTries = 0
         currentReturnType = returnType
         currentDepth = depth
+        currentThis = thisParameter
 
-        body.forEach { statement ->
-            generateStatement(statement)
-
-            // El invariante del pool: entre sentencias del cuerpo no queda ningun
-            // temporal vivo. Si queda uno, el generador perdio una lectura y el TAC
-            // estaria mal: es un bug del compilador, y es mejor que salte aqui que en el
-            // assembler. Solo en este nivel, porque dentro de un `switch` el sujeto
-            // sigue vivo a proposito mientras corren los cuerpos de los case.
-            check(!temporaries.hasLiveTemporaries) {
-                "Quedaron temporales vivos al terminar la sentencia de la linea " +
-                    "${statement.location.line}"
-            }
-        }
+        body()
 
         val finalRecord = withTemporaries(record, temporaries.temporaryCount)
         output += FunctionBegin(record.function, finalRecord.size)
@@ -195,6 +235,24 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         activationRecords += finalRecord
         totalTemporaries += temporaries.temporaryCount
+    }
+
+    private fun generateStatements(body: List<Statement>) {
+        body.forEach { statement ->
+            generateStatement(statement)
+            checkNoLiveTemporaries(statement.location.line)
+        }
+    }
+
+    // El invariante del pool: entre sentencias del cuerpo no queda ningun temporal
+    // vivo. Si queda uno, el generador perdio una lectura y el TAC estaria mal: es un
+    // bug del compilador, y es mejor que salte aqui que en el assembler. Solo en este
+    // nivel, porque dentro de un `switch` el sujeto sigue vivo a proposito mientras
+    // corren los cuerpos de los case.
+    private fun checkNoLiveTemporaries(line: Int) {
+        check(!temporaries.hasLiveTemporaries) {
+            "Quedaron temporales vivos al terminar la sentencia de la linea $line"
+        }
     }
 
     // Los temporales van al final del registro, 8 bytes cada uno. El registro ya mide un
@@ -222,6 +280,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
                     collectFunctionLabels(statement.body.statements)
                 }
                 is Block -> collectFunctionLabels(statement.statements)
+                is ClassDeclaration -> collectFunctionLabels(statement.members)
                 is If -> {
                     collectFunctionLabels(statement.thenBranch.statements)
                     statement.elseBranch?.let { collectFunctionLabels(it.statements) }
@@ -275,12 +334,18 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             is Continue -> jumpOutOfLoop { it.continueLabel }
 
             is Switch -> generateSwitch(stmt)
-            is ForEach -> TODO("foreach")
+            is ForEach -> generateForEach(stmt)
             is TryCatch -> generateTryCatch(stmt)
             // La declaracion no genera codigo aqui: queda pendiente y se emite aparte.
-            is FunctionDeclaration -> pendingFunctions.addLast(stmt)
+            is FunctionDeclaration -> pendingFunctions.addLast(PendingFunction.Declared(stmt))
             is ReturnStatement -> generateReturn(stmt)
-            is ClassDeclaration -> TODO("clases y objetos")
+            // Como una funcion: su `$init` y sus metodos se generan aparte, despues.
+            is ClassDeclaration -> {
+                pendingFunctions.addLast(PendingFunction.Initializer(stmt))
+                stmt.members.filterIsInstance<FunctionDeclaration>().forEach {
+                    pendingFunctions.addLast(PendingFunction.Declared(it))
+                }
+            }
         }
     }
 
@@ -302,14 +367,22 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             return
         }
 
-        copyInto(target, generateExpression(initializer))
+        // `let g: float = n;` con n entero: el valor se convierte antes de copiarse.
+        copyInto(target, convertedTo(ExpressionDag.kindOf(symbol.type), initializer))
     }
 
+    // `x = e`, `p.campo = e` o `lista[i] = e`. Los dos ultimos escriben en memoria,
+    // con sus chequeos.
     private fun generateAssignment(stmt: Assignment) {
-        val target = stmt.target as? Identifier
-            ?: TODO("asignacion a campos y elementos de lista")
-
-        copyInto(nameOf(symbolOf(target)), generateExpression(stmt.value))
+        when (val target = stmt.target) {
+            is Identifier -> {
+                val symbol = symbolOf(target)
+                copyInto(nameOf(symbol), convertedTo(ExpressionDag.kindOf(symbol.type), stmt.value))
+            }
+            is PropertyAccess -> temporaries.consume(generateFieldStore(target, stmt.value))
+            is IndexAccess -> temporaries.consume(generateElementStore(target, stmt.value))
+            else -> error("Destino de asignacion invalido en la linea ${stmt.location.line}")
+        }
     }
 
     private fun generatePrint(stmt: PrintStatement) {
@@ -534,7 +607,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // `readers` es cuantas veces se va a leer el resultado: casi siempre una, salvo el
     // sujeto de un switch, que se compara una vez por case.
     private fun generateExpression(expr: Expression, readers: Int = 1): Address {
-        val dag = ExpressionDag.build(expr, ::nameOf)
+        val dag = ExpressionDag.build(expr, ::nameOf, ::thisName)
         val emitted = HashMap<Int, Address>()
 
         fun usesOf(node: Int): Int = dag.parentCount[node] + if (node == dag.root) readers else 0
@@ -646,10 +719,11 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             is Subexpression.Ternary -> generateTernary(subexpression.expression)
             is Subexpression.LogicalValue -> generateLogicalValue(subexpression.expression)
             is Subexpression.Call -> checkNotNull(generateCall(subexpression.expression, true))
-            is Subexpression.NewObject -> TODO("creacion de objetos")
-            is Subexpression.NewList -> TODO("creacion de listas")
-            is Subexpression.FieldAccess -> TODO("acceso a campos")
-            is Subexpression.ElementAccess -> TODO("acceso a elementos de lista")
+            is Subexpression.NewObject -> generateNewObject(subexpression.expression)
+            is Subexpression.NewList -> generateNewList(subexpression.expression)
+            is Subexpression.FieldAccess -> generateFieldRead(subexpression.expression)
+            is Subexpression.ElementAccess -> generateElementRead(subexpression.expression)
+            is Subexpression.MemoryAssign -> generateMemoryAssign(subexpression.expression)
         }
 
     //      param a1
@@ -662,17 +736,16 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // tipo de su parametro, y una variable se copia antes si un argumento posterior
     // podria modificarla.
     private fun generateCall(call: FunctionCall, wantsResult: Boolean): Address? {
-        val callee = call.callee as? Identifier ?: TODO("llamadas a metodos")
+        val callee = call.callee
+        if (callee is PropertyAccess) return generateMethodCall(call, callee, wantsResult)
+
+        // El TypeChecker solo deja llamar a un nombre o a un metodo.
+        check(callee is Identifier) { "Llamada a algo que no es una funcion en la linea ${call.location.line}" }
         val function = symbolOf(callee)
         val label = checkNotNull(functionLabels[function]) { "'${callee.name}' sin etiqueta" }
         val parameterTypes = (function.type as FunctionType).parameters
 
-        val arguments = call.arguments.mapIndexed { index, argument ->
-            val kind = ExpressionDag.kindOf(parameterTypes[index])
-            val address = convertedTo(kind, argument)
-            val later = call.arguments.drop(index + 1)
-            if (later.all { ExpressionDag.isPure(it) }) address else snapshotIfName(address)
-        }
+        val arguments = evaluateArguments(call.arguments, parameterTypes)
 
         arguments.forEach { argument ->
             instructions += Param(argument)
@@ -687,6 +760,23 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val result = temporaries.newTemp(uses = 1)
         instructions += Call(result, label, arguments.size, accessHops)
         return result
+    }
+
+    // Cada argumento convertido al tipo de su parametro. Una variable se copia antes si
+    // un argumento posterior podria modificarla.
+    private fun evaluateArguments(arguments: List<Expression>, parameterTypes: List<Type>): List<Address> =
+        arguments.mapIndexed { index, argument ->
+            val kind = ExpressionDag.kindOf(parameterTypes[index])
+            val address = convertedTo(kind, argument)
+            val later = arguments.drop(index + 1)
+            if (later.all { ExpressionDag.isPure(it) }) address else snapshotIfName(address)
+        }
+
+    // `this` visto desde la funcion actual: `this` en un metodo, `this^1` en una funcion
+    // anidada dentro de el.
+    private fun thisName(): Name {
+        val symbol = checkNotNull(currentThis) { "'this' fuera de un metodo" }
+        return nameOf(symbol)
     }
 
     // Una variable vista desde la funcion actual. Si vive en el registro de otra
@@ -935,6 +1025,393 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             divisor, RelationalOperator.NOT_EQUAL, Constant(0L), OperandKind.INTEGER, safe
         )
         instructions += Throw(Constant("División entre cero (línea $line)"))
+        instructions += LabelDefinition(safe)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Objetos: new, $init, campos y metodos
+    // ══════════════════════════════════════════════════════════════════════
+
+    //      t1 = alloc 12
+    //      t1[0] = vtable.Perro
+    //      param t1
+    //      call Perro.$init, 1
+    //      param t1
+    //      param "Toby"
+    //      call Perro.constructor, 2
+    //
+    // El constructor es el propio o el heredado, el mismo que eligio el TypeChecker; si
+    // no hay ninguno, no se llama. El temporal del objeto se pide con un solo uso, el
+    // del padre: las lecturas de aqui adentro no lo consumen.
+    private fun generateNewObject(expression: ObjectCreation): Address {
+        val classScope = storageLayout.classes.getValue(expression.className)
+        val layout = layoutOf(classScope)
+
+        val obj = temporaries.newTemp(uses = 1)
+        instructions += Allocate(obj, Constant(layout.size.toLong()))
+        instructions += IndexedStore(obj, Constant(0L), VirtualTableAddress(layout.className))
+        instructions += Param(obj)
+        instructions += Call(null, initializerLabelOf(layout.className), 1)
+
+        val constructorScope = constructorScopeOf(classScope) ?: return obj
+        val constructor = checkNotNull(constructorScope.parent?.lookupLocal(CONSTRUCTOR_NAME))
+        val parameterTypes = (constructor.type as FunctionType).parameters
+
+        val arguments = evaluateArguments(expression.arguments, parameterTypes)
+        instructions += Param(obj)
+        arguments.forEach { argument ->
+            instructions += Param(argument)
+            temporaries.consume(argument)
+        }
+        val label = storageLayout.functions.getValue(constructorScope).function
+        instructions += Call(null, label, arguments.size + 1)
+        return obj
+    }
+
+    // El ambito del constructor que usa `new`: el de la clase o el de la superclase mas
+    // cercana que declare uno.
+    private fun constructorScopeOf(classScope: Scope): Scope? =
+        classScope.children.firstOrNull { it.kind == ScopeKind.FUNCTION && it.name == CONSTRUCTOR_NAME }
+            ?: classScope.superclass?.let { constructorScopeOf(it) }
+
+    private fun initializerLabelOf(className: String): FunctionLabel =
+        storageLayout.initializers.getValue(className).function
+
+    private fun layoutOf(classScope: Scope) = checkNotNull(classScope.classLayout) {
+        "La clase '${classScope.name}' sin disposicion: ¿corrio el StorageAllocator?"
+    }
+
+    //  begin_func Perro.$init, 16
+    //      param this
+    //      call Animal.$init, 1
+    //      this[8] = ""
+    //  end_func Perro.$init
+    //
+    // Primero los campos de la superclase y despues los propios, cada uno con su
+    // inicializador o con el cero de su tipo. Va aparte del constructor (decision 44):
+    // si Perro hereda el constructor de Animal, ese constructor no sabe que existe raza.
+    private fun generateInitializer(declaration: ClassDeclaration) {
+        val classScope = storageLayout.classes.getValue(declaration.name)
+        val record = storageLayout.initializers.getValue(declaration.name)
+        val thisParameter = storageLayout.thisParameters.getValue(record.function)
+
+        generateFunction(record, returnType = null, depth = classScope.functionDepth() + 1, thisParameter) {
+            declaration.superclassName?.let { superclass ->
+                instructions += Param(thisName())
+                instructions += Call(null, initializerLabelOf(superclass), 1)
+            }
+
+            declaration.members.filterIsInstance<VariableDeclaration>().forEach { field ->
+                val symbol = checkNotNull(classScope.lookupLocal(field.name))
+                val value = field.initializer
+                    ?.let { convertedTo(ExpressionDag.kindOf(symbol.type), it) }
+                    ?: Constant(defaultValueOf(symbol.type))
+
+                instructions += IndexedStore(thisName(), Constant(fieldOffsetOf(symbol)), value)
+                temporaries.consume(value)
+                checkNoLiveTemporaries(field.location.line)
+            }
+        }
+    }
+
+    private fun fieldOffsetOf(field: Symbol): Long {
+        val storage = field.storage as? StorageLocation.Field
+            ?: error("El campo '${field.name}' sin desplazamiento: ¿corrio el StorageAllocator?")
+        return storage.offset.toLong()
+    }
+
+    //      <chequeo de null sobre p>
+    //      t1 = p[4]
+    //
+    // Un campo heredado esta en el mismo desplazamiento que en la superclase, asi que
+    // el acceso no depende de la clase real del objeto. Sobre `this` no hay chequeo:
+    // nunca es null.
+    private fun generateFieldRead(expression: PropertyAccess): Address {
+        val field = checkNotNull(expression.resolvedMember) { "'.${expression.propertyName}' sin resolver" }
+        val obj = generateExpression(expression.target)
+        if (expression.target !is ThisReference) emitNullCheck(obj, expression.location.line)
+
+        temporaries.consume(obj)
+        val result = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(result, obj, Constant(fieldOffsetOf(field)))
+        return result
+    }
+
+    // `p.campo = e`: el objeto se evalua antes que el valor, y el chequeo va justo
+    // antes de escribir. Devuelve el valor escrito SIN consumirlo: lo consume la
+    // sentencia, o el padre si es una asignacion anidada.
+    private fun generateFieldStore(target: PropertyAccess, value: Expression): Address {
+        val field = checkNotNull(target.resolvedMember) { "'.${target.propertyName}' sin resolver" }
+        val obj = readBefore(generateExpression(target.target), value)
+        val stored = convertedTo(ExpressionDag.kindOf(field.type), value)
+
+        if (target.target !is ThisReference) emitNullCheck(obj, target.location.line)
+        instructions += IndexedStore(obj, Constant(fieldOffsetOf(field)), stored)
+        temporaries.consume(obj)
+        return stored
+    }
+
+    private fun generateMemoryAssign(expression: AssignmentExpression): Address =
+        when (val target = expression.target) {
+            is PropertyAccess -> generateFieldStore(target, expression.value)
+            is IndexAccess -> generateElementStore(target, expression.value)
+            else -> error("Destino de asignacion invalido en la linea ${expression.location.line}")
+        }
+
+    //      <chequeo de null sobre a>
+    //      t1 = a[0]                la tabla de la clase REAL del objeto
+    //      t1 = t1[0]               hablar esta en la posicion 0
+    //      param a                  this
+    //      call t1, 1
+    //
+    // La posicion sale de la tabla de la clase DECLARADA, y vale para cualquier
+    // subclase porque un metodo conserva su posicion al heredarse (decision 43). Con
+    // `let a: Animal = new Perro()`, a[0] apunta a la tabla de Perro y se llama a
+    // Perro.hablar. `this.hablar()` tambien despacha por la tabla.
+    private fun generateMethodCall(call: FunctionCall, callee: PropertyAccess, wantsResult: Boolean): Address? {
+        val method = checkNotNull(callee.resolvedMember) { "'.${callee.propertyName}' sin resolver" }
+        val parameterTypes = (method.type as FunctionType).parameters
+        val className = (callee.target.type as ClassType).className
+        val slot = layoutOf(storageLayout.classes.getValue(className)).slotOf(method.name)
+        check(slot >= 0) { "'${method.name}' no esta en la tabla de '$className'" }
+
+        // El objeto se evalua antes que los argumentos, y se copia si alguno lo cambia.
+        val receiver = generateExpression(callee.target)
+        val obj = if (call.arguments.all { ExpressionDag.isPure(it) }) receiver else snapshotIfName(receiver)
+        val arguments = evaluateArguments(call.arguments, parameterTypes)
+
+        if (callee.target !is ThisReference) emitNullCheck(obj, call.location.line)
+        val table = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(table, obj, Constant(0L))
+        temporaries.consume(table)
+        val target = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(target, table, Constant(slot.toLong() * StorageAllocator.POINTER_SIZE))
+
+        (listOf(obj) + arguments).forEach { argument ->
+            instructions += Param(argument)
+            temporaries.consume(argument)
+        }
+
+        temporaries.consume(target)
+        val argumentCount = arguments.size + 1
+        if (!wantsResult) {
+            instructions += IndirectCall(null, target, argumentCount)
+            return null
+        }
+        val result = temporaries.newTemp(uses = 1)
+        instructions += IndirectCall(result, target, argumentCount)
+        return result
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Listas: creacion, acceso por indice y foreach
+    // ══════════════════════════════════════════════════════════════════════
+
+    // Una lista en memoria: el largo en la casilla 0, y los elementos desde el primer
+    // multiplo de su tamaño despues de ella: 4 para enteros, booleanos y referencias,
+    // 8 para flotantes.
+    private fun elementsStartOf(elementSize: Int): Int =
+        StorageAllocator.align(StorageAllocator.POINTER_SIZE, elementSize)
+
+    private fun elementSizeOf(listType: Type?): Int {
+        val element = (listType as? ArrayType)?.element ?: error("Indexar algo que no es una lista")
+        return StorageAllocator.sizeOf(element)
+    }
+
+    //      t1 = alloc 16
+    //      t1[0] = 3
+    //      t1[4] = 10
+    //      t1[8] = 20
+    //      t1[12] = 30
+    //
+    // Una lista vacia pide solo la casilla del largo.
+    private fun generateNewList(expression: ArrayLiteral): Address {
+        val elementType = (expression.type as ArrayType).element
+        val count = expression.elements.size
+        val elementSize = if (count == 0) 0 else StorageAllocator.sizeOf(elementType)
+        val start = if (count == 0) StorageAllocator.POINTER_SIZE else elementsStartOf(elementSize)
+
+        val list = temporaries.newTemp(uses = 1)
+        instructions += Allocate(list, Constant((start + count * elementSize).toLong()))
+        instructions += IndexedStore(list, Constant(0L), Constant(count.toLong()))
+
+        val kind = ExpressionDag.kindOf(elementType)
+        expression.elements.forEachIndexed { index, element ->
+            val value = convertedTo(kind, element)
+            instructions += IndexedStore(list, Constant((start + index * elementSize).toLong()), value)
+            temporaries.consume(value)
+        }
+        return list
+    }
+
+    //      <chequeos de null y de rango>
+    //      t1 = i * 4
+    //      t1 = t1 + 4
+    //      t1 = lista[t1]
+    //
+    // matriz[i][j] son dos accesos encadenados: el primero devuelve la referencia a la
+    // fila, y el segundo la chequea igual que a cualquier lista.
+    private fun generateElementRead(expression: IndexAccess): Address {
+        val list = readBefore(generateExpression(expression.target), expression.index)
+        val index = generateExpression(expression.index)
+        val offset = elementOffset(list, index, elementSizeOf(expression.target.type), expression.location.line)
+
+        temporaries.consume(list)
+        temporaries.consume(offset)
+        val result = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(result, list, offset)
+        return result
+    }
+
+    // `lista[i] = e`: la lista, el indice y el valor se evaluan en ese orden, y los
+    // chequeos van justo antes de escribir. Devuelve el valor sin consumirlo.
+    private fun generateElementStore(target: IndexAccess, value: Expression): Address {
+        val laterArePure = ExpressionDag.isPure(target.index) && ExpressionDag.isPure(value)
+        val listAddress = generateExpression(target.target)
+        val list = if (laterArePure) listAddress else snapshotIfName(listAddress)
+        val index = readBefore(generateExpression(target.index), value)
+
+        val elementType = (target.target.type as ArrayType).element
+        val stored = convertedTo(ExpressionDag.kindOf(elementType), value)
+        val offset = elementOffset(list, index, StorageAllocator.sizeOf(elementType), target.location.line)
+
+        instructions += IndexedStore(list, offset, stored)
+        temporaries.consume(list)
+        temporaries.consume(offset)
+        return stored
+    }
+
+    /**
+     * Los chequeos de un acceso por indice y el desplazamiento en bytes del elemento.
+     *
+     *      if lista != null goto L1
+     *      throw "Acceso a null (línea 7)"
+     *  L1: t1 = lista[0]
+     *      if i < 0 goto L2
+     *      if i < t1 goto L3
+     *  L2: throw "Índice fuera de rango (línea 7)"
+     *  L3: ...
+     *
+     * Con un indice constante no se compara con 0, porque el TypeChecker ya rechazo
+     * los negativos constantes, y el desplazamiento se calcula al compilar: lista[2]
+     * es lista[12]. La comparacion con el largo se conserva: el largo no se conoce.
+     *
+     * Consume el indice; la lista no, porque la lee despues quien llama.
+     */
+    private fun elementOffset(list: Address, index: Address, elementSize: Int, line: Int): Address {
+        emitNullCheck(list, line)
+
+        val length = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(length, list, Constant(0L))
+
+        val inRange = newLabel()
+        val constantIndex = (index as? Constant)?.value as? Long
+        if (constantIndex == null) {
+            val outOfRange = newLabel()
+            instructions += IfRelationalGoto(index, RelationalOperator.LESS, Constant(0L), OperandKind.INTEGER, outOfRange)
+            instructions += IfRelationalGoto(index, RelationalOperator.LESS, length, OperandKind.INTEGER, inRange)
+            instructions += LabelDefinition(outOfRange)
+        } else {
+            instructions += IfRelationalGoto(index, RelationalOperator.LESS, length, OperandKind.INTEGER, inRange)
+        }
+        temporaries.consume(length)
+        instructions += Throw(Constant("Índice fuera de rango (línea $line)"))
+        instructions += LabelDefinition(inRange)
+
+        val start = elementsStartOf(elementSize)
+        if (constantIndex != null) return Constant(start + constantIndex * elementSize)
+        return byteOffsetOf(index, elementSize, start)
+    }
+
+    // inicio + i × tamaño, en dos instrucciones. Con elementos de 1 byte no hay
+    // multiplicacion.
+    private fun byteOffsetOf(index: Address, elementSize: Int, start: Int): Address {
+        var scaled = index
+        if (elementSize != 1) {
+            temporaries.consume(index)
+            val product = temporaries.newTemp(uses = 1)
+            instructions += Arithmetic(
+                product, index, ArithmeticOperator.MULTIPLY, Constant(elementSize.toLong()), OperandKind.INTEGER
+            )
+            scaled = product
+        }
+
+        temporaries.consume(scaled)
+        val offset = temporaries.newTemp(uses = 1)
+        instructions += Arithmetic(offset, scaled, ArithmeticOperator.ADD, Constant(start.toLong()), OperandKind.INTEGER)
+        return offset
+    }
+
+    //      $lista = <lista>          se evalua una vez
+    //      <chequeo de null sobre $lista>
+    //      $i = 0
+    //  L1: t1 = $lista[0]            el largo
+    //      if $i >= t1 goto L3
+    //      t1 = $i * 4
+    //      t1 = t1 + 4
+    //      n = $lista[t1]
+    //      S
+    //  L2: $i = $i + 1
+    //      goto L1
+    //  L3:
+    //
+    // $lista y $i son locales ocultas del registro, no temporales: viven todo el bucle.
+    // continue va a L2 y break a L3. El elemento no lleva chequeo de rango: $i ya se
+    // comparo con el largo.
+    private fun generateForEach(stmt: ForEach) {
+        val scope = requireNotNull(stmt.scope) { "foreach sin ambito: ¿corrio el TypeChecker?" }
+        val hidden = storageLayout.forEachLocals.getValue(scope)
+        val variable = checkNotNull(scope.lookupLocal(stmt.variableName))
+        val list = nameOf(hidden.list)
+        val index = nameOf(hidden.index)
+        val line = stmt.location.line
+
+        copyInto(list, generateExpression(stmt.iterable))
+        emitNullCheck(list, line)
+        instructions += Copy(index, Constant(0L))
+
+        val startLabel = newLabel()
+        val continueLabel = newLabel()
+        val endLabel = newLabel()
+
+        instructions += LabelDefinition(startLabel)
+        val length = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(length, list, Constant(0L))
+        instructions += IfRelationalGoto(index, RelationalOperator.GREATER_EQUAL, length, OperandKind.INTEGER, endLabel)
+        temporaries.consume(length)
+
+        val elementSize = StorageAllocator.sizeOf(variable.type)
+        val offset = byteOffsetOf(index, elementSize, elementsStartOf(elementSize))
+        instructions += IndexedLoad(nameOf(variable), list, offset)
+        temporaries.consume(offset)
+
+        withinLoop(LoopLabels(breakLabel = endLabel, continueLabel = continueLabel, openTries)) {
+            generateBlock(stmt.body)
+        }
+
+        instructions += LabelDefinition(continueLabel)
+        instructions += Arithmetic(index, index, ArithmeticOperator.ADD, Constant(1L), OperandKind.INTEGER)
+        instructions += Goto(startLabel)
+        instructions += LabelDefinition(endLabel)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  El chequeo de null (decision 45)
+    // ══════════════════════════════════════════════════════════════════════
+
+    //     if p != null goto L1
+    //     throw "Acceso a null (línea 7)"
+    // L1:
+    //
+    // Antes de leer o escribir un campo, de cada acceso por indice y de cada llamada a
+    // metodo. Sin el, la maquina leeria la direccion 0 en vez de lanzar un error que el
+    // catch pueda atrapar. No lee el temporal: quien llama lo consume despues.
+    private fun emitNullCheck(reference: Address, line: Int) {
+        val safe = newLabel()
+        instructions += IfRelationalGoto(
+            reference, RelationalOperator.NOT_EQUAL, Constant(null), OperandKind.REFERENCE, safe
+        )
+        instructions += Throw(Constant("Acceso a null (línea $line)"))
         instructions += LabelDefinition(safe)
     }
 

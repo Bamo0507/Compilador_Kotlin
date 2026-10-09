@@ -111,7 +111,7 @@ El código de tres direcciones recibe su nombre de la forma de sus instrucciones
 una tiene como máximo un operador del lado derecho, y por lo tanto como máximo tres
 direcciones, dos operandos y un resultado. En este contexto, una dirección no significa
 todavía una posición de memoria, sino cualquier cosa que puede ocupar el lugar de un
-operando o de un resultado. En nuestro lenguaje intermedio existen tres clases de
+operando o de un resultado. En nuestro lenguaje intermedio existen cuatro clases de
 dirección.
 
 La primera es el nombre de una variable del programa fuente. Cabe mencionar que
@@ -122,7 +122,9 @@ adelante, sustituir cada variable por su ubicación real en memoria. La segunda 
 la constante, que es un valor literal del programa, como un número, un texto, un
 booleano o el valor nulo. La tercera es el temporal, un nombre que inventa el
 compilador para guardar un resultado intermedio, y que se escribe como `t1`, `t2` y así
-sucesivamente.
+sucesivamente. La cuarta solo aparece con los objetos: es la dirección de la tabla de
+métodos de una clase, que vive en los datos estáticos y se escribe como `vtable.Perro`,
+como se explica en la sección 23.
 
 Por ejemplo, la asignación `x = a + 5` usa las tres clases: `a` y `x` son nombres, `5`
 es una constante y `t1` es el temporal donde queda la suma antes de copiarse a `x`.
@@ -165,6 +167,9 @@ siguiente tabla las resume, con su forma y un ejemplo de cada una.
 | Impresión | `print_<tipo> x` | `print_i t1` | Imprime un valor de tipo simple |
 | Bloque protegido | `try L, e` / `endtry` | `try L1, e` | Abre y cierra la zona donde un error salta al manejador |
 | Error | `throw x` | `throw "División entre cero (línea 7)"` | Dispara un error en ejecución con su mensaje |
+| Reserva en el montículo | `x = alloc n` | `t1 = alloc 12` | Pide `n` bytes al montículo y guarda la dirección del bloque |
+| Llamada indirecta | `call t, n` / `x = call t, n` | `t1 = call t1, 1` | Llama a la función cuya dirección está en `t`; la usan los métodos |
+| Tabla de métodos | `vtable C: m0, m1, ...` | `vtable Perro: Perro.hablar, Animal.comer` | Declara, como dato estático, la tabla de métodos de una clase |
 
 Hay dos detalles de esta tabla que no son obvios. El primero es que en la copia indexada
 el índice es un desplazamiento en bytes y no el número del elemento, de tal forma que
@@ -819,6 +824,254 @@ de Fibonacci no chocan, porque viven en registros distintos y nunca se confunden
 Tampoco choca una local de una función anidada con la de la función que la contiene,
 porque los saltos del enlace de acceso ya las distinguen.
 
+## 21. Objetos en memoria
+
+Un objeto vive en el montículo, y la variable que lo guarda solo tiene una referencia a
+su primer byte. Dentro del objeto, cada campo tiene un desplazamiento fijo desde ese
+inicio, que se calcula al compilar con las mismas reglas de tamaño y alineación que un
+registro de activación. La diferencia es la primera casilla: los primeros 4 bytes de todo
+objeto guardan la dirección de la tabla de métodos de su clase, que se explica en la
+sección 23, y por eso el primer campo empieza en el desplazamiento 4. Esa casilla está en
+todas las clases, aunque no tengan métodos, para que todos los objetos tengan una sola
+forma.
+
+Cuando una clase hereda de otra, sus objetos empiezan con los campos de la superclase, en
+los mismos desplazamientos que tienen ahí, y después van los campos propios. Por ejemplo,
+si la clase Animal tiene un campo nombre y la clase Perro hereda de Animal y agrega un
+campo raza, un objeto Animal tiene la tabla en el 0 y nombre en el 4, y mide 8 bytes,
+mientras que un objeto Perro tiene la tabla en el 0, nombre en el 4 y raza en el 8, y mide
+12 bytes. El tamaño de un objeto se redondea a la alineación de su campo más grande, de
+tal forma que una clase con un entero y un flotante pone el entero en el 4, el flotante
+en el 8, y mide 16 bytes. Una clase sin campos mide 4 bytes, solo la casilla de la tabla.
+
+Esta forma es la que hace funcionar el subtipado. Como un Perro tiene nombre en el mismo
+lugar que un Animal, el código que lee el nombre de un Animal funciona igual sobre un
+Perro, sin saber de qué clase es en realidad, porque los campos propios de la subclase
+quedan después de todo lo heredado y no estorban.
+
+## 22. `new`, `$init` y el constructor
+
+Crear un objeto con `new` tiene cuatro pasos. Primero se piden al montículo los bytes que
+mide el objeto, con la instrucción `alloc`. Luego se escribe en su casilla 0 la dirección
+de la tabla de métodos de la clase. Después se llama a la rutina `$init` de la clase, que
+le da a cada campo su valor inicial, y por último se llama al constructor con el objeto
+como primer argumento. Por ejemplo, `let a: Animal = new Perro("Toby");`, con un Perro
+que no declara constructor y usa el de Animal, se traduce así:
+
+```
+    t1 = alloc 12
+    t1[0] = vtable.Perro
+    param t1
+    call Perro.$init, 1
+    param t1
+    param "Toby"
+    call Animal.constructor, 2
+    a = t1
+```
+
+El constructor que se llama es el mismo que eligió el análisis semántico: el de la clase,
+o si no declara uno, el de la superclase más cercana que sí lo declare. Si ninguna clase
+de la cadena tiene constructor, solo se llama a `$init`.
+
+La rutina `$init` se genera una por clase. Primero llama a la `$init` de la superclase, y
+después le da a cada campo propio el valor de su inicializador o, si no tiene, el valor
+inicial de su tipo, igual que una variable. La de Perro queda así:
+
+```
+begin_func Perro.$init, 16
+    param this
+    call Animal.$init, 1
+    this[8] = ""
+end_func Perro.$init
+```
+
+La razón de separarla del constructor es la herencia del constructor. Como Compiscript no
+tiene `super`, una subclase que no declara constructor usa el de su superclase, pero ese
+constructor no sabe que la subclase existe y no puede inicializar raza. Con `$init`
+aparte, todos los campos se inicializan siempre, tenga la clase constructor propio o no.
+Adicional, los inicializadores de los campos pueden usar `this`, y como se ejecutan en
+orden, un campo puede leer otro declarado antes.
+
+## 23. Métodos y despacho
+
+Un método es una función con un parámetro escondido, `this`, que es el objeto sobre el
+que se llamó. Ese parámetro siempre va primero, en el desplazamiento 0 del registro de
+activación, y lo reciben los métodos, los constructores y las rutinas `$init`. Dentro del
+método, `this` es una variable más, de tal forma que `this.nombre` se traduce como una
+lectura en el desplazamiento 4 de `this`. Si una función está anidada dentro de un
+método, lee el `this` del método con un salto de enlace de acceso, igual que cualquier
+otra variable de la función que la contiene.
+
+La parte difícil es elegir qué método se llama cuando una subclase lo sobrescribe. Con
+`let a: Animal = new Perro("Toby");` el compilador solo sabe que a es un Animal, así que
+si la llamada `a.hablar()` nombrara directamente a Animal.hablar, se ejecutaría el método
+equivocado. La solución que usamos es la tabla de métodos, la técnica estándar de Java y
+de C++. Cada clase tiene una tabla, en los datos estáticos, con la dirección de cada uno
+de sus métodos, y la casilla 0 de cada objeto apunta a la tabla de su clase real. Las
+tablas se arman con la misma idea que los campos: un método heredado ocupa la misma
+posición que en la tabla de la superclase, uno que sobrescribe reemplaza esa entrada y
+uno nuevo se agrega al final. El constructor y `$init` no van en la tabla, porque `new`
+siempre nombra la clase exacta. Las tablas se emiten al inicio del código intermedio,
+antes del programa principal, porque son datos y no código:
+
+```
+vtable Animal: Animal.hablar, Animal.comer
+vtable Perro: Perro.hablar, Animal.comer
+```
+
+Una llamada a un método lee la tabla del objeto, toma de ella la dirección del método y
+hace una llamada indirecta, que es la que recibe la dirección en un temporal en vez de
+una etiqueta. La llamada `a.hablar()` se traduce así, después del chequeo de `null` de la
+sección 25:
+
+```
+    t1 = a[0]
+    t1 = t1[0]
+    param a
+    call t1, 1
+```
+
+La posición de hablar sale de la tabla de Animal, que es la clase declarada de a, y es
+la 0, así que su desplazamiento dentro de la tabla es 0; comer está en la posición 1, en
+el desplazamiento 4. El código es exactamente el mismo sin importar qué objeto tenga a.
+Si a contiene un Animal, su casilla 0 apunta a la tabla de Animal, la posición 0 es
+Animal.hablar y se imprime "...". En cambio, si contiene un Perro, la casilla 0 apunta a
+la tabla de Perro, la posición 0 es Perro.hablar y se imprime "guau". Esto funciona
+porque un método conserva su posición al heredarse, de la misma forma en que un campo
+conserva su desplazamiento. Considero que el costo es razonable, ya que cada llamada
+cuesta dos lecturas más que una llamada directa, sin importar cuántas subclases haya.
+Cabe mencionar que `this.hablar()` dentro de un método también pasa por la tabla, para
+que se llame al de la subclase si lo sobrescribió.
+
+## 24. Listas
+
+Una lista también vive en el montículo. Su casilla 0 guarda el largo, en 4 bytes, y los
+elementos empiezan en el primer desplazamiento después del largo que respete su
+alineación: en el 4 para enteros, booleanos y referencias, y en el 8 para flotantes. El
+elemento i está entonces en el inicio más i por el tamaño del elemento. Crear la lista
+`[10, 20, 30]` pide 16 bytes, que son 4 del largo y 12 de los elementos, y escribe cada
+casilla:
+
+```
+    t1 = alloc 16
+    t1[0] = 3
+    t1[4] = 10
+    t1[8] = 20
+    t1[12] = 30
+    lista = t1
+```
+
+Para leer `lista[i]`, después de los chequeos de la sección 25, se calcula el
+desplazamiento en dos instrucciones y se lee con una copia indexada:
+
+```
+    t1 = i * 4
+    t1 = t1 + 4
+    t1 = lista[t1]
+```
+
+Si el índice es una constante, el desplazamiento se calcula al compilar, de tal forma
+que `lista[2]` se traduce como una lectura en el desplazamiento 12. Por otro lado, una
+lista de listas, como una matriz, guarda referencias, así que `matriz[i][j]` son dos
+accesos encadenados: el primero devuelve la referencia a la fila y el segundo lee dentro
+de ella, cada uno con sus propios chequeos.
+
+El foreach se traduce como un ciclo con un índice. La lista se evalúa una sola vez y se
+guarda en una variable oculta, `$lista`, y el índice en otra, `$i`. Estas variables no
+pueden ser temporales, porque viven durante todo el ciclo y los temporales se reciclan al
+terminar cada sentencia, así que van en el registro de activación como cualquier local,
+con un `$` para que no choquen con los nombres del programa. Por ejemplo, recorrer
+`lista` e imprimir cada elemento se traduce así:
+
+```
+    $lista = lista
+    if $lista != null goto L4
+    throw "Acceso a null (línea 4)"
+L4:
+    $i = 0
+L5:
+    t1 = $lista[0]
+    if $i >= t1 goto L7
+    t1 = $i * 4
+    t1 = t1 + 4
+    n = $lista[t1]
+    print_i n
+L6:
+    $i = $i + 1
+    goto L5
+L7:
+```
+
+Un continue salta a L6, donde se incrementa el índice, y un break a L7. Cabe mencionar
+que la lectura del elemento no lleva chequeo de rango, porque el índice ya se comparó con
+el largo en la condición del ciclo.
+
+## 25. Chequeos en ejecución
+
+Los errores que solo se conocen al ejecutar se chequean en el código intermedio, en
+línea, justo antes de la operación que podría fallar, y si el chequeo falla se dispara un
+`throw` con el mensaje y la línea del código fuente. Así, un try/catch los atrapa igual
+que cualquier otro error. Hay tres chequeos.
+
+El primero es la división entre cero, que se explicó en la sección 10, y solo se emite
+para la división y el módulo de enteros cuando el divisor no es una constante.
+
+El segundo es el de `null`, que se emite antes de leer o escribir un campo, antes de cada
+acceso por índice y antes de cada llamada a un método. Sin él, la máquina leería la
+dirección 0 en vez de lanzar un error que se pueda atrapar. No se emite sobre `this`,
+porque un método solo se puede llamar sobre un objeto que existe, así que `this` nunca es
+`null`.
+
+El tercero es el de rango, que se emite en cada acceso por índice: el índice tiene que
+ser al menos 0 y menor que el largo, que se lee de la casilla 0 de la lista. Un acceso
+`lista[i]` en la línea 3 lleva los dos chequeos:
+
+```
+    if lista != null goto L1
+    throw "Acceso a null (línea 3)"
+L1:
+    t1 = lista[0]
+    if i < 0 goto L3
+    if i < t1 goto L2
+L3:
+    throw "Índice fuera de rango (línea 3)"
+L2:
+```
+
+Con un índice constante se omite la comparación con 0, ya que el análisis semántico
+rechaza los índices negativos constantes, pero se conserva la del largo, porque el largo
+de una lista solo se conoce al ejecutar.
+
+## 26. Montículo y recolección de basura
+
+En el montículo se crean los objetos, las listas y los textos que se forman al ejecutar,
+y cada `new`, cada lista literal y cada concatenación piden su bloque con `alloc`. El
+problema del montículo es devolver esa memoria. Un bloque que ya no se puede alcanzar
+desde ninguna variable es basura, y si nunca se libera, el programa va consumiendo
+memoria sin usarla. Lo contrario es más grave: liberar un bloque que todavía se usa deja
+una referencia colgante, que apunta a memoria que puede reutilizarse para otra cosa.
+
+Hay dos familias de técnicas para encontrar la basura de forma automática. El conteo de
+referencias guarda en cada bloque cuántas referencias lo apuntan, y lo libera cuando el
+contador llega a cero. Tiene la ventaja de liberar en cuanto un bloque deja de usarse,
+pero cada asignación de una referencia tiene que actualizar contadores, y no puede
+liberar estructuras cíclicas, como dos objetos que se apuntan entre sí, porque sus
+contadores nunca llegan a cero. La recolección por rastreo, en cambio, parte de las
+raíces, que son las variables globales y las de los registros de activación vivos, marca
+todo lo que se puede alcanzar desde ellas y libera el resto. No cuesta nada en cada
+asignación y sí libera los ciclos, a cambio de detener el programa mientras recorre la
+memoria.
+
+En esta etapa el montículo no se libera: `alloc` es la única operación, y no existe una
+instrucción para devolver memoria. Considero que es un supuesto razonable, porque el
+enunciado de esta etapa pide el código intermedio y no un recolector, y los programas de
+la batería son pequeños y terminan pronto. Sin embargo, el diseño deja posible agregar
+más adelante un recolector por rastreo, ya que cumple las dos condiciones que necesita.
+La primera es que toda referencia apunta al inicio de su bloque, nunca a la mitad, de tal
+forma que el recolector sabe dónde empieza cada objeto. La segunda es que la casilla 0 de
+cada objeto identifica su clase, y con ella el recolector puede saber cuánto mide el
+objeto y cuáles de sus campos son referencias que hay que seguir.
+
 ## Supuestos
 
 - Una instrucción tiene como máximo un operador del lado derecho.
@@ -843,3 +1096,10 @@ porque los saltos del enlace de acceso ya las distinguen.
   vivan a la vez.
 - Los desplazamientos son positivos desde el inicio del registro, y la fase de
   assembler puede reubicarlos según cómo organice la pila.
+- Las listas tienen tamaño fijo: se crean con todos sus elementos y no crecen.
+- Los textos son referencias de 4 bytes. Los literales viven en los datos estáticos,
+  porque su contenido se conoce al compilar, y una concatenación pide su bloque en el
+  montículo, porque su contenido solo se conoce al ejecutar.
+- El montículo no se libera: no hay recolector de basura en esta etapa.
+- `this` nunca es `null`, así que no lleva chequeo.
+- La lista de un foreach se evalúa una sola vez, antes de la primera vuelta.

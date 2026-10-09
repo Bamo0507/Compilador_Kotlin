@@ -1,5 +1,7 @@
 package org.compiler.frontend.semantic.symbols
 
+import org.compiler.frontend.intermediate.models.ClassLayout
+
 /**
  * Un ambito: los nombres visibles en un lugar del programa.
  *
@@ -21,6 +23,11 @@ class Scope(
     // despues de crear su ambito.
     var superclass: Scope? = null
         private set
+
+    // Solo para kind == CLASS: como queda un objeto de esta clase en memoria y su
+    // tabla de metodos. La pone el StorageAllocator, despues del analisis semantico; la
+    // lee la tabla de simbolos del IDE.
+    var classLayout: ClassLayout? = null
 
     fun attachSuperclass(scope: Scope) {
         require(superclass == null) { "La superclase de '$name' ya fue asignada" }

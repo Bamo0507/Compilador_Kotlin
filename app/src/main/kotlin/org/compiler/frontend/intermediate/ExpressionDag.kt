@@ -58,6 +58,10 @@ sealed interface DagNode {
         data class NewList(val expression: ArrayLiteral) : Subexpression
         data class FieldAccess(val expression: PropertyAccess) : Subexpression
         data class ElementAccess(val expression: IndexAccess) : Subexpression
+
+        // `x = (p.nombre = "a")` o `x = (lista[i] = 5)`: una asignacion anidada que
+        // escribe en memoria y no en una variable. Su valor es el que se escribio.
+        data class MemoryAssign(val expression: AssignmentExpression) : Subexpression
     }
 }
 
@@ -98,12 +102,14 @@ class ExpressionDag private constructor(
     companion object {
 
         // nameOf construye la direccion de una variable: el generador la usa para
-        // agregar los saltos del enlace de acceso.
+        // agregar los saltos del enlace de acceso. thisName hace lo mismo con `this`, el
+        // parametro escondido del metodo que se esta generando.
         fun build(
             expression: Expression,
-            nameOf: (Symbol) -> Name = { Name(it) }
+            nameOf: (Symbol) -> Name = { Name(it) },
+            thisName: () -> Name = { error("'this' fuera de un metodo") }
         ): ExpressionDag {
-            val builder = Builder(shareOperations = isPure(expression), nameOf)
+            val builder = Builder(shareOperations = isPure(expression), nameOf, thisName)
             val root = builder.build(expression)
             return ExpressionDag(builder.nodes, root, builder.countParents(), builder.lines)
         }
@@ -124,7 +130,8 @@ class ExpressionDag private constructor(
         fun isPure(expression: Expression): Boolean {
             if (expression.constantValue != null) return true
             return when (expression) {
-                is Literal, is Identifier -> true
+                // `this` es una variable mas: el parametro escondido del metodo.
+                is Literal, is Identifier, is ThisReference -> true
                 is UnaryOperation -> isPure(expression.operand)
                 is BinaryOperation -> expression.operator.group != OperatorGroup.LOGICAL &&
                     isPure(expression.left) && isPure(expression.right)
@@ -167,7 +174,8 @@ class ExpressionDag private constructor(
 
     private class Builder(
         private val shareOperations: Boolean,
-        private val nameOf: (Symbol) -> Name
+        private val nameOf: (Symbol) -> Name,
+        private val thisName: () -> Name
     ) {
 
         val nodes = mutableListOf<DagNode>()
@@ -200,10 +208,11 @@ class ExpressionDag private constructor(
 
                 is AssignmentExpression -> {
                     val target = expression.target as? Identifier
-                        ?: TODO("asignacion a campos y elementos de lista")
+                        ?: return subexpression(Subexpression.MemoryAssign(expression), line)
 
-                    val value = build(expression.value)
-                    add(DagNode.Assign(nameOf(requireNotNull(target.resolvedSymbol)), value), line)
+                    val symbol = requireNotNull(target.resolvedSymbol)
+                    val value = convertedTo(kindOf(symbol.type), expression.value)
+                    add(DagNode.Assign(nameOf(symbol), value), line)
                 }
 
                 // 4. Lo que necesita su propia traduccion entra entero.
@@ -214,7 +223,8 @@ class ExpressionDag private constructor(
                 is PropertyAccess -> subexpression(Subexpression.FieldAccess(expression), line)
                 is IndexAccess -> subexpression(Subexpression.ElementAccess(expression), line)
 
-                is ThisReference -> TODO("this")
+                // `this` es el parametro escondido: una hoja, como cualquier variable.
+                is ThisReference -> leaf(thisName(), line)
             }
         }
 

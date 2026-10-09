@@ -3,7 +3,10 @@ package org.compiler
 
 import org.compiler.frontend.intermediate.StorageLayout
 import org.compiler.frontend.intermediate.TacPrinter
+import org.compiler.frontend.intermediate.models.Name
 import org.compiler.frontend.intermediate.models.ActivationRecordField
+import org.compiler.frontend.intermediate.models.ClassLayout
+import org.compiler.frontend.intermediate.models.FunctionLabel
 import org.compiler.frontend.semantic.symbols.Scope
 import org.compiler.frontend.semantic.symbols.StorageLocation
 import org.compiler.frontend.semantic.symbols.Symbol
@@ -136,4 +139,136 @@ class StorageAllocatorTest {
         assertNull(global.child("factorial").symbol("n").tacName)
         assertNull(global.child("fibonacci").symbol("n").tacName)
     }
+
+    // ── Las clases (Fase 5) ────────────────────────────────────────────────
+
+    private val animals = """
+        class Animal {
+          let nombre: string;
+          function hablar(): string { return "..."; }
+          function comer(): string { return "come"; }
+        }
+        class Perro : Animal {
+          let raza: string;
+          function hablar(): string { return "guau"; }
+        }
+    """.trimIndent()
+
+    private fun classLayout(source: String, className: String): ClassLayout {
+        val result = compile(source)
+        return assertNotNull(assertNotNull(result.globalScope).child(className).classLayout)
+    }
+
+    private fun labels(vararg names: String) = names.map { FunctionLabel(it) }
+
+    // La casilla 0 es la de la tabla; el primer campo va en 4.
+    @Test
+    fun `Animal mide 8 y su tabla tiene sus dos metodos`() {
+        val layout = classLayout(animals, "Animal")
+
+        assertEquals(8, layout.size)
+        assertEquals(labels("Animal.hablar", "Animal.comer"), layout.methods)
+        assertEquals(
+            listOf(ActivationRecordField("tabla de métodos", 0, 4), ActivationRecordField("nombre", 4, 4)),
+            layout.fields
+        )
+    }
+
+    // nombre conserva su desplazamiento, y hablar su posicion en la tabla.
+    @Test
+    fun `Perro hereda los campos primero y sobrescribe en la misma posicion`() {
+        val result = compile(animals)
+        val global = assertNotNull(result.globalScope)
+        val layout = assertNotNull(global.child("Perro").classLayout)
+
+        assertEquals(12, layout.size)
+        assertEquals(labels("Perro.hablar", "Animal.comer"), layout.methods)
+        assertEquals(StorageLocation.Field(4), global.child("Animal").symbol("nombre").storage)
+        assertEquals(StorageLocation.Field(8), global.child("Perro").symbol("raza").storage)
+        assertEquals(listOf("tabla de métodos", "nombre", "raza"), layout.fields.map { it.name })
+    }
+
+    // y es float: empieza en 8, y el objeto se redondea a 8.
+    @Test
+    fun `los campos se alinean como en un registro`() {
+        val layout = classLayout("class Punto { let x: integer; let y: float; }", "Punto")
+
+        assertEquals(listOf(4, 8), layout.fields.drop(1).map { it.offset })
+        assertEquals(16, layout.size)
+    }
+
+    @Test
+    fun `una clase vacia solo tiene la casilla de la tabla`() {
+        val layout = classLayout("class Vacia { }", "Vacia")
+
+        assertEquals(4, layout.size)
+        assertTrue(layout.methods.isEmpty())
+    }
+
+    // Un metodo nuevo va al final; el constructor no entra a la tabla.
+    @Test
+    fun `un metodo nuevo va al final y el constructor no esta en la tabla`() {
+        val source = animals + """
+
+            class Gato : Animal {
+              function constructor(n: string) { this.nombre = n; }
+              function ronronear() { print("rrr"); }
+            }
+        """.trimIndent()
+
+        assertEquals(
+            labels("Animal.hablar", "Animal.comer", "Gato.ronronear"),
+            classLayout(source, "Gato").methods
+        )
+    }
+
+    // this es el primer parametro escondido: desplazamiento 0.
+    @Test
+    fun `un metodo recibe this en el desplazamiento 0`() {
+        val result = compile(animals)
+        val hablar = assertNotNull(result.globalScope).child("Perro").child("hablar")
+        val record = layoutOf(result).functions.getValue(hablar)
+
+        assertEquals(ActivationRecordField("this", 0, 4), record.fields.first())
+        val thisParameter = layoutOf(result).thisParameters.getValue(FunctionLabel("Perro.hablar"))
+        assertEquals(StorageLocation.Frame(0), thisParameter.storage)
+    }
+
+    @Test
+    fun `cada clase tiene el registro de su init`() {
+        val record = layoutOf(compile(animals)).initializers.getValue("Perro")
+
+        assertEquals(FunctionLabel("Perro.\$init"), record.function)
+        assertEquals("this", record.fields.first().name)
+        assertEquals(16, record.size)
+    }
+
+    // ── El foreach ─────────────────────────────────────────────────────────
+
+    // $lista y $i van al registro, antes de la variable del bucle.
+    @Test
+    fun `un foreach agrega sus dos locales ocultas al registro`() {
+        val result = compile("let l: integer[] = [1, 2];\nforeach (n in l) { print(n); }")
+
+        assertEquals(
+            listOf("\$lista", "\$i", "n"),
+            layoutOf(result).main.fields.map { it.name }.filter { it !in linkFields }
+        )
+    }
+
+    // El segundo foreach de la misma funcion lleva la linea, como dos variables con el
+    // mismo nombre (decision 41).
+    @Test
+    fun `dos foreach en la misma funcion no se confunden en el TAC`() {
+        val result = compile(
+            "let l: integer[] = [1, 2];\n" +
+                "foreach (a in l) { print(a); }\n" +
+                "foreach (b in l) { print(b); }"
+        )
+        val names = layoutOf(result).forEachLocals.values.map { TacPrinter.address(Name(it.index)) }
+
+        assertEquals(listOf("\$i", "\$i@3"), names)
+    }
+
+    private val linkFields = setOf("enlace de control", "enlace de acceso", "dirección de retorno")
 }
