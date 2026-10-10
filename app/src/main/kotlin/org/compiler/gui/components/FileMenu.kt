@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import org.compiler.frontend.intermediate.TacPrinter
+import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.gui.state.AppState
 import java.awt.FileDialog
 import java.awt.Frame
@@ -52,6 +54,14 @@ fun FileMenu(
             onClick = {
                 expanded = false
                 saveAs(state)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Exportar código intermedio...") },
+            enabled = state.result?.tac != null,
+            onClick = {
+                expanded = false
+                exportIntermediateCode(state)
             }
         )
     }
@@ -100,13 +110,35 @@ private fun saveAs(state: AppState) {
     }
 }
 
+private fun exportIntermediateCode(state: AppState) {
+    val tac = state.result?.tac ?: return
+    runCatching {
+        val file = chooseFile("Exportar código intermedio", FileDialog.SAVE, TAC_EXTENSION)
+            ?: return
+        saveIntermediateCode(file, tac)
+        state.errorMessage = null
+    }.onFailure {
+        state.errorMessage = "No se pudo exportar el código intermedio: ${it.message}"
+    }
+}
+
+internal fun saveIntermediateCode(file: File, tac: TacProgram): File {
+    val target = if (file.name.endsWith(TAC_EXTENSION, ignoreCase = true)) {
+        file
+    } else {
+        File(file.parentFile, "${file.name}$TAC_EXTENSION")
+    }
+    target.writeText(TacPrinter.print(tac.instructions))
+    return target
+}
+
 // El dialogo de AWT no agrega la extension: un nombre sin punto se guarda sin ella.
 private fun withCompiscriptExtension(file: File): File =
     if (file.name.contains('.')) file else File(file.parentFile, "${file.name}$EXTENSION")
 
-private fun chooseFile(title: String, mode: Int): File? {
+private fun chooseFile(title: String, mode: Int, extension: String = EXTENSION): File? {
     val dialog = FileDialog(null as Frame?, title, mode)
-    dialog.file = "*$EXTENSION"
+    dialog.file = "*$extension"
     dialog.isVisible = true
 
     val directory = dialog.directory ?: return null
@@ -115,3 +147,4 @@ private fun chooseFile(title: String, mode: Int): File? {
 }
 
 private const val EXTENSION = ".cps"
+private const val TAC_EXTENSION = ".tac"

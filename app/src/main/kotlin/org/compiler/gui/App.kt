@@ -19,6 +19,7 @@ import org.compiler.gui.components.AppView
 import org.compiler.gui.components.FileMenu
 import org.compiler.gui.components.ViewMenu
 import org.compiler.gui.screens.SymbolTableScreen
+import org.compiler.gui.screens.IntermediateCodeScreen
 import org.compiler.gui.screens.TreesScreen
 import org.compiler.gui.screens.WorkspaceScreen
 import org.compiler.gui.state.AppState
@@ -56,6 +57,11 @@ fun App() {
                     )
 
                     AppView.SYMBOLS -> SymbolTableScreen(
+                        state = appState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    AppView.INTERMEDIATE_CODE -> IntermediateCodeScreen(
                         state = appState,
                         modifier = Modifier.fillMaxSize()
                     )

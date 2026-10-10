@@ -19,7 +19,7 @@ diapositiva 25 de la presentación 06.
 
 ## Ticket 6.1: La pantalla de código intermedio
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2, 2.3
 
 **Archivos:**
@@ -73,7 +73,7 @@ pantalla.
 
 ## Ticket 6.2: Exportar el TAC
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.1
 
 **Archivos:**

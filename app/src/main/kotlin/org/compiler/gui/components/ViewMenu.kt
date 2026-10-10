@@ -18,7 +18,8 @@ import androidx.compose.ui.Modifier
 enum class AppView {
     WORKSPACE,
     TREES,
-    SYMBOLS
+    SYMBOLS,
+    INTERMEDIATE_CODE
 }
 
 @Composable
@@ -64,4 +65,5 @@ fun AppView.displayName(): String = when (this) {
     AppView.WORKSPACE -> "Editor"
     AppView.TREES -> "Árboles"
     AppView.SYMBOLS -> "Tabla de símbolos"
+    AppView.INTERMEDIATE_CODE -> "Código intermedio"
 }
