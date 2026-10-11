@@ -1,11 +1,4 @@
-// Los programas .cps que DEBEN fallar, cada uno con su error.
-//
-// Cada archivo declara en su primera linea que error espera y en que linea, asi que
-// el archivo es su propia especificacion:
-//
-//   // ESPERADO: linea 4, "No se puede asignar 'string' a 'integer'"
-//
-// Agregar un caso es agregar un archivo: no hay que tocar este codigo.
+
 package org.compiler
 
 import org.compiler.runtime.CompilerPipeline
@@ -17,9 +10,6 @@ import kotlin.test.assertTrue
 
 class InvalidProgramsTest {
 
-    // El fragmento y no el mensaje completo: el test fija la REGLA que se viola, no
-    // la redaccion exacta del mensaje. Cambiar una palabra del texto no debe romper
-    // veintidos tests.
     private data class ExpectedError(val line: Int, val fragment: String)
 
     @TestFactory
@@ -39,8 +29,7 @@ class InvalidProgramsTest {
                         error.message.contains(expected.fragment)
                 }
 
-                // El mensaje de fallo lista los errores que SI salieron: cuando este
-                // test falla, se ve de inmediato que paso sin correr el programa a mano.
+                // Cuando este test falla, se ve de inmediato que paso sin correr el programa a mano.
                 assertTrue(
                     matches,
                     "En ${sample.id} se esperaba en la línea ${expected.line} " +
@@ -64,6 +53,20 @@ class InvalidProgramsTest {
                 assertTrue(
                     result.execution == null,
                     "${sample.id} tiene errores y aun asi se ejecutó."
+                )
+            }
+        }
+
+    // Decision 18: con errores, el generador de codigo intermedio no corre.
+    @TestFactory
+    fun `ningun programa invalido genera TAC`(): List<DynamicTest> =
+        ValidProgramsTest.programsOf(SampleGroup.INVALID).map { sample ->
+            DynamicTest.dynamicTest(sample.name) {
+                val result = CompilerPipeline.compile(sample.source, execute = false)
+
+                assertTrue(
+                    result.tac == null,
+                    "${sample.id} tiene errores y aun asi generó TAC."
                 )
             }
         }

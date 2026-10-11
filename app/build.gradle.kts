@@ -93,4 +93,12 @@ compose.desktop {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+
+    // `./gradlew test -DupdateGolden=true` reescribe los .tac de la bateria con el TAC
+    // que genera el compilador (decision 49). La propiedad llega a la JVM de Gradle, no
+    // a la de los tests: hay que pasarla. Como entrada de la tarea, ademas, cambiarla
+    // obliga a correr los tests aunque nada mas haya cambiado.
+    val updateGolden = System.getProperty("updateGolden") ?: "false"
+    systemProperty("updateGolden", updateGolden)
+    inputs.property("updateGolden", updateGolden)
 }

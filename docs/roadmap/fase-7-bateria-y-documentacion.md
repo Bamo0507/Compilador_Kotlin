@@ -22,7 +22,7 @@ El enunciado lo pide con estas palabras:
 
 ## Ticket 7.1: La batería con archivos dorados
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.5, 6.2
 
 **Archivos:**
