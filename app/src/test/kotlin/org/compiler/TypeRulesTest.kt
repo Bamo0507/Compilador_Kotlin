@@ -60,7 +60,7 @@ class TypeRulesTest {
         assertEquals(FloatType, rules.arithmetic(BinaryOperator.DIVIDE, FloatType, FloatType))
     }
 
-    // A3, decision documentada: el modulo NO aplica a float.
+    // El modulo NO aplica a float.
     @Test
     fun `modulo con float es error`() {
         assertNull(rules.arithmetic(BinaryOperator.MODULO, FloatType, IntegerType))
@@ -183,7 +183,7 @@ class TypeRulesTest {
         assertTrue(rules.isAssignable(target = ArrayType(dog), source = ArrayType(NullType)))
     }
 
-    // S5, decision documentada: el agujero de Java, cerrado en compilacion.
+    // El agujero de Java, cerrado en compilacion.
     @Test
     fun `los arreglos no son covariantes`() {
         assertFalse(rules.isAssignable(target = ArrayType(FloatType), source = ArrayType(IntegerType)))

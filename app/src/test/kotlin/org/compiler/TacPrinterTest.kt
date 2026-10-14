@@ -135,7 +135,7 @@ class TacPrinterTest {
         assertLine("    a[t1] = 5", IndexedStore(a, t1, Constant(5L)))
     }
 
-    // ── Las familias de objetos (Fase 5) ───────────────────────────────────
+    // ── Las familias de objetos ───────────────────────────────────────────
 
     @Test
     fun `alloc pide bytes al monticulo`() {
@@ -154,16 +154,24 @@ class TacPrinterTest {
     fun `la tabla de metodos y su direccion`() {
         assertLine(
             "vtable Perro: Perro.hablar, Animal.comer",
-            VirtualTableDefinition("Perro", listOf(FunctionLabel("Perro.hablar"), FunctionLabel("Animal.comer")))
+            VirtualTableDefinition(
+                "Perro", listOf(FunctionLabel("Perro.hablar"), FunctionLabel("Animal.comer"))
+            )
         )
         assertLine("vtable Vacia:", VirtualTableDefinition("Vacia", emptyList()))
-        assertLine("    t1[0] = vtable.Perro", IndexedStore(t1, Constant(0L), VirtualTableAddress("Perro")))
+        assertLine(
+            "    t1[0] = vtable.Perro",
+            IndexedStore(t1, Constant(0L), VirtualTableAddress("Perro"))
+        )
     }
 
     @Test
     fun `las familias de objetos tienen su fila de cuatro columnas`() {
         assertEquals(QuadrupleRow("alloc", "12", "", "t1"), Allocate(t1, Constant(12L)).toRow())
-        assertEquals(QuadrupleRow("call", "t2", "1", "t3"), IndirectCall(Temporary(3), t2, 1).toRow())
+        assertEquals(
+            QuadrupleRow("call", "t2", "1", "t3"),
+            IndirectCall(Temporary(3), t2, 1).toRow()
+        )
         assertEquals(QuadrupleRow("call", "t2", "1", ""), IndirectCall(null, t2, 1).toRow())
         assertEquals(
             QuadrupleRow("vtable", "Perro", "Perro.hablar, Animal.comer", ""),
@@ -185,7 +193,10 @@ class TacPrinterTest {
     fun `try endtry y throw`() {
         assertLine("    try L1, a", TryBegin(l1, a))
         assertLine("    endtry", TryEnd)
-        assertLine("    throw \"División entre cero (línea 7)\"", Throw(Constant("División entre cero (línea 7)")))
+        assertLine(
+            "    throw \"División entre cero (línea 7)\"",
+            Throw(Constant("División entre cero (línea 7)"))
+        )
     }
 
     @Test

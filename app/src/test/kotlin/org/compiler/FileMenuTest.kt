@@ -21,6 +21,15 @@ class FileMenuTest {
         val exported = saveIntermediateCode(directory.resolve("programa").toFile(), tac)
 
         assertEquals("programa.tac", exported.name)
-        assertEquals(TacPrinter.print(tac.instructions), exported.readText())
+        assertEquals(TacPrinter.print(tac.instructions) + "\n", exported.readText())
+    }
+
+    @Test
+    fun `exportar un programa cps cambia su extension por tac`() {
+        val tac = assertNotNull(CompilerPipeline.compile("print(1);", execute = false).tac)
+
+        val exported = saveIntermediateCode(directory.resolve("programa.cps").toFile(), tac)
+
+        assertEquals("programa.tac", exported.name)
     }
 }

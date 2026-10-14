@@ -486,4 +486,38 @@ class InterpreterTest {
     fun `una funcion usa una global declarada mas abajo`() {
         assertEquals(listOf("5"), output("function mostrar() { print(contador); } let contador: integer = 5; mostrar();"))
     }
+
+    // Como en Java y en el codigo intermedio: el indice se lee antes de evaluar el valor.
+    @Test
+    fun `en una asignacion a una lista el indice se evalua antes que el valor`() {
+        assertEquals(
+            listOf("9", "2"),
+            output(
+                """
+                let i: integer = 0;
+                let lista: integer[] = [1, 2, 3];
+                function g(): integer { i = 2; return 9; }
+                lista[i] = g();
+                print(lista[0]);
+                print(i);
+                """.trimIndent()
+            )
+        )
+    }
+
+    // El objeto es null, pero los argumentos se evaluan antes de llamar.
+    @Test
+    fun `una llamada a metodo sobre null evalua sus argumentos antes del error`() {
+        val result = run(
+            """
+            class C { function m(x: integer) { } }
+            function f(): integer { print("argumento"); return 1; }
+            let c: C = null;
+            c.m(f());
+            """.trimIndent()
+        )
+
+        assertEquals(listOf("argumento"), result.output)
+        assertNotNull(result.runtimeError)
+    }
 }

@@ -118,7 +118,8 @@ fun SymbolTableScreen(
                         emptyMessage = emptyMessage,
                         record = selectedScope?.let { activationRecordOf(it, result) },
                         // Solo si el programa llego a la asignacion de memoria.
-                        classLayout = selectedScope?.classLayout?.takeIf { result?.storageLayout != null },
+                        classLayout = selectedScope?.classLayout
+                            ?.takeIf { result?.storageLayout != null },
                         staticSize = result?.storageLayout?.staticSize
                             ?.takeIf { selectedScope?.kind == ScopeKind.GLOBAL }
                     )
@@ -195,7 +196,8 @@ private fun SymbolTable(
             } else {
                 ActivationRecordView(
                     record = methodTableOf(layout),
-                    title = "Tabla de métodos de ${layout.className}: ${layout.methods.size} entradas"
+                    title = "Tabla de métodos de ${layout.className}: " +
+                        "${layout.methods.size} entradas"
                 )
             }
         }

@@ -124,7 +124,9 @@ class StorageAllocator {
             .filter { it.kind == DeclarationKind.FUNCTION && it.name != CONSTRUCTOR_NAME }
             .forEach { method ->
                 val label = methodLabel(classScope, method.name)
-                val inherited = methods.indexOfFirst { it.name.substringAfterLast('.') == method.name }
+                val inherited = methods.indexOfFirst { existing ->
+                    existing.name.substringAfterLast('.') == method.name
+                }
                 if (inherited >= 0) methods[inherited] = label else methods += label
             }
 
@@ -145,7 +147,9 @@ class StorageAllocator {
     private fun allocateInitializer(classScope: Scope): ActivationRecordLayout {
         val label = FunctionLabel("${classScope.name}.$INIT_NAME")
         val record = RecordBuilder()
-        record.place(thisParameterOf(classScope, label, INIT_NAME, classScope.functionDepth() + 1, null))
+        record.place(
+            thisParameterOf(classScope, label, INIT_NAME, classScope.functionDepth() + 1, null)
+        )
         record.placeLinks()
         return record.build(label)
     }
@@ -213,7 +217,9 @@ class StorageAllocator {
         if (classScope != null) {
             val location = classScope.lookupLocal(functionScope.name)?.location
             record.place(
-                thisParameterOf(classScope, label, functionScope.name, functionScope.functionDepth(), location)
+                thisParameterOf(
+                    classScope, label, functionScope.name, functionScope.functionDepth(), location
+                )
             )
         }
 

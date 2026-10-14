@@ -62,7 +62,9 @@ private fun ExecutionOutput(execution: ExecutionResult) {
 
         // Va al final y no arriba: el usuario necesita ver hasta donde llego su
         // programa antes de leer por que se detuvo.
-        execution.runtimeError?.let { error -> RuntimeErrorLine(error.location.line, error.message) }
+        execution.runtimeError?.let { error ->
+            RuntimeErrorLine(error.location.line, error.message)
+        }
     }
 }
 

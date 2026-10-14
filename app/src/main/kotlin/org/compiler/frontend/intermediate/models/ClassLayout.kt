@@ -9,7 +9,8 @@ data class ClassLayout(
     // La posicion de cada entrada es su indice en la lista.
     val methods: List<FunctionLabel>,
 
-    // Cada casilla del objeto en orden: la de la tabla, los campos heredados
+    // Cada casilla del objeto en orden: la de la tabla, los campos heredados y los
+    // propios.
     val fields: List<ActivationRecordField>
 ) {
     // La posicion de un metodo en la tabla, por su nombre. -1 si no esta.

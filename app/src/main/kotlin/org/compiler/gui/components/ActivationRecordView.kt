@@ -54,7 +54,9 @@ internal fun objectRecordOf(layout: ClassLayout): ActivationRecordLayout =
 internal fun methodTableOf(layout: ClassLayout): ActivationRecordLayout =
     ActivationRecordLayout(
         FunctionLabel(layout.className),
-        layout.methods.mapIndexed { slot, method -> ActivationRecordField(method.name, slot * 4, 4) },
+        layout.methods.mapIndexed { slot, method ->
+            ActivationRecordField(method.name, slot * 4, 4)
+        },
         layout.methods.size * 4
     )
 

@@ -51,12 +51,26 @@ sealed interface DagNode {
     // temporal donde quedo su resultado. Un caso por construccion, para que el
     // generador los nombre y el compilador obligue a traducir cada uno.
     sealed interface Subexpression : DagNode {
+        // `a + (c ? 1 : 2)`: cada rama copia su valor al mismo temporal.
         data class Ternary(val expression: TernaryOperation) : Subexpression
+
+        // `let r: boolean = x < y && z;`: `&&` y `||` usados como valor, no como
+        // condicion. Se generan los saltos y se escribe true o false.
         data class LogicalValue(val expression: BinaryOperation) : Subexpression
+
+        // `a + f(2)`: param y call; el resultado queda en un temporal.
         data class Call(val expression: FunctionCall) : Subexpression
+
+        // `new Perro("Toby")`: alloc, la tabla en la casilla 0, $init y constructor.
         data class NewObject(val expression: ObjectCreation) : Subexpression
+
+        // `[10, 20, 30]`: alloc, el largo en la casilla 0 y cada elemento.
         data class NewList(val expression: ArrayLiteral) : Subexpression
+
+        // `p.nombre`: chequeo de null y lectura en el desplazamiento del campo.
         data class FieldAccess(val expression: PropertyAccess) : Subexpression
+
+        // `lista[i]`: chequeos de null y de rango, y lectura del elemento.
         data class ElementAccess(val expression: IndexAccess) : Subexpression
 
         // `x = (p.nombre = "a")` o `x = (lista[i] = 5)`: una asignacion anidada que

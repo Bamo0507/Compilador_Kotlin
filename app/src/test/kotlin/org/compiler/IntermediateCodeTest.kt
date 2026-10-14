@@ -1,13 +1,12 @@
-
 package org.compiler
 
-import java.io.File
 import org.compiler.frontend.intermediate.TacPrinter
 import org.compiler.runtime.CompilerPipeline
 import org.compiler.samples.SampleProgram
 import org.compiler.samples.SamplePrograms
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
+import java.io.File
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -71,7 +70,7 @@ class IntermediateCodeTest {
     private fun goldenFileOf(sample: SampleProgram): File =
         File(goldenFolder, sample.id.removePrefix(VALID_PREFIX) + ".tac")
 
-    // \r\n; el TAC se compara sin ellos.
+    // Un .tac editado en Windows trae \r\n; el TAC se compara sin ellos.
     private fun normalized(text: String): String = text.replace("\r\n", "\n")
 
     private fun assertSameLines(sample: SampleProgram, expected: String, actual: String) {
@@ -79,8 +78,9 @@ class IntermediateCodeTest {
 
         val expectedLines = expected.lines()
         val actualLines = actual.lines()
-        val index = expectedLines.indices.firstOrNull { it >= actualLines.size || expectedLines[it] != actualLines[it] }
-            ?: expectedLines.size
+        val index = expectedLines.indices.firstOrNull { line ->
+            line >= actualLines.size || expectedLines[line] != actualLines[line]
+        } ?: expectedLines.size
 
         fail(
             "El TAC de ${sample.id} no coincide con ${goldenFileOf(sample).name}, " +

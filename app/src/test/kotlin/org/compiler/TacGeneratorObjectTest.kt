@@ -1,5 +1,5 @@
-// Ticket 5.3: new, $init, this, campos y metodos con despacho por tabla. Tambien el
-// chequeo de null del ticket 5.5 sobre objetos.
+// new, $init, this, campos y metodos con despacho por tabla, y el chequeo de null
+// sobre objetos.
 //
 // Se compara el texto del TAC de UNA funcion: la que nombra cada test.
 package org.compiler
@@ -48,11 +48,12 @@ class TacGeneratorObjectTest {
         }
     """.trimIndent()
 
-    private val nullCheckA = listOf("if a != null goto L1", "throw \"Acceso a null (línea 12)\"", "L1:")
+    private val nullCheckA =
+        listOf("if a != null goto L1", "throw \"Acceso a null (línea 12)\"", "L1:")
 
     // ── Las tablas de metodos ──────────────────────────────────────────────
 
-    // Datos estaticos al inicio del TAC, antes del main (decision 46).
+    // Datos estaticos al inicio del TAC, antes del main.
     @Test
     fun `las tablas de metodos van antes del main`() {
         assertEquals(
@@ -108,7 +109,7 @@ class TacGeneratorObjectTest {
         )
     }
 
-    // ── $init (decision 44) ────────────────────────────────────────────────
+    // ── $init ─────────────────────────────────────────────────────────────
 
     // Primero el $init del padre, despues los campos propios con su valor por defecto.
     @Test
@@ -132,7 +133,7 @@ class TacGeneratorObjectTest {
 
     // ── Campos ─────────────────────────────────────────────────────────────
 
-    // El chequeo de null va antes de leer (decision 45).
+    // El chequeo de null va antes de leer.
     @Test
     fun `leer un campo chequea null antes`() {
         val source = "$animals\nlet a: Animal = new Animal(\"x\");\nprint(a.nombre);"
@@ -148,7 +149,10 @@ class TacGeneratorObjectTest {
         val source = "$animals\nlet p: Perro = new Perro(\"x\");\np.raza = \"lab\";"
 
         assertEquals(
-            listOf("if p != null goto L1", "throw \"Acceso a null (línea 12)\"", "L1:", "p[8] = \"lab\""),
+            listOf(
+                "if p != null goto L1", "throw \"Acceso a null (línea 12)\"", "L1:",
+                "p[8] = \"lab\""
+            ),
             body(source, "\$main").drop(8)
         )
     }
@@ -180,7 +184,8 @@ class TacGeneratorObjectTest {
         val source = "$animals\nlet a: Animal = new Perro(\"x\");\nprint(a.hablar());"
 
         assertEquals(
-            nullCheckA + listOf("t1 = a[0]", "t1 = t1[0]", "param a", "t1 = call t1, 1", "print_s t1"),
+            nullCheckA +
+                listOf("t1 = a[0]", "t1 = t1[0]", "param a", "t1 = call t1, 1", "print_s t1"),
             body(source, "\$main").drop(8)
         )
     }
@@ -248,14 +253,17 @@ class TacGeneratorObjectTest {
         val source = "class A { let x: integer; }\nlet a: A = new A();\nlet y: integer = (a.x = 5);"
 
         assertEquals(
-            listOf("if a != null goto L1", "throw \"Acceso a null (línea 3)\"", "L1:", "a[4] = 5", "y = 5"),
+            listOf(
+                "if a != null goto L1", "throw \"Acceso a null (línea 3)\"", "L1:",
+                "a[4] = 5", "y = 5"
+            ),
             body(source, "\$main").drop(5)
         )
     }
 
     // ── La bateria ─────────────────────────────────────────────────────────
 
-    // El objetivo de la fase: el programa completo de la demo genera TAC.
+    // El programa completo de la demo genera TAC.
     @Test
     fun `demo_completa genera TAC`() {
         val demo = assertNotNull(SamplePrograms.byId("validos/demo_completa"))

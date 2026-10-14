@@ -1,4 +1,3 @@
-
 package org.compiler
 
 import org.compiler.runtime.CompilerPipeline
@@ -29,7 +28,8 @@ class InvalidProgramsTest {
                         error.message.contains(expected.fragment)
                 }
 
-                // Cuando este test falla, se ve de inmediato que paso sin correr el programa a mano.
+                // Cuando este test falla, se ve de inmediato que paso sin correr el programa
+                // a mano.
                 assertTrue(
                     matches,
                     "En ${sample.id} se esperaba en la línea ${expected.line} " +
@@ -57,7 +57,7 @@ class InvalidProgramsTest {
             }
         }
 
-    // Decision 18: con errores, el generador de codigo intermedio no corre.
+    // Con errores, el generador de codigo intermedio no corre.
     @TestFactory
     fun `ningun programa invalido genera TAC`(): List<DynamicTest> =
         ValidProgramsTest.programsOf(SampleGroup.INVALID).map { sample ->

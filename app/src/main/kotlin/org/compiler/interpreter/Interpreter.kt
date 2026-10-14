@@ -234,15 +234,17 @@ class Interpreter {
         environment.get("this")
             ?: throw RuntimeError(expr.location, "'this' no está disponible aquí")
 
+    // Como en Java: la lista y el indice se evaluan antes de chequear que la lista no
+    // sea null, el mismo orden que sigue el codigo intermedio.
     private fun evaluateIndexAccess(expr: IndexAccess): RuntimeValue {
-        val array = asArray(evaluate(expr.target), expr.location)
-        return array.elements[boundsCheckedIndex(array, expr)]
+        val container = evaluate(expr.target)
+        val index = asLong(evaluate(expr.index)).toInt()
+        val array = asArray(container, expr.location)
+        return array.elements[boundsCheckedIndex(array, index, expr)]
     }
 
     // El chequeo de rango, compartido por la lectura y la escritura.
-    private fun boundsCheckedIndex(array: ArrayValue, expr: IndexAccess): Int {
-        val index = asLong(evaluate(expr.index)).toInt()
-
+    private fun boundsCheckedIndex(array: ArrayValue, index: Int, expr: IndexAccess): Int {
         if (index < 0 || index >= array.elements.size) {
             throw RuntimeError(expr.location,
                 "Índice fuera de rango: $index (la lista tiene ${array.elements.size} " +
@@ -257,6 +259,16 @@ class Interpreter {
     // ===================================================
 
     private fun evaluateFunctionCall(expr: FunctionCall): RuntimeValue {
+        // En o.m(a), como en Java: primero el objeto, despues los argumentos, y recien
+        // al llamar se chequea que el objeto no sea null.
+        val calleeExpression = expr.callee
+        if (calleeExpression is PropertyAccess) {
+            val receiver = evaluate(calleeExpression.target)
+            val arguments = expr.arguments.map { evaluate(it) }
+            val method = asFunction(memberOf(receiver, calleeExpression), expr.location)
+            return invoke(method, arguments, expr.location)
+        }
+
         val callee = asFunction(evaluate(expr.callee), expr.location)
         val arguments = expr.arguments.map { evaluate(it) }
         return invoke(callee, arguments, expr.location)
@@ -369,9 +381,10 @@ class Interpreter {
         }
 
     // Un acceso a propiedad devuelve un CAMPO o un METODO ligado.
-    private fun evaluatePropertyAccess(expr: PropertyAccess): RuntimeValue {
-        val target = evaluate(expr.target)
+    private fun evaluatePropertyAccess(expr: PropertyAccess): RuntimeValue =
+        memberOf(evaluate(expr.target), expr)
 
+    private fun memberOf(target: RuntimeValue, expr: PropertyAccess): RuntimeValue {
         if (target !is ObjectValue) {
             throw RuntimeError(expr.location,
                 "No se puede acceder a '.${expr.propertyName}' sobre un valor que no es " +
@@ -414,35 +427,41 @@ class Interpreter {
     // ==================================================
 
     private fun executeAssignment(stmt: Assignment) {
-        assignTo(stmt.target, evaluate(stmt.value))
+        assign(stmt.target, stmt.value)
     }
 
     // La misma operacion la necesita AssignmentExpression cuando se usa anidada.
-    private fun evaluateAssignmentExpression(expr: AssignmentExpression): RuntimeValue {
-        val value = evaluate(expr.value)
-        assignTo(expr.target, value)
-        return value // el valor de `x = 5` es 5
-    }
+    private fun evaluateAssignmentExpression(expr: AssignmentExpression): RuntimeValue =
+        assign(expr.target, expr.value) // el valor de `x = 5` es 5
 
-    // Cuerpo de BLOQUE y no `= when (...)`: como expresion, cada rama tendria que
-    // ser una expresion, y el `if` sin `else` de la primera rama no lo es.
-    private fun assignTo(target: Expression, value: RuntimeValue) {
+    // Como en Java: primero el objeto y el indice del destino, despues el valor, y los
+    // chequeos al escribir. En lista[i] = g(), si g cambia i, se escribe en la
+    // posicion que tenia i antes de la llamada.
+    private fun assign(target: Expression, valueExpression: Expression): RuntimeValue {
         when (target) {
             is Identifier -> {
+                val value = evaluate(valueExpression)
                 if (!environment.assign(target.name, value)) {
                     throw RuntimeError(target.location,
                         "La variable '${target.name}' no existe en tiempo de ejecución")
                 }
+                return value
             }
 
             is PropertyAccess -> {
-                val instance = asObject(evaluate(target.target), target.location)
-                instance.fields[target.propertyName] = value
+                val container = evaluate(target.target)
+                val value = evaluate(valueExpression)
+                asObject(container, target.location).fields[target.propertyName] = value
+                return value
             }
 
             is IndexAccess -> {
-                val array = asArray(evaluate(target.target), target.location)
-                array.elements[boundsCheckedIndex(array, target)] = value
+                val container = evaluate(target.target)
+                val index = asLong(evaluate(target.index)).toInt()
+                val value = evaluate(valueExpression)
+                val array = asArray(container, target.location)
+                array.elements[boundsCheckedIndex(array, index, target)] = value
+                return value
             }
 
             else -> error("Destino de asignación no válido: ${target::class.simpleName}")

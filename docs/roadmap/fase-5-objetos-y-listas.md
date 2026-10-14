@@ -87,6 +87,13 @@ de cada campo, incluidos los heredados, el tamaño del objeto y su tabla de mét
 | `class Punto { let x: integer; let y: float; }` | `x` en 4, `y` en 8, tamaño 16 |
 | Una clase sin campos ni métodos | tamaño 4: solo la casilla de la tabla |
 
+**Al implementarlo:** `ClassLayout` guarda también sus casillas como `fields`, con la
+misma forma que los campos de un registro, para que el IDE muestre un objeto con la vista
+del registro de activación. Al revisar la fase aparecieron dos casos que rompían la
+disposición, y los dos pasaron a ser errores semánticos: una clase declarada dentro de un
+bloque, que el generador no encontraba (decisión 56), y un campo heredado declarado otra
+vez en la subclase, que ocupaba una segunda casilla (decisión 57).
+
 ---
 
 ## Ticket 5.2: Las instrucciones de objetos
@@ -230,6 +237,12 @@ parámetros.
 | Una función anidada en un método que usa `this` | `this^1` |
 | El `demo_completa.cps` | genera TAC completo |
 
+**Al implementarlo:** la asignación a un campo o a un elemento usada como valor, como en
+`y = (a.x = 5)`, entró al GDA como un caso nuevo de `Subexpression`, `MemoryAssign`. En
+una llamada a método, el objeto se evalúa antes que los argumentos y el chequeo de `null`
+va justo antes de usarlo, como en Java (decisión 55); el intérprete chequeaba antes de
+evaluar los argumentos y se corrigió.
+
 ---
 
 ## Ticket 5.4: Listas y `foreach`
@@ -318,6 +331,11 @@ Fase 3.
 | `matriz[i][j]` con `integer[][]` | dos accesos encadenados: el primero devuelve una referencia |
 | `foreach` con `continue` | salta a `Lcont` |
 | `tipos_listas.cps` | genera TAC completo |
+
+**Al implementarlo:** el `foreach` guarda su ámbito en `ForEach.scope`, que llena el
+`TypeChecker`, porque la lista y el índice ocultos viven ahí. La lista oculta lleva su
+chequeo de `null` antes del ciclo, igual que cualquier otra lista que se recorre. En
+`lista[i] = e`, la lista y el índice se evalúan antes que el valor (decisión 55).
 
 ---
 

@@ -122,13 +122,11 @@ private fun exportIntermediateCode(state: AppState) {
     }
 }
 
+// programa.cps se exporta como programa.tac, igual que el archivo esperado de la
+// bateria: con el salto de linea final.
 internal fun saveIntermediateCode(file: File, tac: TacProgram): File {
-    val target = if (file.name.endsWith(TAC_EXTENSION, ignoreCase = true)) {
-        file
-    } else {
-        File(file.parentFile, "${file.name}$TAC_EXTENSION")
-    }
-    target.writeText(TacPrinter.print(tac.instructions))
+    val target = File(file.parentFile, "${file.nameWithoutExtension}$TAC_EXTENSION")
+    target.writeText(TacPrinter.print(tac.instructions) + "\n")
     return target
 }
 

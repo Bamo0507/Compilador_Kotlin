@@ -1,5 +1,4 @@
-// Tickets 5.4 y 5.5: listas, acceso por indice, foreach, y los chequeos de null y de
-// rango.
+// Listas, acceso por indice, foreach, y los chequeos de null y de rango.
 //
 // Las listas se declaran en la linea 1 con `lista`, y el codigo probado empieza en la
 // linea 2. Solo se compara lo que genera el codigo probado.
@@ -22,13 +21,15 @@ class TacGeneratorListTest {
         assertTrue(result.errors.isEmpty(), "Errores: ${result.errors.map { it.message }}")
         val tac = assertNotNull(result.tac, "El TAC salio null para:\n$source")
 
-        val all = TacPrinter.print(tac.instructions).lines().map { it.trim() }
-        return all.subList(all.indexOf("begin_func \$main, ${tac.activationRecords.first().size}") + 1,
-            all.indexOf("end_func \$main"))
+        val lines = TacPrinter.print(tac.instructions).lines().map { it.trim() }
+        val mainBegin = "begin_func \$main, ${tac.activationRecords.first().size}"
+        return lines.subList(lines.indexOf(mainBegin) + 1, lines.indexOf("end_func \$main"))
     }
 
+    private val defaultPrelude = "let lista: integer[] = [10, 20, 30]; let i: integer = 1;"
+
     // El main sin las lineas del preludio: `prelude` las declara y no son lo que se prueba.
-    private fun tac(code: String, prelude: String = "let lista: integer[] = [10, 20, 30]; let i: integer = 1;"): List<String> {
+    private fun tac(code: String, prelude: String = defaultPrelude): List<String> {
         val skipped = mainOf(prelude).size
         return mainOf("$prelude\n$code").drop(skipped)
     }
@@ -53,7 +54,9 @@ class TacGeneratorListTest {
     @Test
     fun `una lista de enteros pide 16 bytes y escribe largo y elementos`() {
         assertEquals(
-            listOf("t1 = alloc 16", "t1[0] = 3", "t1[4] = 10", "t1[8] = 20", "t1[12] = 30", "l = t1"),
+            listOf(
+                "t1 = alloc 16", "t1[0] = 3", "t1[4] = 10", "t1[8] = 20", "t1[12] = 30", "l = t1"
+            ),
             tac("let l: integer[] = [10, 20, 30];", prelude = "")
         )
     }
@@ -75,7 +78,10 @@ class TacGeneratorListTest {
 
     @Test
     fun `una lista vacia solo pide la casilla del largo`() {
-        assertEquals(listOf("t1 = alloc 4", "t1[0] = 0", "v = t1"), tac("let v: integer[] = [];", prelude = ""))
+        assertEquals(
+            listOf("t1 = alloc 4", "t1[0] = 0", "v = t1"),
+            tac("let v: integer[] = [];", prelude = "")
+        )
     }
 
     // ── Acceso por indice ──────────────────────────────────────────────────
@@ -120,7 +126,10 @@ class TacGeneratorListTest {
     // Un booleano mide 1: no hace falta multiplicar.
     @Test
     fun `los elementos de un byte no se multiplican`() {
-        val code = tac("print(bs[i]);", prelude = "let bs: boolean[] = [true, false]; let i: integer = 0;")
+        val code = tac(
+            "print(banderas[i]);",
+            prelude = "let banderas: boolean[] = [true, false]; let i: integer = 0;"
+        )
 
         assertTrue("t1 = i + 4" in code)
         assertTrue(code.none { it.contains("*") })
@@ -131,13 +140,17 @@ class TacGeneratorListTest {
     fun `una matriz son dos accesos encadenados`() {
         val code = tac(
             "print(m[i][j]);",
-            prelude = "let m: integer[][] = [[1, 2], [3, 4]]; let i: integer = 0; let j: integer = 1;"
+            prelude = "let m: integer[][] = [[1, 2], [3, 4]]; " +
+                "let i: integer = 0; let j: integer = 1;"
         )
 
         assertEquals(2, code.count { it.startsWith("throw \"Acceso a null") })
         assertEquals(2, code.count { it.startsWith("throw \"Índice fuera de rango") })
         assertTrue("t1 = m[t1]" in code)
-        assertTrue("if t1 != null goto L4" in code, "la fila tambien se chequea:\n${code.joinToString("\n")}")
+        assertTrue(
+            "if t1 != null goto L4" in code,
+            "la fila tambien se chequea:\n${code.joinToString("\n")}"
+        )
         assertTrue("t1 = t1[t2]" in code)
     }
 

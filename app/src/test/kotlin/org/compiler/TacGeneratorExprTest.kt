@@ -231,8 +231,7 @@ class TacGeneratorExprTest {
         assertNotNull(compile("let a: integer = 1;\nprint(a);").tac)
     }
 
-    // Desde la Fase 5 todo programa valido se traduce: las clases, que eran lo ultimo
-    // pendiente, ya generan su TAC.
+    // Las clases tambien se traducen: todo programa valido tiene TAC.
     @Test
     fun `un programa con clases tambien trae su TAC`() {
         val result = compile("class A { }\nlet a: A = new A();")

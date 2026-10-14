@@ -4,9 +4,7 @@ import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.AstBuilder
 import org.compiler.frontend.ast.models.Program
 import org.compiler.frontend.intermediate.StorageAllocator
-import org.compiler.frontend.intermediate.StorageLayout
 import org.compiler.frontend.intermediate.TacGenerator
-import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.semantic.DeclarationCollector
 import org.compiler.frontend.semantic.FlowAnalyzer
 import org.compiler.frontend.semantic.LivenessReportBuilder
@@ -61,7 +59,7 @@ object CompilerPipeline {
         // su lugar en memoria, y despues el generador lo usa.
         val storageLayout =
             if (!diagnostics.hasErrors) StorageAllocator().allocate(collector.globalScope) else null
-        val tac = storageLayout?.let { generateIntermediateCode(ast, it) }
+        val tac = storageLayout?.let { TacGenerator(it).generate(ast) }
 
         return CompilationResult(
             source = source,
@@ -75,15 +73,4 @@ object CompilerPipeline {
             storageLayout = storageLayout
         )
     }
-
-    // Lo que el generador todavia no traduce (un `while`, una llamada) es un TODO, que
-    // lanza NotImplementedError. Se atrapa SOLO ese: el programa es valido y el IDE no
-    // debe caerse, pero cualquier otra excepcion es un bug del generador y tiene que
-    // verse.
-    private fun generateIntermediateCode(ast: Program, storageLayout: StorageLayout): TacProgram? =
-        try {
-            TacGenerator(storageLayout).generate(ast)
-        } catch (pending: NotImplementedError) {
-            null
-        }
 }

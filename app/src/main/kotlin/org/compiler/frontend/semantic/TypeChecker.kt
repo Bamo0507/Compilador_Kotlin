@@ -881,7 +881,10 @@ class TypeChecker(
             when (member) {
                 // Los campos ya los declaro la Pasada 1: aqui solo se verifica su
                 // inicializador, que esa pasada no evalua.
-                is VariableDeclaration -> checkFieldInitializer(member)
+                is VariableDeclaration -> {
+                    checkFieldRedeclaration(member, classScope)
+                    checkFieldInitializer(member)
+                }
                 is FunctionDeclaration -> checkFunctionDeclaration(member)
                 else -> Unit
             }
@@ -890,7 +893,18 @@ class TypeChecker(
         currentScope = previousScope
     }
 
-    // Sin esto, `class A { let x: integer = "hola"; }` pasaria sin error.
+    // Un objeto tiene una sola casilla por nombre: si la subclase declarara otra vez un
+    // campo heredado, los metodos de la superclase leerian una casilla y los de la
+    // subclase otra.
+    private fun checkFieldRedeclaration(decl: VariableDeclaration, classScope: Scope) {
+        val superclass = classScope.superclass ?: return
+        if (superclass.lookupMember(decl.name) == null) return
+
+        report(decl, "El campo '${decl.name}' ya se hereda de '${superclass.name}': " +
+            "no se puede declarar otra vez")
+    }
+
+        // Sin esto, `class A { let x: integer = "hola"; }` pasaria sin error.
     private fun checkFieldInitializer(decl: VariableDeclaration) {
         val initializer = decl.initializer?.let { checkExpression(it) } ?: return
         val declaredType = currentScope.lookupLocal(decl.name)?.type ?: return

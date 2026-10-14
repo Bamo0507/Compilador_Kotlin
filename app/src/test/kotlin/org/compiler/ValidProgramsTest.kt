@@ -38,7 +38,7 @@ class ValidProgramsTest {
             }
         }
 
-    // Desde la Fase 5 todo programa valido se traduce: ninguno se queda sin TAC.
+    // Todo programa valido se traduce: ninguno se queda sin TAC.
     @TestFactory
     fun `cada programa valido genera TAC`(): List<DynamicTest> =
         programsOf(SampleGroup.VALID).map { sample ->

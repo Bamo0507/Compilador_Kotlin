@@ -39,7 +39,7 @@ class ActivationRecordViewTest {
         )
     }
 
-    // ── La clase seleccionada en la tabla de simbolos (Fase 5) ─────────────
+    // ── La clase seleccionada en la tabla de simbolos ─────────────────────
 
     private val perro = ClassLayout(
         className = "Perro",

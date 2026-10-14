@@ -26,7 +26,8 @@ class StorageAllocatorTest {
         return result
     }
 
-    private fun layoutOf(result: CompilationResult): StorageLayout = assertNotNull(result.storageLayout)
+    private fun layoutOf(result: CompilationResult): StorageLayout =
+        assertNotNull(result.storageLayout)
 
     private fun Scope.child(name: String): Scope = children.single { it.name == name }
 
@@ -101,7 +102,9 @@ class StorageAllocatorTest {
     @Test
     fun `una funcion anidada lleva el camino de las que la contienen`() {
         val layout = layoutOf(
-            compile("function externa() { function sumar(): integer { return 1; } print(sumar()); }")
+            compile(
+                "function externa() { function sumar(): integer { return 1; } print(sumar()); }"
+            )
         )
 
         val names = layout.functions.values.map { it.function.name }
@@ -140,7 +143,7 @@ class StorageAllocatorTest {
         assertNull(global.child("fibonacci").symbol("n").tacName)
     }
 
-    // ── Las clases (Fase 5) ────────────────────────────────────────────────
+    // ── Las clases ────────────────────────────────────────────────────────
 
     private val animals = """
         class Animal {
@@ -169,7 +172,10 @@ class StorageAllocatorTest {
         assertEquals(8, layout.size)
         assertEquals(labels("Animal.hablar", "Animal.comer"), layout.methods)
         assertEquals(
-            listOf(ActivationRecordField("tabla de métodos", 0, 4), ActivationRecordField("nombre", 4, 4)),
+            listOf(
+                ActivationRecordField("tabla de métodos", 0, 4),
+                ActivationRecordField("nombre", 4, 4)
+            ),
             layout.fields
         )
     }
@@ -257,7 +263,7 @@ class StorageAllocatorTest {
     }
 
     // El segundo foreach de la misma funcion lleva la linea, como dos variables con el
-    // mismo nombre (decision 41).
+    // mismo nombre.
     @Test
     fun `dos foreach en la misma funcion no se confunden en el TAC`() {
         val result = compile(

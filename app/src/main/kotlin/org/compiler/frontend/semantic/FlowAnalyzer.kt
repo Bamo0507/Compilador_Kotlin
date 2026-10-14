@@ -30,6 +30,7 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
 
     private var loopDepth = 0
     private var functionDepth = 0
+    private var blockDepth = 0
 
     fun analyze(program: Program) {
         analyzeStatements(program.statements)
@@ -44,7 +45,7 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
         checkUnreachable(statements)
     }
 
-    private fun analyzeBlock(block: Block) = analyzeStatements(block.statements)
+    private fun analyzeBlock(block: Block) = withinBlock { analyzeStatements(block.statements) }
 
     private fun analyzeStatement(stmt: Statement) {
         when (stmt) {
@@ -80,11 +81,25 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
                 analyzeBlock(stmt.catchBlock)
             }
 
-            is ClassDeclaration -> stmt.members.forEach { analyzeStatement(it) }
+            // La Pasada 1 solo registra las clases del nivel superior: una dentro de un
+            // bloque no tendria tipo ni disposicion en memoria.
+            is ClassDeclaration -> {
+                if (blockDepth > 0) {
+                    report(stmt, "La clase '${stmt.name}' solo se puede declarar en el " +
+                        "nivel superior")
+                }
+                stmt.members.forEach { analyzeStatement(it) }
+            }
 
             // Las demas no afectan el flujo.
             else -> Unit
         }
+    }
+
+    private inline fun withinBlock(body: () -> Unit) {
+        blockDepth += 1
+        body()
+        blockDepth -= 1
     }
 
     private inline fun withinLoop(body: () -> Unit) {
@@ -98,7 +113,7 @@ class FlowAnalyzer(private val diagnostics: Diagnostics) {
     //
     // Y dentro de un bucle, ese break rompe el BUCLE: Compiscript no tiene break de
     // switch, porque no hay fall-through.
-    private fun analyzeSwitch(stmt: Switch) {
+    private fun analyzeSwitch(stmt: Switch) = withinBlock {
         stmt.cases.forEach { analyzeStatements(it.body) }
         stmt.defaultBody?.let { analyzeStatements(it) }
     }

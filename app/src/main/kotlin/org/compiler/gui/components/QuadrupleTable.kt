@@ -53,10 +53,11 @@ fun QuadrupleTable(instructions: List<Quadruple>) {
 
 @Composable
 private fun TableCell(value: String, width: Dp, header: Boolean = false) {
+    val typography = MaterialTheme.typography
     Text(
         text = value,
         modifier = Modifier.width(width).padding(vertical = 5.dp),
-        style = if (header) MaterialTheme.typography.labelMedium else MaterialTheme.typography.bodySmall,
+        style = if (header) typography.labelMedium else typography.bodySmall,
         fontFamily = if (header) null else FontFamily.Monospace,
         fontWeight = if (header) FontWeight.SemiBold else null,
         softWrap = false

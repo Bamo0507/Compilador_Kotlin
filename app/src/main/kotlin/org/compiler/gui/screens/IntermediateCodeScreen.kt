@@ -63,7 +63,9 @@ fun IntermediateCodeScreen(state: AppState, modifier: Modifier = Modifier) {
 
         when {
             result == null -> Text("Presiona compilar para ver el código intermedio.")
-            result.hasErrors -> Text("No disponible: el programa tiene errores. Revísalos en el Editor.")
+            result.hasErrors -> Text(
+                "No disponible: el programa tiene errores. Revísalos en el Editor."
+            )
             tac == null -> Text("No disponible: no se generó código intermedio.")
             view == IntermediateView.TAC -> TacText(tac.instructions)
             else -> QuadrupleTable(tac.instructions)
