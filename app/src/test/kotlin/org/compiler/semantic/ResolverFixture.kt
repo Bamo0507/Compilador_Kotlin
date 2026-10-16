@@ -1,7 +1,12 @@
 package org.compiler.semantic
 
+import org.compiler.catalog.AutoIncrement
 import org.compiler.catalog.Catalog
 import org.compiler.catalog.Column
+import org.compiler.catalog.Default
+import org.compiler.catalog.ForeignKey
+import org.compiler.catalog.NotNull
+import org.compiler.catalog.PrimaryKey
 import org.compiler.catalog.Table
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.SqlAstBuilder
@@ -18,7 +23,9 @@ import org.compiler.frontend.ast.models.Query
 import org.compiler.frontend.ast.models.Script
 import org.compiler.frontend.ast.models.SelectExpression
 import org.compiler.frontend.ast.models.Unary
+import org.compiler.diagnostics.Severity
 import org.compiler.frontend.semantic.NameResolver
+import org.compiler.frontend.semantic.SqlChecker
 import org.compiler.frontend.semantic.symbols.Scope
 import org.compiler.frontend.syntax.SqlSyntaxAnalyzer
 import org.compiler.storage.DataDirectory
@@ -36,14 +43,14 @@ import kotlin.test.assertNotNull
  * calificar cuando se las une.
  */
 val users = Table("users", listOf(
-    Column("id", IntType, emptyList()),
-    Column("name", VarcharType(80), emptyList()),
+    Column("id", IntType, listOf(PrimaryKey, AutoIncrement)),
+    Column("name", VarcharType(80), listOf(NotNull)),
     Column("city", VarcharType(40), emptyList())
 ))
 
 val posts = Table("posts", listOf(
-    Column("uid", IntType, emptyList()),
-    Column("title", VarcharType(120), emptyList()),
+    Column("uid", IntType, listOf(ForeignKey("users", "id"))),
+    Column("title", VarcharType(120), listOf(NotNull, Default("sin titulo"))),
     Column("city", VarcharType(40), emptyList())
 ))
 
@@ -51,6 +58,8 @@ val catalog = Catalog(mapOf("users" to users, "posts" to posts))
 
 class Resolved(val global: Scope, val script: Script, val diagnostics: Diagnostics) {
     val errors: List<String> get() = diagnostics.all().map { it.message }
+    val failures: List<String> get() = diagnostics.all().filter { it.severity == Severity.ERROR }.map { it.message }
+    val warnings: List<String> get() = diagnostics.warnings().map { it.message }
     val queries: List<Query> get() = script.statements.filterIsInstance<Query>()
     val query: Query get() = queries.single()
     val scope: Scope get() = assertNotNull(query.scope)
@@ -76,6 +85,21 @@ fun clean(root: File, sql: String): Resolved {
     val resolved = resolve(root, sql)
     kotlin.test.assertEquals(emptyList(), resolved.errors, "Reporto: $sql")
     return resolved
+}
+
+// Las dos etapas semanticas, que es como corren de verdad.
+fun checked(root: File, sql: String): Resolved {
+    val resolved = resolve(root, sql)
+    SqlChecker(catalog, DataDirectory(root), resolved.diagnostics).check(resolved.script)
+    return resolved
+}
+
+// Un CSV con encabezado y filas, para las reglas que necesitan saber si la tabla
+// ya tiene datos.
+fun withRows(root: File, table: Table, rows: Int) {
+    val header = table.columns.joinToString(",") { it.name }
+    val row = table.columns.joinToString(",") { "x" }
+    File(root, "${table.name}.csv").writeText(header + "\r\n" + (row + "\r\n").repeat(rows))
 }
 
 // ── Para hurgar en el AST ya resuelto ──────────────────────────────────────

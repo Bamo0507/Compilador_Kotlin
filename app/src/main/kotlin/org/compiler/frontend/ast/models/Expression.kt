@@ -112,4 +112,13 @@ class Aggregate(
     override var type: Type = ErrorType
 }
 
-enum class AggregateFunction { COUNT, COUNT_ALL, SUM, AVG, MIN, MAX }
+// La etiqueta es como sale en un mensaje de error: COUNT(*) y COUNT(x) son dos
+// nodos distintos pero la misma funcion para quien lee.
+enum class AggregateFunction(val label: String) {
+    COUNT("COUNT"),
+    COUNT_ALL("COUNT"),
+    SUM("SUM"),
+    AVG("AVG"),
+    MIN("MIN"),
+    MAX("MAX")
+}

@@ -69,6 +69,12 @@ class Scope(
         return Resolution(outer.symbol, level = outer.level + 1)
     }
 
+    // Pisa un simbolo ya declarado conservando su lugar. La fase 5 lo usa para
+    // refrescar las columnas de una tabla derivada una vez que quedaron tipadas.
+    fun redeclare(symbol: Symbol) {
+        symbols[symbol.name] = symbol
+    }
+
     // Solo ESTE nivel, sin subir. Para detectar un alias repetido en el mismo FROM.
     fun lookupLocal(name: String): Symbol? = symbols[name]
 

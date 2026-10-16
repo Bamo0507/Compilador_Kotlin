@@ -174,8 +174,9 @@ error confuso tres etapas más adelante.
 
 **Por qué aquí y no en el `CatalogLoader`:** el cargador no abre CSV, por la regla
 de esquema ansioso y datos perezosos. Esta fase ya sabe cuáles tablas se van a
-tocar, así que revisa solo esas. Las tablas que toca un `INSERT` o un `DELETE` las
-revisa la fase 5, que es donde se resuelven.
+tocar, así que revisa solo esas, incluidas las de un `INSERT`, un `UPDATE` o un
+`DELETE`. Una tabla creada en el mismo script todavía no tiene archivo, así que la
+guarda la salta.
 
 ### El ámbito de una tabla derivada cuelga del global
 

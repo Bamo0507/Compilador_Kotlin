@@ -167,13 +167,25 @@ class ColumnResolutionTest {
         assertEquals(0, reference.level)
     }
 
+    // El mensaje dice por que, no solo que no esta: el SELECT se calcula despues
+    // del WHERE, asi que el nombre existe pero todavia no.
     @Test
-    fun `el mismo alias en el WHERE reporta`(@TempDir root: File) {
+    fun `el mismo alias en el WHERE reporta que se define despues`(@TempDir root: File) {
+        healthy(root, users)
+
+        assertEquals(
+            listOf("'doble' se define en el SELECT y no esta disponible en WHERE"),
+            resolve(root, "SELECT id + 1 AS doble FROM users WHERE doble > 40;").errors
+        )
+    }
+
+    @Test
+    fun `un alias no se puede usar en la misma lista donde se define`(@TempDir root: File) {
         healthy(root, users)
 
         assertEquals(
             listOf("no existe la columna 'doble'"),
-            resolve(root, "SELECT id + 1 AS doble FROM users WHERE doble > 40;").errors
+            resolve(root, "SELECT id + 1 AS doble, doble + 1 FROM users;").errors
         )
     }
 

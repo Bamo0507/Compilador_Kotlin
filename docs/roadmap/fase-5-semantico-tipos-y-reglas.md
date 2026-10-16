@@ -40,28 +40,28 @@ alias todavía no existe. En `ORDER BY` sí, porque va después.
 
 ## Ticket 5.1 · Tipado de expresiones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.5, 4.3, 4.5
 
 **Archivos:**
 
 - `frontend/semantic/SqlChecker.kt` (NUEVO)
-- `app/src/test/.../TipadoExpresionesTest.kt` (NUEVO)
+- `app/src/test/.../ExpressionTypingTest.kt` (NUEVO)
 
 **Qué es esto, en simple:** recorrer cada expresión de abajo hacia arriba
 preguntándole a `TypeRules` si lo que se hace tiene sentido, y dejar el tipo
 pegado en el nodo.
 
 ```kotlin
-private fun tipar(expression: Expression): Type {
+private fun typeOf(expression: Expression): Type {
     val type = when (expression) {
-        is Literal -> expression.tipoLiteral
+        is Literal -> expression.literalType
         is ColumnReference -> expression.symbol?.type ?: ErrorType
         is Binary -> {
-            val izq = tipar(expression.izquierda)
-            val der = tipar(expression.derecha)
-            TypeRules.binaryResultType(expression.operator, izq, der)
-                ?: reportar(expression, "no se puede aplicar ...")
+            val left = typeOf(expression.left)
+            val right = typeOf(expression.right)
+            TypeRules.binaryResultType(expression.operator, left, right)
+                ?: fail(expression.location, "no se puede aplicar ...")
         }
         // ...
     }
@@ -77,23 +77,30 @@ mutable con guardar y restaurar, igual que en Compiscript.
 `ErrorType` corta cascadas: cualquier operación con un `ErrorType` da `ErrorType`
 sin reportar de nuevo, así que `(1 + 'a') * 2` reporta **un** error.
 
+**Los mensajes salen todos con la misma forma:**
+`no se puede aplicar + entre INT y VARCHAR(1)`, con los dos tipos nombrados. Los
+unarios tienen el suyo, porque "aplicar" suena raro con un solo operando:
+`no se puede negar VARCHAR(80), se esperaba un tipo numerico`.
+
 **Aceptación:**
 
 - cada nodo de expresión queda con `type` distinto de `ErrorType` en SQL válido
 - `1 + 'a'` reporta exactamente un error, no dos
-- `WHERE fecha > TIME '10:00:00'` reporta incompatibilidad de familias
+- `DATE '2026-01-01' > TIME '10:00:00'` reporta incompatibilidad de familias
+- una columna que no se resolvió no genera errores de tipo encima
 
 ---
 
 ## Ticket 5.2 · Reglas de la consulta
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.1, 4.5
 
 **Archivos:**
 
 - `frontend/semantic/SqlChecker.kt` (MODIFICA)
-- `app/src/test/.../ReglasConsultaTest.kt` (NUEVO)
+- `frontend/semantic/NameResolver.kt` (MODIFICA, la regla del alias)
+- `app/src/test/.../QueryRulesTest.kt` (NUEVO)
 
 | Regla | Mensaje |
 |---|---|
@@ -107,8 +114,21 @@ sin reportar de nuevo, así que `(1 + 'a') * 2` reporta **un** error.
 | alias de salida repetidos | `hay dos columnas llamadas 'total' en el resultado` |
 | `= NULL` en vez de `IS NULL` | advertencia: `= NULL nunca es verdadero, se esperaba IS NULL` |
 
-**Las dos reglas de alias las hace cumplir `schemaOf`**, del ticket 4.5: él es
-quien sabe qué nombres produce el `SELECT` y qué cláusulas pueden verlos.
+**La regla del alias terminó en el `NameResolver`, no aquí.** El checker no puede
+hacerla cumplir porque no sabe qué nombres fallaron: cuando le llega la expresión,
+la referencia ya quedó sin símbolo. Quien lo sabe es el resolutor, en el momento
+exacto en que la búsqueda no encuentra nada, así que el mensaje se arma ahí. Cada
+cláusula se resuelve sabiendo su nombre y los alias que el `SELECT` declara, y de
+ahí salen los dos mensajes:
+
+```
+'doble' se define en el SELECT y no esta disponible en WHERE
+no existe la columna 'doble'
+```
+
+El segundo es el de `SELECT id + 1 AS doble, doble + 1 FROM users`: dentro de la
+misma lista el alias todavía no existe, así que ahí el nombre no se "define
+después", simplemente no está.
 
 ### Las advertencias no detienen el script
 
@@ -132,22 +152,27 @@ es depender de un detalle de implementación. La advertencia lo dice.
 evaluación:** es la pregunta obvia de la defensa, y la respuesta es el diagrama de
 arriba.
 
+**La regla de los alias repetidos mira solo los `AS` escritos.** Que un
+`SELECT *` sobre un join repita un nombre de columna es normal y no se toca.
+
 **Aceptación:** una prueba por fila de la tabla, más
 
 - un script con solo advertencias **se ejecuta**, y `hasErrors` es `false`
 - la advertencia aparece igual en la lista de errores, con su severidad
+- `SELECT *` sobre un join con un nombre repetido no reporta
 
 ---
 
 ## Ticket 5.3 · Reglas de agregación
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.2
 
 **Archivos:**
 
 - `frontend/semantic/SqlChecker.kt` (MODIFICA)
-- `app/src/test/.../ReglasAgregacionTest.kt` (NUEVO)
+- `frontend/ast/models/Expression.kt` (MODIFICA, la etiqueta de cada función)
+- `app/src/test/.../AggregationRulesTest.kt` (NUEVO)
 
 **Es la regla semántica más interesante del proyecto**, porque no se resuelve
 mirando un nodo aislado: necesita el contexto de toda la consulta.
@@ -194,6 +219,22 @@ cuál de los cinco debería salir, así que no tiene respuesta.
 **Por qué `AVG` siempre da `FLOAT`:** el promedio de enteros casi nunca es entero,
 y devolver `INT` truncando sería una sorpresa silenciosa.
 
+### Dos cosas que este ticket no listaba
+
+**La regla alcanza también al `HAVING` y al `ORDER BY`.** `HAVING name = 'ana'`
+sobre una consulta agrupada por `city` tiene el mismo problema que ponerlo en el
+`SELECT`: hay un grupo y cinco nombres. Es el mismo chequeo y la misma función, así
+que cubrirlos fue gratis. Las referencias a un alias del `SELECT` quedan fuera,
+porque esas nombran la fila de salida.
+
+**`SELECT *` con `GROUP BY`.** El `*` se expande a todas las columnas y casi
+ninguna está agrupada, así que en vez de un error por columna sale uno solo:
+`'*' no se puede usar en una consulta agrupada, nombre las columnas`.
+
+`COUNT(*)` y `COUNT(x)` son dos nodos distintos del AST pero la misma función para
+quien lee el error, así que `AggregateFunction` ganó una etiqueta y los dos dicen
+`COUNT`.
+
 **Aceptación:** una prueba por regla, más el caso de que `SELECT COUNT(*) FROM
 users` sin `GROUP BY` es válido, porque agrupa todo en un solo grupo.
 
@@ -201,13 +242,14 @@ users` sin `GROUP BY` es válido, porque agrupa todo en un solo grupo.
 
 ## Ticket 5.4 · Reglas de subconsulta
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.2
 
 **Archivos:**
 
 - `frontend/semantic/SqlChecker.kt` (MODIFICA)
-- `app/src/test/.../ReglasSubconsultaTest.kt` (NUEVO)
+- `frontend/semantic/symbols/Scope.kt` (MODIFICA, `redeclare`)
+- `app/src/test/.../SubqueryRulesTest.kt` (NUEVO)
 
 | Forma | Regla | Mensaje |
 |---|---|---|
@@ -232,7 +274,14 @@ para referencias simples a columna, que heredan su nombre.
 **Refrescar el esquema de una tabla derivada:** la fase 4 declara sus columnas con
 `schemaOf`, pero una columna calculada queda en `ErrorType` porque todavía no se
 tipaba nada. Al terminar de tipar una subconsulta del `FROM`, este ticket vuelve a
-pedirle el esquema y reemplaza la `Table` del símbolo del origen.
+pedirle el esquema y reemplaza la `Table` del símbolo del origen, con
+`Scope.redeclare`.
+
+Reemplazar el símbolo no alcanza: las referencias de la consulta de afuera ya
+quedaron pegadas al esquema viejo. Por eso, después de refrescar, se repasan las
+referencias de esa consulta que siguen en `ErrorType` y se vuelven a resolver
+contra el ámbito, que ahora sí tiene los tipos. Solo se tocan esas, así que una
+referencia que ya estaba bien no se mueve.
 
 **Aceptación:** una prueba por fila, una subconsulta de tres niveles válida pasa
 sin errores, y `FROM (SELECT edad * 2 AS doble FROM users) x` deja `x.doble` con
@@ -242,13 +291,38 @@ tipo.
 
 ## Ticket 5.5 · Reglas de DML y DDL
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.1
 
 **Archivos:**
 
 - `frontend/semantic/SqlChecker.kt` (MODIFICA)
-- `app/src/test/.../ReglasDmlDdlTest.kt` (NUEVO)
+- `frontend/semantic/CatalogEvolution.kt` (NUEVO)
+- `frontend/semantic/NameResolver.kt` (MODIFICA, el WHERE del DML)
+- `app/src/test/.../DmlDdlRulesTest.kt` (NUEVO)
+
+### Dos huecos de la fase 4 que este ticket destapó
+
+**El catálogo tiene que avanzar con el script.** `CREATE TABLE t (...);` seguido de
+`INSERT INTO t ...` es lo primero que escribe cualquiera, y con un catálogo fijo la
+segunda línea reportaba que la tabla no existe. De ahí sale `Catalog.after`, que
+devuelve el catálogo como queda después de una sentencia y que usan por igual el
+resolutor y el checker:
+
+```kotlin
+fun Catalog.after(statement: Statement): Catalog
+```
+
+**El `WHERE` de un `UPDATE` o un `DELETE` nombra columnas.** La fase 4 solo
+recorría los `SELECT`, así que esas referencias llegaban sin símbolo y no había
+nada que tipar. Ahora el resolutor abre un ámbito con la tabla del `UPDATE` o el
+`DELETE` y resuelve su `WHERE` y sus asignaciones, igual que haría con un `FROM` de
+una sola tabla. Si la tabla no existe no resuelve nada, para que un nombre mal
+escrito no dé además un error por cada columna.
+
+La guarda de cordura estructural del ticket 4.2 pasó a correr también sobre estas
+tablas, que es donde dice el propio 4.2 que haría falta. Una tabla creada en el
+mismo script todavía no tiene archivo, así que la guarda la salta.
 
 ### `INSERT`
 
@@ -259,7 +333,8 @@ tipo.
 | Cada valor es asignable a su columna | `no se puede guardar VARCHAR en la columna 'edad' de tipo INT` |
 | Un literal de texto cabe en el largo | `'abcdefgh' no cabe en VARCHAR(5)` |
 | Columnas omitidas tienen `DEFAULT`, `AUTOINCREMENT` o aceptan nulos | `la columna 'name' no acepta nulos y no tiene valor por omision` |
-| Las columnas nombradas existen y no se repiten | |
+| Las columnas nombradas existen y no se repiten | `la columna 'id' se nombra dos veces` |
+| Un `NULL` explícito en una columna que no los acepta | `la columna 'name' no acepta nulos` |
 
 El chequeo de largo se hace **solo sobre literales**, porque una expresión como
 `name || apellido` no tiene largo conocido hasta ejecutarla. Ese caso lo atrapa la
@@ -286,12 +361,12 @@ validación de escritura de la fase 7.
 | `NOT NULL` y `NULL` no juntos | `'name' se declara NOT NULL y NULL a la vez` |
 | `AUTOINCREMENT` solo sobre `INT` | `AUTOINCREMENT solo aplica a INT` |
 | `DEFAULT` del tipo de la columna | `el valor por omision de 'edad' no es INT` |
-| `DEFAULT` y `AUTOINCREMENT` no juntos | |
+| `DEFAULT` y `AUTOINCREMENT` no juntos | `'id' no puede tener DEFAULT y AUTOINCREMENT a la vez` |
 | `REFERENCES` apunta a tabla y columna que existen | |
 | La columna referenciada es `PRIMARY KEY` o `UNIQUE` | `'posts.uid' referencia 'users.name', que no es unica` |
-| Los tipos de la FK coinciden | |
+| Los tipos de la FK coinciden | `'posts.uid' es VARCHAR(5) y 'users.id' es INT` |
 | `DECIMAL(p,s)` con `s <= p` y ambos positivos | `DECIMAL(2,5) no es valido: la escala excede la precision` |
-| `CHAR(n)` y `VARCHAR(n)` con `n > 0` | |
+| `CHAR(n)` y `VARCHAR(n)` con `n > 0` | `CHAR(0) no es valido: el largo debe ser mayor que cero` |
 
 ### `ALTER TABLE`
 
@@ -321,5 +396,10 @@ Sus reglas viven en el **ticket 8.5**, junto al resto de los índices. Dos de el
 tocan sentencias de esta fase: `ALTER TABLE ... DROP COLUMN` sobre una columna
 indexada falla, y `DROP TABLE` se lleva los `.idx` de la tabla.
 
-**Aceptación:** una prueba por fila de las cinco tablas. Son alrededor de 35
+**Una tabla no se estorba a sí misma.** Si una tabla se referencia a sí misma, esa
+FK no impide borrarla ni quitarle la columna: las referencias que bloquean son las
+de las demás.
+
+**Aceptación:** una prueba por fila de las cinco tablas, más que una tabla creada
+arriba se pueda usar abajo y que una borrada arriba ya no exista abajo. Son 45
 casos y es la batería más grande de la fase, pero cada uno es de tres líneas.

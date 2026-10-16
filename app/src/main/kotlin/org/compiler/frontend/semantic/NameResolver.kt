@@ -8,20 +8,24 @@ import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.models.Aggregate
 import org.compiler.frontend.ast.models.Binary
 import org.compiler.frontend.ast.models.ColumnReference
+import org.compiler.frontend.ast.models.Delete
 import org.compiler.frontend.ast.models.DerivedSource
 import org.compiler.frontend.ast.models.Exists
 import org.compiler.frontend.ast.models.Expression
 import org.compiler.frontend.ast.models.FromSource
 import org.compiler.frontend.ast.models.InList
 import org.compiler.frontend.ast.models.InSubquery
+import org.compiler.frontend.ast.models.Insert
 import org.compiler.frontend.ast.models.IsNull
 import org.compiler.frontend.ast.models.Literal
 import org.compiler.frontend.ast.models.Query
 import org.compiler.frontend.ast.models.Script
 import org.compiler.frontend.ast.models.SelectExpression
 import org.compiler.frontend.ast.models.SelectTableAll
+import org.compiler.frontend.ast.models.Statement
 import org.compiler.frontend.ast.models.TableSource
 import org.compiler.frontend.ast.models.Unary
+import org.compiler.frontend.ast.models.Update
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.DeclareResult
 import org.compiler.frontend.semantic.symbols.Scope
@@ -46,8 +50,12 @@ class NameResolver(
     private val diagnostics: Diagnostics
 ) {
 
-    // El ambito raiz, con la base completa. Es lo que el IDE dibuja arriba.
+    // El ambito raiz, con la base como estaba al arrancar. Es lo que el IDE dibuja.
     private val global = Scope(ScopeKind.GLOBAL, GLOBAL_SCOPE, parent = null)
+
+    // El catalogo como va quedando: un script puede crear una tabla y usarla en la
+    // linea siguiente.
+    private var working = catalog
 
     // Una tabla se revisa una sola vez por corrida, aunque el script la use diez.
     private val checked = mutableSetOf<String>()
@@ -69,8 +77,55 @@ class NameResolver(
     }
 
     fun resolve(script: Script): Scope {
-        script.statements.filterIsInstance<Query>().forEach { resolveQuery(it, global, emptyList()) }
+        script.statements.forEach { statement ->
+            when (statement) {
+                is Query -> resolveQuery(statement, global, emptyList())
+                is Insert, is Update, is Delete -> resolveStatement(statement)
+                else -> {}
+            }
+            working = working.after(statement)
+        }
         return global
+    }
+
+    /**
+     * El WHERE de un UPDATE o un DELETE nombra columnas de su tabla, igual que el
+     * de un SELECT, solo que sin alias ni JOIN.
+     *
+     * Que la tabla no exista lo reporta la fase 5: si ademas se resolvieran sus
+     * columnas, un nombre de tabla mal escrito daria un error por cada columna.
+     */
+    private fun resolveStatement(statement: Statement) {
+        when (statement) {
+            is Insert -> {
+                working.table(statement.table)?.let { checkStructure(it, statement.location) }
+                // Un INSERT no puede nombrar columnas de la tabla que llena, pero
+                // si traer una subconsulta.
+                statement.rows.flatten().forEach { resolveExpression(it, global, emptyList(), Clause("VALUES")) }
+            }
+
+            is Update -> {
+                val scope = tableScope(statement.table, statement.location) ?: return
+                statement.assignments.forEach { resolveExpression(it.value, scope, emptyList(), Clause("SET")) }
+                resolveExpression(statement.where, scope, emptyList(), Clause("WHERE"))
+            }
+
+            is Delete -> {
+                val scope = tableScope(statement.table, statement.location) ?: return
+                resolveExpression(statement.where, scope, emptyList(), Clause("WHERE"))
+            }
+
+            else -> {}
+        }
+    }
+
+    private fun tableScope(name: String, location: LexemeLocation): Scope? {
+        val table = working.table(name) ?: return null
+
+        checkStructure(table, location)
+        val scope = global.openChild(ScopeKind.QUERY, "statement@${location.line}")
+        declare(scope, name, DeclarationKind.TABLE, table, offset = 0, location = location)
+        return scope
     }
 
     /**
@@ -85,21 +140,28 @@ class NameResolver(
         val scope = parent.openChild(ScopeKind.QUERY, "query@${query.location.line}")
         query.scope = scope
         val stack = enclosing + query
+        val aliases = query.selection.filterIsInstance<SelectExpression>().mapNotNull { it.alias }.toSet()
 
         // El desplazamiento se acumula: en un JOIN la fila de trabajo es la
         // concatenacion de las dos, y el segundo origen arranca donde acaba el primero.
         var offset = declareSource(query.source, scope, offset = 0)
         query.joins.forEach { offset = declareSource(it.source, scope, offset) }
 
-        query.joins.forEach { resolveExpression(it.condition, scope, stack) }
-        query.selection.filterIsInstance<SelectExpression>().forEach { resolveExpression(it.expression, scope, stack) }
+        // El SELECT va con el conjunto vacio: un alias no se puede usar en la
+        // misma lista donde se define.
+        query.selection.filterIsInstance<SelectExpression>()
+            .forEach { resolveExpression(it.expression, scope, stack, Clause("el SELECT")) }
         query.selection.filterIsInstance<SelectTableAll>().forEach { checkQualifier(it, scope) }
-        resolveExpression(query.where, scope, stack)
-        query.groupBy.forEach { resolveExpression(it, scope, stack) }
-        resolveExpression(query.having, scope, stack)
+
+        query.joins.forEach { resolveExpression(it.condition, scope, stack, Clause("la condicion del JOIN", aliases)) }
+        resolveExpression(query.where, scope, stack, Clause("WHERE", aliases))
+        query.groupBy.forEach { resolveExpression(it, scope, stack, Clause("GROUP BY", aliases)) }
+        resolveExpression(query.having, scope, stack, Clause("HAVING", aliases))
 
         val output = schemaOf(query)
-        query.orderBy.forEach { resolveExpression(it.expression, scope, stack, output) }
+        query.orderBy.forEach {
+            resolveExpression(it.expression, scope, stack, Clause("ORDER BY", aliases, output))
+        }
     }
 
     // ── El FROM ────────────────────────────────────────────────────────────
@@ -182,47 +244,37 @@ class NameResolver(
 
     // ── Las columnas ───────────────────────────────────────────────────────
 
-    private fun resolveExpression(
-        expression: Expression?,
-        scope: Scope,
-        stack: List<Query>,
-        output: List<ResultColumn> = emptyList()
-    ) {
+    private fun resolveExpression(expression: Expression?, scope: Scope, stack: List<Query>, clause: Clause) {
         when (expression) {
             null, is Literal -> {}
-            is ColumnReference -> resolveReference(expression, scope, stack, output)
+            is ColumnReference -> resolveReference(expression, scope, stack, clause)
             is Query -> resolveQuery(expression, scope, stack)
             is Binary -> {
-                resolveExpression(expression.left, scope, stack, output)
-                resolveExpression(expression.right, scope, stack, output)
+                resolveExpression(expression.left, scope, stack, clause)
+                resolveExpression(expression.right, scope, stack, clause)
             }
-            is Unary -> resolveExpression(expression.operand, scope, stack, output)
-            is IsNull -> resolveExpression(expression.operand, scope, stack, output)
+            is Unary -> resolveExpression(expression.operand, scope, stack, clause)
+            is IsNull -> resolveExpression(expression.operand, scope, stack, clause)
             is InList -> {
-                resolveExpression(expression.operand, scope, stack, output)
-                expression.values.forEach { resolveExpression(it, scope, stack, output) }
+                resolveExpression(expression.operand, scope, stack, clause)
+                expression.values.forEach { resolveExpression(it, scope, stack, clause) }
             }
             is InSubquery -> {
-                resolveExpression(expression.operand, scope, stack, output)
+                resolveExpression(expression.operand, scope, stack, clause)
                 resolveQuery(expression.query, scope, stack)
             }
             is Exists -> resolveQuery(expression.query, scope, stack)
-            is Aggregate -> resolveExpression(expression.argument, scope, stack, output)
+            is Aggregate -> resolveExpression(expression.argument, scope, stack, clause)
         }
     }
 
-    private fun resolveReference(
-        reference: ColumnReference,
-        scope: Scope,
-        stack: List<Query>,
-        output: List<ResultColumn>
-    ) {
+    private fun resolveReference(reference: ColumnReference, scope: Scope, stack: List<Query>, clause: Clause) {
         // Solo el ORDER BY llega con un esquema de salida, y solo un nombre sin
         // calificar puede ser un alias del SELECT.
         if (reference.qualifier == null) {
-            val position = output.indexOfFirst { it.name == reference.name }
+            val position = clause.output.indexOfFirst { it.name == reference.name }
             if (position >= 0) {
-                bindOutputAlias(reference, output[position], position, scope)
+                bindOutputAlias(reference, clause.output[position], position, scope)
                 return
             }
         }
@@ -230,7 +282,7 @@ class NameResolver(
         val matches = scope.findColumn(reference.qualifier, reference.name)
         when (matches.size) {
             1 -> bind(reference, matches.single(), stack)
-            0 -> reportMissing(reference, scope)
+            0 -> reportMissing(reference, scope, clause)
             else -> report(
                 reference.location,
                 "'${reference.name}' existe en " + matches.joinToString(" y en ") { "'${it.source.sourceTable}'" }
@@ -277,10 +329,17 @@ class NameResolver(
         stack.takeLast(level).forEach { it.correlated = true }
     }
 
-    private fun reportMissing(reference: ColumnReference, scope: Scope) {
+    private fun reportMissing(reference: ColumnReference, scope: Scope, clause: Clause) {
         val qualifier = reference.qualifier
         if (qualifier == null) {
-            report(reference.location, "no existe la columna '${reference.name}'")
+            // El nombre existe, pero todavia no: el SELECT se calcula despues del
+            // WHERE, asi que decirlo asi ahorra la pregunta.
+            val message = if (reference.name in clause.aliases) {
+                "'${reference.name}' se define en el SELECT y no esta disponible en ${clause.name}"
+            } else {
+                "no existe la columna '${reference.name}'"
+            }
+            report(reference.location, message)
             return
         }
 
@@ -312,7 +371,11 @@ class NameResolver(
     private fun checkStructure(table: Table, location: LexemeLocation) {
         if (!checked.add(table.name)) return
 
+        // Una tabla creada en este mismo script todavia no tiene archivo. Lo
+        // crea el motor al escribir, no hay nada que comparar.
         val file = directory.csv(table.name)
+        if (!file.isFile) return
+
         val header = try {
             CsvReader.header(file)
         } catch (error: IOException) {
@@ -336,6 +399,19 @@ class NameResolver(
     private fun report(location: LexemeLocation, message: String) {
         diagnostics.report(CompilerError.SemanticError(location, message))
     }
+
+    /**
+     * Donde se esta resolviendo.
+     *
+     * El nombre sale en el mensaje de un alias usado antes de tiempo, y el esquema
+     * de salida solo lo lleva el ORDER BY, que es la unica clausula que corre
+     * despues del SELECT.
+     */
+    private class Clause(
+        val name: String,
+        val aliases: Set<String> = emptySet(),
+        val output: List<ResultColumn> = emptyList()
+    )
 
     private companion object {
         const val GLOBAL_SCOPE = "global"
