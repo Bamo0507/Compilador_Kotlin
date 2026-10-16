@@ -10,6 +10,39 @@ object CsvReader {
         val source = file.readText(Charsets.UTF_8).removePrefix("\uFEFF")
         if (source.isEmpty()) throw IOException("${file.name} no tiene encabezado")
 
+        val records = parse(source, file.name)
+        val header = headerOf(records, file.name)
+        records.drop(1).forEachIndexed { rowIndex, row ->
+            if (row.size != header.size) {
+                throw IOException("${file.name}: la fila ${rowIndex + 2} tiene ${row.size} campos, se esperaban ${header.size}")
+            }
+        }
+        return CsvContent(header, records.drop(1))
+    }
+
+    /**
+     * Solo la primera linea.
+     *
+     * La guarda de cordura compara nombres de columnas, no datos, asi que no hay
+     * por que abrir entera una tabla de miles de filas para eso.
+     */
+    fun header(file: File): List<String> {
+        val first = file.useLines(Charsets.UTF_8) { it.firstOrNull() }
+            .orEmpty()
+            .removePrefix("\uFEFF")
+        if (first.isEmpty()) throw IOException("${file.name} no tiene encabezado")
+
+        return headerOf(parse(first, file.name), file.name)
+    }
+
+    private fun headerOf(records: List<List<String?>>, name: String): List<String> {
+        val header = records.firstOrNull() ?: throw IOException("$name no tiene encabezado")
+        if (header.any { it.isNullOrEmpty() }) throw IOException("$name tiene una columna sin nombre")
+
+        return header.filterNotNull()
+    }
+
+    private fun parse(source: String, name: String): List<List<String?>> {
         val records = mutableListOf<List<String?>>()
         val record = mutableListOf<String?>()
         val field = StringBuilder()
@@ -65,7 +98,7 @@ object CsvReader {
                         recordStarted = true
                     }
                     character == '"' || closedQuote ->
-                        throw IOException("${file.name} contiene comillas CSV mal formadas")
+                        throw IOException("$name contiene comillas CSV mal formadas")
                     else -> {
                         field.append(character)
                         recordStarted = true
@@ -75,19 +108,9 @@ object CsvReader {
             index++
         }
 
-        if (quoted) throw IOException("${file.name} termina dentro de un campo entre comillas")
+        if (quoted) throw IOException("$name termina dentro de un campo entre comillas")
         if (recordStarted || record.isNotEmpty() || field.isNotEmpty() || wasQuoted) finishRecord()
 
-        val header = records.firstOrNull()
-            ?: throw IOException("${file.name} no tiene encabezado")
-        if (header.any { it.isNullOrEmpty() }) {
-            throw IOException("${file.name} tiene una columna sin nombre")
-        }
-        records.drop(1).forEachIndexed { rowIndex, row ->
-            if (row.size != header.size) {
-                throw IOException("${file.name}: la fila ${rowIndex + 2} tiene ${row.size} campos, se esperaban ${header.size}")
-            }
-        }
-        return CsvContent(header.filterNotNull(), records.drop(1))
+        return records
     }
 }

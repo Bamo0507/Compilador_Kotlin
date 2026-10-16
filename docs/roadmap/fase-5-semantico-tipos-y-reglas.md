@@ -214,7 +214,7 @@ users` sin `GROUP BY` es válido, porque agrupa todo en un solo grupo.
 | escalar `(SELECT ...)` | exactamente **una columna** | `la subconsulta debe devolver una sola columna, devuelve 3` |
 | `IN (SELECT ...)` | una columna, de tipo comparable con el lado izquierdo | `no se puede comparar INT con VARCHAR(80)` |
 | `EXISTS (SELECT ...)` | cualquier forma | |
-| `FROM (SELECT ...) x` | alias obligatorio | `la subconsulta del FROM necesita un alias` |
+| `FROM (SELECT ...) x` | alias obligatorio, ya lo exige la gramática | |
 | `FROM (SELECT ...) x` | toda columna con nombre | `la columna 2 de la subconsulta no tiene nombre, use AS` |
 
 **Sobre "a lo sumo una fila" en la escalar:** eso **no** se puede verificar en el
@@ -229,8 +229,14 @@ datos, la **cantidad** necesita leerlos.
 así que `x.algo` no puede funcionar. El `AS` es obligatorio para expresiones, no
 para referencias simples a columna, que heredan su nombre.
 
-**Aceptación:** una prueba por fila, y una subconsulta de tres niveles válida pasa
-sin errores.
+**Refrescar el esquema de una tabla derivada:** la fase 4 declara sus columnas con
+`schemaOf`, pero una columna calculada queda en `ErrorType` porque todavía no se
+tipaba nada. Al terminar de tipar una subconsulta del `FROM`, este ticket vuelve a
+pedirle el esquema y reemplaza la `Table` del símbolo del origen.
+
+**Aceptación:** una prueba por fila, una subconsulta de tres niveles válida pasa
+sin errores, y `FROM (SELECT edad * 2 AS doble FROM users) x` deja `x.doble` con
+tipo.
 
 ---
 

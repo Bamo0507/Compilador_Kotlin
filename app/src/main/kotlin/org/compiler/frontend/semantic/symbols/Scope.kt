@@ -1,42 +1,31 @@
 package org.compiler.frontend.semantic.symbols
 
 /**
- * Un ambito: los nombres visibles en un lugar del programa.
+ * Un ambito: los nombres visibles en un punto del script.
  *
  * Es una clase normal y no un data class porque un ambito tiene IDENTIDAD: dos
  * ambitos con los mismos simbolos siguen siendo dos ambitos distintos.
  *
- * No se destruye al salir de el. El arbol completo sobrevive toda la compilacion,
- * porque la GUI tiene que mostrarlo y la herencia necesita ambitos ya cerrados.
+ * No se destruye al salir de el. El arbol completo sobrevive toda la corrida,
+ * porque la GUI tiene que mostrarlo.
  */
 class Scope(
     val kind: ScopeKind,
     val name: String,
 
-    // El ambito que me contiene.
+    // El ambito que me contiene. Para una subconsulta es el de la consulta de
+    // afuera, y por eso resolver un nombre externo es subir por aqui.
     val parent: Scope?
 ) {
 
-    // La clase de la que heredo. Es var porque de que hereda una clase se sabe
-    // despues de crear su ambito.
-    var superclass: Scope? = null
-        private set
-
-    fun attachSuperclass(scope: Scope) {
-        require(superclass == null) { "La superclase de '$name' ya fue asignada" }
-        superclass = scope
-    }
-
-    // Linked para conservar el orden de declaracion: importa para la GUI y para los
-    // offsets.
+    // Linked para conservar el orden de declaracion: es el orden de las columnas
+    // en la fila, y el que muestra la GUI.
     private val symbols = linkedMapOf<String, Symbol>()
 
     private val childScopes = mutableListOf<Scope>()
 
     // Vista de solo lectura. Nadie de afuera agrega hijos.
     val children: List<Scope> get() = childScopes
-
-    private var nextOffset = 0
 
     fun openChild(kind: ScopeKind, name: String): Scope {
         val child = Scope(kind, name, parent = this)
@@ -45,73 +34,54 @@ class Scope(
     }
 
     /**
-     * Falla solo si el nombre ya existe en ESTE nivel. Tapar un nombre de un ambito
-     * exterior es legal; redeclararlo en el mismo ambito no.
+     * Falla solo si el nombre ya existe en ESTE nivel.
+     *
+     * Tapar un nombre de un ambito exterior es legal: una subconsulta puede usar
+     * el alias `u` aunque la consulta de afuera ya lo tenga. Repetirlo en el mismo
+     * FROM no lo es.
      */
     fun declare(symbol: Symbol): DeclareResult {
         val previous = symbols[symbol.name]
         if (previous != null) return DeclareResult.AlreadyDeclared(previous)
 
-        // El ambito completa los tres datos que solo el conoce, para que ningun
-        // llamador pueda equivocarse en ellos.
-        symbols[symbol.name] = symbol.copy(
-            offset = nextOffset,
-            isMember = kind == ScopeKind.CLASS,
-            declarationFunctionDepth = functionDepth()
-        )
-        nextOffset += 1
+        symbols[symbol.name] = symbol
         return DeclareResult.Ok
     }
 
     /**
-     * El lookup general: para resolver un nombre suelto como `x` o `saludar`.
-     *
-     * Busca en este nivel, luego en la cadena de superclases, y por ultimo en la de
-     * ambitos que lo contienen. Gana la primera coincidencia, que es la regla del
-     * ambito mas anidado.
+     * Busca en este nivel y luego sube por la cadena de padres. Gana la primera
+     * coincidencia, que es la regla del ambito mas anidado.
      */
-    fun lookup(name: String): Symbol? {
+    fun lookup(name: String): Symbol? = symbols[name] ?: parent?.lookup(name)
+
+    /**
+     * Lo mismo que lookup, pero diciendo CUANTOS niveles subio.
+     *
+     * Ese numero es el `level` que la fase 4 pega en cada ColumnReference: 0 es
+     * esta consulta, 1 la de afuera. El motor lo necesita para saber de que fila
+     * de la pila sacar el valor, y sale gratis de la misma busqueda.
+     */
+    fun resolve(name: String): Resolution? {
         val local = symbols[name]
-        if (local != null) return local
+        if (local != null) return Resolution(local, level = 0)
 
-        val inherited = superclass?.lookupMember(name)
-        if (inherited != null) return inherited
-
-        return parent?.lookup(name)
+        val outer = parent?.resolve(name) ?: return null
+        return Resolution(outer.symbol, level = outer.level + 1)
     }
 
-    /**
-     * Solo ESTE nivel, sin recorrer ninguna cadena.
-     *
-     * Para detectar redeclaracion, y para buscar el `constructor` de una clase.
-     */
+    // Solo ESTE nivel, sin subir. Para detectar un alias repetido en el mismo FROM.
     fun lookupLocal(name: String): Symbol? = symbols[name]
-
-    /**
-     * Este nivel y la cadena de superclases, sin mirar los ambitos que lo contienen.
-     *
-     * Es lo que necesita `perro.nombre`: un campo heredado de Animal si, una variable
-     * global llamada `nombre` no.
-     */
-    fun lookupMember(name: String): Symbol? =
-        symbols[name] ?: superclass?.lookupMember(name)
-
-    // La clase mas cercana que me contiene. Lo usa `this`.
-    fun enclosingClass(): Scope? =
-        if (kind == ScopeKind.CLASS) this else parent?.enclosingClass()
-
-    // Cuantas funciones hay en la cadena entre aqui y la raiz. Clases, bloques y
-    // bucles no cuentan.
-    fun functionDepth(): Int =
-        (if (kind == ScopeKind.FUNCTION) 1 else 0) + (parent?.functionDepth() ?: 0)
 
     // Los simbolos de este nivel, en orden de declaracion.
     fun localSymbols(): List<Symbol> = symbols.values.toList()
 }
 
+// Un simbolo encontrado, y a cuantos ambitos de distancia estaba.
+data class Resolution(val symbol: Symbol, val level: Int)
+
 /**
- * Es un sealed interface y no un Boolean porque cuando falla se necesita el simbolo
- * anterior, para poder decir en que linea estaba.
+ * Es un sealed interface y no un Boolean porque cuando falla se necesita el
+ * simbolo anterior, para poder decir en que linea estaba.
  */
 sealed interface DeclareResult {
     data object Ok : DeclareResult

@@ -26,122 +26,200 @@ ambito de la consulta externa    { u -> users }
 scope de la subquery         { p -> posts }
 ```
 
-Resolver `u.id` desde adentro es **subir por la cadena de padres**, que es
-literalmente `Scope.lookup` sin modificarlo. Por eso se conservó `Scope` en la
-fase 0.
+Resolver `u.id` desde adentro es **subir por la cadena de padres**, que es lo que
+hace `Scope.lookup`. Por eso se conservó `Scope` en la fase 0.
 
-Y el **nivel** de la referencia es *cuántos saltos dio ese lookup*. El número que
-el motor necesita lo produce esta fase como subproducto de buscar el nombre.
+Y el **nivel** de la referencia es *cuántos saltos dio ese lookup*. Lo devuelve
+`Scope.resolve`, que busca y cuenta en la misma recursión, así que el número que
+el motor necesita sale gratis de buscar el nombre.
 
 ---
 
 ## Ticket 4.1 · El ámbito de consulta
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.6, 3.5
 
 **Archivos:**
 
 - `frontend/semantic/symbols/ScopeKind.kt` (MODIFICA)
 - `frontend/semantic/symbols/Symbol.kt` (MODIFICA)
-- `app/src/test/.../ScopeTest.kt` (MODIFICA)
+- `frontend/semantic/symbols/Scope.kt` (MODIFICA)
+- `app/src/test/.../ScopeTest.kt` (NUEVO)
 
 ```kotlin
 enum class ScopeKind { GLOBAL, QUERY }
 
-enum class DeclarationKind { TABLA, COLUMNA, ALIAS }
+enum class DeclarationKind { TABLE, COLUMN, ALIAS }
 ```
 
 Solo dos clases de ámbito: el global, que contiene las tablas del catálogo, y el
 de consulta, uno por cada `SELECT`, anidados según el anidamiento del SQL.
 
-`Symbol` gana lo que hace falta para una columna visible:
+`Symbol` queda con lo que hace falta para una columna visible, y pierde los nueve
+campos que eran de Compiscript, entre ellos `offset`, `memberScope` y el conteo de
+usos:
 
 ```kotlin
-class Symbol(
+data class Symbol(
     val name: String,
     val kind: DeclarationKind,
-    val declaredAt: LexemeLocation,
     val type: Type,
-    val tablaOrigen: String? = null,   // de que tabla real viene
+    val location: LexemeLocation,
+    val scopeName: String,
+    val sourceTable: String? = null,  // de que tabla real viene
     val index: Int = -1               // posicion en la fila de ESTE nivel
 )
 ```
+
+`Scope` sí cambia, y no poco: se le quita toda la herencia de clases
+(`superclass`, `attachSuperclass`, `lookupMember`, `enclosingClass`) junto con
+`functionDepth` y el contador de offsets, y gana el método que el ticket 4.3
+necesita:
+
+```kotlin
+fun resolve(name: String): Resolution?
+
+data class Resolution(val symbol: Symbol, val level: Int)
+```
+
+**Por qué `resolve` y no contar el nivel afuera:** contarlo desde el llamador
+obliga a recorrer la cadena de padres dos veces, una para encontrar y otra para
+medir. Devolviéndolo desde la misma recursión el ticket 4.3 queda en una línea.
 
 **Por qué el ámbito global contiene las tablas:** así una tabla no encontrada usa
 el mismo mecanismo de error que una columna no encontrada, y el árbol de ámbitos
 del IDE muestra la base completa arriba y cada consulta debajo.
 
-**Aceptación:** `Scope` compila sin cambios en su lógica, solo con los valores
-nuevos de los dos enums.
+**Aceptación:**
+
+- declarar dos veces el mismo nombre en un nivel devuelve el símbolo anterior
+- un alias de una subconsulta tapa al de la consulta externa sin borrarlo
+- `lookupLocal` no sube por la cadena
+- un nombre local resuelve en `level = 0`, uno de la consulta externa en 1, y con
+  tres niveles de anidamiento en 2
+- un nombre tapado resuelve en `level = 0`, no en el nivel del de afuera
 
 ---
 
 ## Ticket 4.2 · Resolución de tablas y guarda de cordura
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.5, 4.1
 
 **Archivos:**
 
 - `frontend/semantic/NameResolver.kt` (NUEVO)
-- `app/src/test/.../ResolucionTablasTest.kt` (NUEVO)
+- `frontend/semantic/ColumnLookup.kt` (NUEVO)
+- `frontend/semantic/OutputSchema.kt` (NUEVO, es el 4.5)
+- `frontend/semantic/symbols/Symbol.kt` (MODIFICA)
+- `storage/CsvReader.kt` (MODIFICA)
+- `app/src/test/.../TableResolutionTest.kt` (NUEVO)
 
 ### Qué resuelve
 
 | Caso | Resultado |
 |---|---|
-| `FROM users` | busca `users` en el catálogo |
-| `FROM users u` | además declara el alias `u` en el ámbito de la consulta |
+| `FROM users` | busca `users` en el catálogo y la declara con su propio nombre |
+| `FROM users u` | declara el alias `u`, y `users` deja de ser visible |
 | `FROM (SELECT ...) x` | resuelve la subconsulta primero y declara `x` con las columnas que le devuelve `schemaOf`, del ticket 4.5 |
-| `FROM users, users` | error: alias repetido |
-| `FROM (SELECT ...)` sin alias | error: la tabla derivada necesita nombre |
+| `FROM users u JOIN posts u` | error: el nombre se repite |
+| `FROM fantasma` | error: la tabla no existe, y el análisis sigue |
+
+**La tabla se busca en el catálogo, no subiendo por los ámbitos.** Un alias de la
+consulta de afuera no es una tabla: `FROM u` tiene que fallar aunque afuera exista
+`FROM users u`.
+
+### Lo que queda declarado
+
+Un origen del `FROM` deja **un** símbolo, no uno por columna. Guarda la `Table` a
+la que apunta, que puede venir del catálogo o ser el esquema de salida de una
+subconsulta, y en su `index` el **desplazamiento**: dónde arrancan sus columnas
+dentro de la fila concatenada de un `JOIN`.
+
+```
+FROM users u JOIN posts p     users tiene 3 columnas, posts 2
+   u -> index 0               la fila de trabajo tiene 5
+   p -> index 3
+```
+
+De ahí sale `Scope.findColumn`, que busca una columna entre los orígenes y sube de
+ámbito si no está. Devuelve una **lista** y no un solo resultado: que un nombre sin
+calificar aparezca en dos tablas es ambigüedad, y decidir eso es del ticket 4.3, no
+de la búsqueda.
+
+**Por qué un símbolo por origen y no uno por columna:** declarar las columnas
+planas haría que `name` en dos tablas chocara al declararse, cuando la ambigüedad
+es un error del **uso**, no de la declaración. Y `u.*` con dos alias sobre la misma
+tabla no tendría cómo distinguirlos.
 
 ### La guarda de cordura estructural
 
 Aquí es donde se compara el header del CSV contra las columnas del JSON, porque
 es el primer punto del pipeline que abre el archivo de una tabla concreta. Se lee
-**solo la primera línea**.
+**solo la primera línea**, con `CsvReader.header`, que se agregó para esto.
 
 ```
 users.csv fue editado fuera del DBMS: el archivo tiene la columna 'email',
 que no esta en el esquema
 ```
 
+Los otros dos mensajes son `al archivo le falta la columna 'city'` y `las columnas
+del archivo estan en otro orden`. Cada tabla se revisa **una vez por corrida**,
+aunque el script la use diez veces.
+
 Es la decisión 4: el DBMS es el único que escribe, así que esto no debería pasar
-nunca. Exists para que cuando pase, el mensaje diga qué pasó en vez de dar un
+nunca. Existe para que cuando pase, el mensaje diga qué pasó en vez de dar un
 error confuso tres etapas más adelante.
 
 **Por qué aquí y no en el `CatalogLoader`:** el cargador no abre CSV, por la regla
 de esquema ansioso y datos perezosos. Esta fase ya sabe cuáles tablas se van a
-tocar, así que revisa solo esas.
+tocar, así que revisa solo esas. Las tablas que toca un `INSERT` o un `DELETE` las
+revisa la fase 5, que es donde se resuelven.
 
-**El ticket 4.5 se escribe junto con este**, porque una tabla derivada necesita
-saber qué columnas produce su subconsulta, y eso es lo que calcula `schemaOf`.
-No es un ciclo: la subconsulta se resuelve **entera** primero, y recién entonces
-se le pregunta su esquema. Están en tickets separados porque el esquema de salida
-lo consumen también las fases 5, 6 y 8.
+### El ámbito de una tabla derivada cuelga del global
+
+Una tabla derivada se ejecuta **una sola vez**. Si pudiera mirar columnas de la
+consulta que la contiene, el motor tendría que volver a correrla por cada fila, que
+es lo que SQL llama `LATERAL` y este proyecto no implementa. Colgarla del ámbito
+global lo impide, y el intento falla con el mismo mensaje de siempre.
+
+**El ticket 4.5 se escribió junto con este**, porque una tabla derivada necesita
+saber qué columnas produce su subconsulta.
+
+**Dos cosas que este ticket decía mal:**
+
+- *"tabla derivada sin alias reporta"* no es un caso del resolutor: la gramática ya
+  exige el `Identifier` final, así que `DerivedSource.alias` no es nulo. Lo mismo
+  vale para la fila correspondiente del ticket 5.4.
+- `FROM users, users` tampoco existe: la gramática solo acepta `JOIN ... ON`, no
+  comas en el `FROM`. El nombre repetido se prueba con un `JOIN`.
 
 **Aceptación:**
 
-- tabla inexistente reporta y sigue, sin cortar el análisis
-- alias repetido reporta
-- tabla derivada sin alias reporta
-- un CSV con una columna de más reporta el mensaje de la guarda
+- tabla inexistente reporta y sigue, sin cortar el análisis, y sin correr el
+  desplazamiento del `JOIN`
+- nombre repetido en el `FROM` reporta
+- el segundo origen de un `JOIN` arranca en la cantidad de columnas del primero
+- los tres mensajes de la guarda, más el de un CSV ilegible
+- una tabla rota usada dos veces reporta una sola vez
 - el análisis de una consulta sobre `users` no abre `posts.csv`
+- una tabla derivada queda declarada con sus columnas y no ve el `FROM` de afuera
 
 ---
 
 ## Ticket 4.3 · Resolución de columnas, nivel e índice
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.2
 
 **Archivos:**
 
 - `frontend/semantic/NameResolver.kt` (MODIFICA)
+- `frontend/semantic/ColumnLookup.kt` (MODIFICA)
 - `frontend/ast/models/Expression.kt` (MODIFICA)
-- `app/src/test/.../ResolucionColumnasTest.kt` (NUEVO)
+- `app/src/test/.../ResolverFixture.kt` (NUEVO, la base de prueba de toda la fase)
+- `app/src/test/.../ColumnResolutionTest.kt` (NUEVO)
 
 ### El resultado que deja pegado
 
@@ -173,11 +251,12 @@ Al evaluar `p.uid = u.id`, el motor está parado en una fila de `posts`, pero
 `u.id` se refiere a la fila de `users` del nivel de arriba. Un índice solo no
 distingue las dos.
 
-El `level` sale de contar cuántos ámbitos subió el `lookup`. No hay que calcularlo
-aparte.
+El `level` y el `index` los devuelve ya calculados `Scope.findColumn`, del ticket
+4.2, en cada `ColumnMatch`. Lo que agrega este ticket es decidir qué hacer con la
+lista: vacía es un error, una es la buena, dos o más es ambigüedad.
 
 **Por qué se guarda el `Symbol` y no solo el tipo:** el ticket 5.1 lee
-`referencia.simbolo?.tipo` para tipar, la fase 6 no lo necesita porque le basta el
+`reference.symbol?.type` para tipar, la fase 6 no lo necesita porque le basta el
 índice, y la fase 8 lo usa para decir de qué tabla viene cada columna de la
 rejilla. Guardar la ficha completa evita copiar tres campos sueltos. Queda en
 `null` si el nombre no se resolvió, y de ahí sale el `ErrorType` que corta la
@@ -199,26 +278,42 @@ Durante un join, la fila que se evalúa es la **concatenación** de las dos. Si
 arranca en el índice 3. El resolutor lleva ese desplazamiento al declarar los
 símbolos de cada origen, en el orden en que aparecen en el `FROM`.
 
+### Un calificador que existe en este nivel manda
+
+```sql
+SELECT 1 FROM users u WHERE EXISTS (SELECT 1 FROM posts u WHERE u.id = 1)
+```
+
+La subconsulta redeclara `u`, así que su `u` es `posts` y `u.id` es un error, no
+una referencia correlacionada a `users`. La búsqueda **deja de subir** apenas
+encuentra un origen con ese nombre, tenga o no la columna. Sin esa regla, el
+resolutor se escaparía al `u` de afuera y el motor leería la fila equivocada.
+
+**Un error que este ticket no listaba:** `SELECT z.*` con una `z` que nadie puso
+en el `FROM`. Sin revisarlo, la columna simplemente no salía y nadie decía por qué.
+
 **Aceptación:**
 
-- un `EXISTS` correlacionado deja `nivel = 1` en la referencia externa y
-  `nivel = 0` en la interna
-- tres niveles de anidamiento dejan `nivel = 2` en la más externa
+- un `EXISTS` correlacionado deja `level = 1` en la referencia externa y
+  `level = 0` en la interna
+- tres niveles de anidamiento dejan `level = 2` en la más externa
 - en `FROM users u JOIN posts p`, una columna de `p` tiene índice mayor o igual a
   la cantidad de columnas de `users`
-- los cuatro casos de error de la tabla tienen test
+- los cuatro casos de error de la tabla tienen test, más el calificador
+  redeclarado y el `*` calificado
+- un nombre que no se resolvió queda con `symbol` en `null`
 
 ---
 
 ## Ticket 4.4 · Detección de subconsultas correlacionadas
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.3
 
 **Archivos:**
 
 - `frontend/semantic/NameResolver.kt` (MODIFICA)
-- `app/src/test/.../CorrelacionTest.kt` (NUEVO)
+- `app/src/test/.../CorrelationTest.kt` (NUEVO)
 
 **Qué es esto, en simple:** una subconsulta que no mira nada de afuera da siempre
 el mismo resultado, así que se puede ejecutar una vez y guardar. Una que sí mira
@@ -237,40 +332,53 @@ WHERE EXISTS (SELECT 1 FROM posts p WHERE p.uid = u.id)
 Una subconsulta es correlacionada **si y solo si** alguna de sus referencias quedó
 con `nivel > 0`.
 
-```kotlin
-query.correlated = query.referencias().any { it.level > 0 }
-```
-
 **Por qué esto es lo más redondo del proyecto:** es un análisis semántico que no
 reporta ningún error y que decide una optimización de ejecución. El dato ya está
 ahí como subproducto del ticket 4.3, así que la detección no cuesta un recorrido
 extra.
 
-Hay un detalle: `nivel > 0` se mide **relativo a la subconsulta**. Una referencia
-con `nivel = 2` dentro de una subconsulta de nivel 2 correlaciona con la consulta
-más externa, no con su padre inmediato, y las **dos** intermedias tienen que
-marcarse como correlacionadas, porque ninguna de las dos se puede cachear.
+**No es un pase aparte.** El ticket proponía recorrer después las referencias de
+cada consulta, pero eso es un segundo recorrido para leer algo que ya se supo en
+el primero. Se marca **en el momento de resolver**: el resolutor lleva la pila de
+consultas que contienen a la actual y, al pegar una referencia de nivel `L`,
+marca las `L` consultas más internas de esa pila.
+
+```kotlin
+stack.takeLast(level).forEach { it.correlated = true }
+```
+
+De ahí sale solo el detalle que el ticket señalaba: una referencia que salta dos
+niveles marca a la subconsulta **y a la del medio**, porque ninguna de las dos se
+puede cachear, mientras que una que salta uno no toca a la de más adentro.
 
 **Aceptación:**
 
-- `IN` sin referencias externas queda con `correlacionada = false`
-- `EXISTS` que usa `u.id` queda con `correlacionada = true`
-- en tres niveles, si la más interna referencia a la más externa, las dos
-  intermedias quedan marcadas
+- `IN` sin referencias externas queda con `correlated = false`
+- `EXISTS` que usa `u.id` queda con `correlated = true`, y la consulta de más
+  afuera nunca
+- en tres niveles, si la más interna referencia a la más externa, las dos de
+  adentro quedan marcadas; si la del medio es la que mira hacia afuera, la más
+  interna no
+- una tabla derivada nunca queda correlacionada
 - el marcado no reporta ningún error
 
 ---
 
 ## Ticket 4.5 · Esquema de salida de una consulta
 
-- **Estado**: pendiente
+- **Estado**: completado, repartido entre el 4.2 y el 4.3
 - **Depende de**: 4.3
 
 **Archivos:**
 
 - `frontend/semantic/OutputSchema.kt` (NUEVO)
-- `frontend/semantic/NameResolver.kt` (MODIFICA)
-- `app/src/test/.../EsquemaSalidaTest.kt` (NUEVO)
+- `app/src/test/.../TableResolutionTest.kt`, `ColumnResolutionTest.kt`
+
+**Lo único que queda fuera** es el tipo de una columna **calculada** de una tabla
+derivada: hoy sale `ErrorType`, porque tipar expresiones es de la fase 5 y esta
+corre antes. El ticket 5.4 vuelve a pedir el `schemaOf` de la subconsulta ya
+tipada y refresca la `Table` del origen derivado. Una columna que es una
+referencia simple sí sale con su tipo real desde esta fase.
 
 **Qué es esto, en simple:** qué columnas devuelve un `SELECT`, con qué nombre y de
 qué tipo. Suena obvio y no lo es, porque `SELECT *` no lo dice, una expresión sin
@@ -283,7 +391,7 @@ respuesta.
 |---|---|
 | ticket 4.2 | declarar las columnas de una tabla derivada en el ámbito |
 | ticket 5.2 | detectar dos columnas de salida con el mismo alias |
-| ticket 6.1 | llenar `ResultSet.columnas` |
+| ticket 6.1 | llenar `ResultSet.columns` |
 | ticket 8.1 | los encabezados de la rejilla |
 
 Sin este ticket, `ResultColumn` aparecería en la fase 6 como si el motor
@@ -334,11 +442,22 @@ SELECT edad * 2 AS doble FROM users WHERE doble > 40; -- ERROR
 `GROUP BY` y `HAVING`, solo contra las tablas. Sale directo del orden de
 evaluación: cuando corre el `WHERE`, el `SELECT` todavía no se calculó.
 
+Por eso el `ORDER BY` se resuelve **de último** dentro de una consulta: necesita
+el esquema de salida ya calculado, que a su vez necesita el `SELECT` resuelto.
+
+**Cómo queda marcado un alias.** Un alias del `SELECT` no nombra una columna de la
+fila que entra sino de la que sale, así que su símbolo queda con
+`kind = ALIAS` y su `index` es el lugar en el esquema de salida, no en la fila del
+`FROM`. La fase 6 mira el `kind` para saber en cuál de las dos numeraciones
+indexar. Solo un nombre **sin calificar** puede ser un alias: `ORDER BY u.city` va
+derecho a la tabla.
+
 **Aceptación:**
 
-- `SELECT *` sobre un join de 3 y 4 columnas da 7 columnas en el orden del `FROM`
-- `SELECT u.*` da solo las de `u`
-- `SELECT edad * 2 AS doble` da una columna llamada `doble` de tipo `INT`
-- `SELECT edad * 2` da una columna sin nombre
+- `SELECT *` sobre un join da todas las columnas en el orden del `FROM`
+- `SELECT u.*` da solo las de `u`, y un calificador que nadie declaró reporta
+- `SELECT u.id AS clave, u.name` da `clave` y `name`, con sus tipos reales
+- `SELECT edad * 2` da una columna sin nombre. El tipo de una calculada lo pone la
+  fase 5, no esta
 - un alias del `SELECT` usado en `ORDER BY` resuelve; en `WHERE` reporta
 - el esquema de una consulta anidada es el que ve el `FROM` que la contiene

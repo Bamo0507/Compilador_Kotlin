@@ -1,5 +1,6 @@
 package org.compiler.frontend.ast.models
 
+import org.compiler.frontend.semantic.symbols.Symbol
 import org.compiler.models.LexemeLocation
 import org.compiler.types.BinaryOperator
 import org.compiler.types.ErrorType
@@ -30,6 +31,10 @@ class ColumnReference(
     val name: String,
     override val location: LexemeLocation
 ) : Expression {
+    // La columna a la que se resolvio. Null si el nombre no existia, y de ahi sale
+    // el ErrorType que corta la cascada de la fase 5.
+    var symbol: Symbol? = null
+
     // Cuantos ambitos subio el lookup: 0 = esta consulta, 1 = la de afuera.
     var level: Int = -1
 
