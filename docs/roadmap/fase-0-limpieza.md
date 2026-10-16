@@ -24,7 +24,7 @@ varios días.
 
 ## Ticket 0.1 · Delete la gramática y el frontend sintáctico
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: nada
 
 **Archivos (ELIMINA):**
@@ -53,7 +53,7 @@ simplemente no genera nada.
 
 ## Ticket 0.2 · Delete el análisis semántico
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.1
 
 **Archivos (ELIMINA):**
@@ -88,7 +88,7 @@ externa, y resolver un nombre de afuera es subir por la cadena de padres, que es
 
 ## Ticket 0.3 · Delete el intérprete y los programas de ejemplo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.2
 
 **Archivos (ELIMINA):**
@@ -128,7 +128,7 @@ cinco variantes.
 
 ## Ticket 0.4 · Reducir la GUI a editor y errores
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.3
 
 **Archivos (ELIMINA):**
@@ -174,7 +174,7 @@ pendiente de compilar en `gui/` es la llamada al pipeline.
 
 ## Ticket 0.5 · Preparar el andamiaje
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.4
 
 **Archivos (CREA):**
@@ -266,7 +266,7 @@ el 0.7.
 
 ## Ticket 0.6 · Podar los cimientos y reorganizar la documentación
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.5
 
 **Archivos (MODIFICA):**
@@ -368,7 +368,7 @@ rastro vive en `CompilerPipelineTest`, que se reescribe en el 0.7.
 
 ## Ticket 0.7 · Reconstruir el runtime y cerrar el build
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.6
 
 **Archivos:**

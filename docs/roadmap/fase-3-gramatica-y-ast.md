@@ -16,7 +16,7 @@ con la fase 2.**
 
 ## Ticket 3.1 · `Sql.g4` parte 1, léxico y tipos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.5
 
 **Archivos:**
@@ -100,7 +100,7 @@ más los 7 literales parsean en un test de sintaxis aislado.
 
 ## Ticket 3.2 · `Sql.g4` parte 2, DDL y DML
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.1
 
 **Archivos:**
@@ -174,7 +174,7 @@ con las siete restricciones en una sola columna.
 
 ## Ticket 3.3 · `Sql.g4` parte 3, consultas
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.2
 
 **Archivos:**
@@ -279,7 +279,7 @@ un mensaje claro en vez de un error semántico confuso.
 
 ## Ticket 3.4 · `SqlSyntaxAnalyzer`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.3
 
 **Archivos:**
@@ -336,7 +336,7 @@ fun ParseTree.toTreeView(): TreeNodeView
 
 ## Ticket 3.5 · Los nodos del AST
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.3, 1.1, **2.1**
 
 `ColumnDefinition` guarda `List<Constraint>`, y `Constraint` nace en el ticket 2.1.
@@ -474,7 +474,7 @@ y ningún nodo guarda un tipo de ANTLR.
 
 ## Ticket 3.6 · `SqlAstBuilder` y el pipeline mínimo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.4, 3.5
 
 **Archivos:**

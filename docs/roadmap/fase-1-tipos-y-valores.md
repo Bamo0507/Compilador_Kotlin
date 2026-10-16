@@ -28,7 +28,7 @@ comparación sea estructural, que es lo que `data class` da gratis.
 
 ## Ticket 1.1 · `Type`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.6
 
 **Archivos:**
@@ -130,7 +130,7 @@ es justo lo contrario de lo que dice el estándar.
 
 ## Ticket 1.2 · `Value`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -234,7 +234,7 @@ el hash antes que por la igualdad.
 
 ## Ticket 1.3 · Conversión entre texto y valor
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2
 
 **Archivos:**
@@ -306,7 +306,7 @@ por defecto.
 
 ## Ticket 1.4 · `TypeRules`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -466,7 +466,7 @@ el estándar no dicta la respuesta.
 
 ## Ticket 1.5 · Reglas de los operadores
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.4
 
 **Archivos:**
