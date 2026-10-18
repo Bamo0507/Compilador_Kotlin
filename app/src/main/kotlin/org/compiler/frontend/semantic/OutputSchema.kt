@@ -14,8 +14,11 @@ import org.compiler.types.Type
  * El nombre es nulo cuando la columna no tiene uno natural, como en
  * `SELECT edad * 2` sin AS: se puede mostrar en la rejilla, pero nadie la puede
  * nombrar desde afuera.
+ *
+ * El origen es de que tabla viene, para el encabezado de la rejilla. Es nulo en
+ * una columna calculada, que no viene de ninguna.
  */
-data class ResultColumn(val name: String?, val type: Type)
+data class ResultColumn(val name: String?, val type: Type, val source: String? = null)
 
 /**
  * Que columnas produce una consulta, con que nombre y de que tipo.
@@ -37,7 +40,7 @@ fun schemaOf(query: Query): List<ResultColumn> {
 
 // El orden es el del FROM, que es el mismo de la fila concatenada de un JOIN.
 private fun columnsOf(source: Symbol?): List<ResultColumn> =
-    source?.table?.columns.orEmpty().map { ResultColumn(it.name, it.type) }
+    source?.table?.columns.orEmpty().map { ResultColumn(it.name, it.type, source?.sourceTable) }
 
 /**
  * El nombre sale del AS; si no hay, de la columna cuando el item es una
@@ -51,5 +54,9 @@ private fun resultColumnOf(item: SelectExpression): ResultColumn {
     val reference = item.expression as? ColumnReference
         ?: return ResultColumn(item.alias, item.expression.type)
 
-    return ResultColumn(item.alias ?: reference.name, reference.symbol?.type ?: item.expression.type)
+    return ResultColumn(
+        name = item.alias ?: reference.name,
+        type = reference.symbol?.type ?: item.expression.type,
+        source = reference.symbol?.sourceTable
+    )
 }

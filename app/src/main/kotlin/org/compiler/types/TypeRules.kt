@@ -92,8 +92,10 @@ object TypeRules {
 
             OperatorCategory.EQUALITY -> BooleanType.takeIf { unify(left, right) != null }
 
+            // NULL entra: `activo AND NULL` es SQL valido y da NULL, que es
+            // distinto de ser un error.
             OperatorCategory.LOGICAL -> BooleanType.takeIf {
-                bothAre(Family.LOGICAL, left, right)
+                logicalOperand(left) && logicalOperand(right)
             }
         }
     }
@@ -165,6 +167,9 @@ object TypeRules {
     // lo que cabe en un Long.
     private fun asDecimal(type: Type): DecimalType =
         type as? DecimalType ?: DecimalType(INT_DIGITS, 0)
+
+    private fun logicalOperand(type: Type): Boolean =
+        familyOf(type) == Family.LOGICAL || familyOf(type) == Family.NULL
 
     private fun bothAre(family: Family, left: Type, right: Type): Boolean =
         familyOf(left) == family && familyOf(right) == family

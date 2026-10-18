@@ -288,6 +288,15 @@ class OperatorRulesTest {
         assertNull(binary(BinaryOperator.AND, IntType, IntType))
     }
 
+    // `activo AND NULL` es SQL valido: da NULL, que no es lo mismo que ser un
+    // error. El motor lo resuelve con logica de tres valores.
+    @Test
+    fun `AND y OR aceptan NULL de cualquier lado`() {
+        assertEquals(BooleanType, binary(BinaryOperator.AND, BooleanType, NullType))
+        assertEquals(BooleanType, binary(BinaryOperator.OR, NullType, BooleanType))
+        assertEquals(BooleanType, binary(BinaryOperator.AND, NullType, NullType))
+    }
+
     // ── Unarios y IS NULL ──────────────────────────────────────────────────
 
     @Test

@@ -31,12 +31,12 @@ import org.compiler.frontend.ast.models.FromSource
 import org.compiler.frontend.ast.models.InList
 import org.compiler.frontend.ast.models.InSubquery
 import org.compiler.frontend.ast.models.Insert
+import org.compiler.frontend.ast.models.hasAggregate
 import org.compiler.frontend.ast.models.IsNull
 import org.compiler.frontend.ast.models.Literal
 import org.compiler.frontend.ast.models.Query
 import org.compiler.frontend.ast.models.Script
 import org.compiler.frontend.ast.models.SelectExpression
-import org.compiler.frontend.ast.models.SelectItem
 import org.compiler.frontend.ast.models.Unary
 import org.compiler.frontend.ast.models.Update
 import org.compiler.frontend.semantic.symbols.DeclarationKind
@@ -660,19 +660,6 @@ private fun Query.expressions(): List<Expression> =
         listOfNotNull(where, having) +
         groupBy +
         orderBy.map { it.expression }
-
-private fun SelectItem.hasAggregate(): Boolean =
-    this is SelectExpression && expression.hasAggregate()
-
-private fun Expression.hasAggregate(): Boolean = when (this) {
-    is Aggregate -> true
-    is Binary -> left.hasAggregate() || right.hasAggregate()
-    is Unary -> operand.hasAggregate()
-    is IsNull -> operand.hasAggregate()
-    is InList -> operand.hasAggregate() || values.any { it.hasAggregate() }
-    is InSubquery -> operand.hasAggregate()
-    else -> false
-}
 
 // Las referencias que NO estan dentro de una agregacion: son las que el GROUP BY
 // tiene que cubrir.

@@ -12,12 +12,13 @@ que ya se sabía, es que una fase anterior no dejó su trabajo hecho.
 
 ## Ticket 6.0 · `Session`, el estado de una corrida
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.5, 2.6, 5.5
 
 **Archivos:**
 
 - `engine/Session.kt` (NUEVO)
+- `app/src/test/.../EngineFixture.kt` (NUEVO, la base de prueba de toda la fase)
 - `app/src/test/.../SessionTest.kt` (NUEVO)
 
 **Qué es esto, en simple:** el objeto que guarda todo lo que pasa durante una
@@ -106,45 +107,63 @@ que dos corridas seguidas compartieran filas, que dos tests se pisaran, y que
 hubiera que acordarse de limpiarlo entre una y otra. Fue un problema real en el
 proyecto anterior.
 
+### Tres cuentas que la sesión lleva
+
+```kotlin
+var reads = 0        // archivos abiertos
+var executions = 0   // consultas ejecutadas, subconsultas incluidas
+var examined = 0     // filas miradas para decidir si pasaban un filtro
+```
+
+No son adorno: son lo que vuelve **verificables** los criterios de aceptación de
+los tickets 6.3 y 6.6, que hablan de "una sola lectura", "una sola ejecución" y
+"corta en la primera fila". Sin ellas, esas pruebas tendrían que confiar en que el
+resultado salió bien por la razón correcta. Y en la defensa, decir cuántas filas
+miró el motor vale más que decir que es rápido.
+
+**Un archivo corrupto no detiene la corrida.** Un valor que no cuadra con su tipo
+reporta `users.csv fila 3: 'treinta' no es un valor de INT` y queda en nulo. El CSV
+se pudo editar a mano, y reventar a la mitad de un script sería peor.
+
 **Aceptación:**
 
 - `INSERT` seguido de `SELECT` sobre la misma tabla **ve la fila nueva**
 - la misma tabla leída dos veces abre el archivo una sola vez
 - `rowsOf` sobre una tabla que no se tocó no la marca como modificada
 - dos `Session` sobre el mismo directorio no comparten nada
-- al terminar, `cambios()` lista exactamente las tablas tocadas
+- al terminar, `changes()` lista exactamente las tablas tocadas
+- un campo vacío se decodifica como nulo, no como cadena vacía
+- un valor que no cuadra con su tipo reporta y queda en nulo
 
 ---
 
 ## Ticket 6.1 · `ResultSet`, `Row` y el contexto de evaluación
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2, 4.3, 4.5
 
 **Archivos:**
 
-- `engine/ResultSet.kt` (NUEVO)
-- `engine/RowContext.kt` (NUEVO)
+- `engine/ResultSet.kt` (NUEVO, con `Row` y `RowContext`)
+- `frontend/semantic/OutputSchema.kt` (MODIFICA, el origen de cada columna)
 - `app/src/test/.../ResultSetTest.kt` (NUEVO)
 
 ```kotlin
-class ResultSet(
-    val columns: List<ResultColumn>,
-    val rows: List<Row>
-)
+class ResultSet(val columns: List<ResultColumn>, val rows: List<Row>)
 
-class Row(val values: List<Value>)
-
-class ResultColumn(
-    val name: String,
-    val source: String?,    // el alias de la tabla de donde viene, si aplica
-    val type: Type
-)
+data class Row(val values: List<Value>)
 ```
 
-**`ResultColumn` no lo inventa el motor:** se lo da `schemaOf`, del ticket
-4.5, que ya resolvió la expansión de `*`, los nombres de salida y los tipos. Aquí
-solo se declara la estructura y se copia.
+**`ResultColumn` no se declara aquí.** Este ticket proponía una clase propia del
+motor, pero el ticket 4.5 ya creó la suya y es la que devuelve `schemaOf`.
+Duplicarla significaría copiar campo por campo en cada proyección y tener dos
+definiciones que se van separando. Se reusa la de la fase 4, que solo necesitaba
+un campo más, el `source`, que es de qué tabla viene la columna para el encabezado
+de la rejilla.
+
+**`Row` es `data class`** y eso hace que `DISTINCT` sea una línea: `DecimalValue`
+ya compara por valor y no por escala desde la fase 1, así que `1.0` y `1.00`
+colapsan sin que el operador haga nada aparte.
 
 **Por qué `Row` es posicional y no un mapa:** es lo que ya es una línea de CSV, y
 en un `JOIN` puede haber dos columnas llamadas `id`, que en un mapa se pisarían.
@@ -170,28 +189,40 @@ Es el mismo mecanismo que el `Environment` encadenado de Compiscript, con una
 diferencia: aquí el salto **no se recorre en ejecución**, porque la fase 4 ya
 dejó el número. `valor(nivel, indice)` es dos indexaciones de arreglo.
 
+`RowContext` ganó un tercer método que el ticket no tenía, `withTop`, que cambia
+la fila de este nivel sin tocar las de afuera. Lo necesita la agregación, que
+recorre las filas de un grupo con el mismo contexto exterior.
+
 **Aceptación:**
 
-- `anidar` no muta el contexto original
-- `valor(1, 0)` sobre un contexto de dos niveles devuelve la fila de afuera
+- `nest` no muta el contexto original
+- `value(1, 0)` sobre un contexto de dos niveles devuelve la fila de afuera
+- `withTop` cambia el nivel 0 y deja los de afuera
 
 ---
 
 ## Ticket 6.2 · Evaluación de expresiones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.1, 5.1
 
 **Archivos:**
 
 - `engine/Evaluator.kt` (NUEVO)
+- `engine/ValueOrder.kt` (NUEVO)
+- `types/TypeRules.kt` (MODIFICA, ver abajo)
 - `app/src/test/.../EvaluatorTest.kt` (NUEVO)
 
 ```kotlin
-class Evaluator(private val motor: Engine) {
-    fun evaluate(expression: Expression, context: RowContext): Value
+class Evaluator(private val engine: Engine) {
+    fun evaluate(expression: Expression, context: RowContext, group: List<Row>? = null): Value
 }
 ```
+
+El tercer parámetro es el grupo, y solo lo lleva lo que se evalúa dentro de una
+agregación. Comparar dos valores concretos salió a `ValueOrder`, porque lo usan
+por igual el evaluador y el `ORDER BY`, con una diferencia: el evaluador necesita
+saber que un nulo **no se sabe**, y el orden necesita una respuesta siempre.
 
 Un `when` sobre `Expression`. Los casos interesantes:
 
@@ -224,19 +255,36 @@ una recursión mutua deliberada y refleja la del lenguaje, donde una expresión
 puede contener una consulta y una consulta contiene expresiones. Se resuelve
 pasando el motor al evaluador en el constructor, y no al revés.
 
+### Un hueco de la fase 1 que este ticket destapó
+
+Los criterios de aceptación de abajo piden que `false AND NULL` dé `false`, y eso
+**no compilaba**: `TypeRules` exigía que los dos lados de un `AND` fueran de
+familia lógica, y `NULL` es su propia familia. Así que `activo AND NULL`, que es
+SQL perfectamente válido, se reportaba como error de tipos antes de llegar al
+motor. El ticket pedía probar algo que una fase anterior prohibía.
+
+Corregido en `TypeRules`: los lógicos aceptan `NULL` de cualquier lado, igual que
+ya lo hacían la aritmética y las comparaciones.
+
+**Dividir entre cero reporta y sigue.** No estaba en el ticket y hace falta: es un
+error que solo se ve con los datos delante, así que es de ejecución, y reventar a
+la mitad de un script sería peor que devolver nulo.
+
 **Aceptación:**
 
 - `1 + NULL` da `NullValue`
-- `false AND NULL` da `BoolValue(false)`
-- `true AND NULL` da `NullValue`
+- `false AND NULL` da `BoolValue(false)` y `true AND NULL` da `NullValue`
+- `true OR NULL` da `BoolValue(true)` y `false OR NULL` da `NullValue`
 - una fila con `WHERE` en `NullValue` no pasa el filtro
-- una subconsulta escalar con dos filas reporta error de ejecución
+- `IN (1, NULL)` sobre un valor que no está da `NullValue`, no falso
+- `INT / INT` trunca y `10.0 / 3.0` usa la escala que calculó la fase 5
+- dividir entre cero reporta y da nulo
 
 ---
 
 ## Ticket 6.3 · Operadores básicos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.2, 6.0, 2.4
 
 **Archivos:**
@@ -274,10 +322,17 @@ después de un `INSERT` ve la fila nueva, porque es el mismo mapa.
 La decodificación con `ValueCodec` guiada por el esquema ocurre dentro de
 `rowsOf`, la primera vez que la tabla se carga.
 
+**`sort` es genérico sobre lo que ordena**, no sobre filas. Suena a abstracción de
+más y no lo es: el ticket 6.5 necesita ordenar **grupos**, no filas, y con la misma
+regla de nulos. Una función con un parámetro de tipo evita tener dos comparadores
+que hay que acordarse de mantener iguales.
+
 **Aceptación:**
 
-- `scan` decodifica los 11 tipos correctamente desde un CSV escrito a mano
-- `sort` pone los nulos al final en `ASC`
+- `scan` decodifica cada tipo guardable desde un CSV escrito a mano, y una fila en
+  blanco da puros nulos
+- `sort` pone los nulos al final en `ASC` y al principio en `DESC`
+- se puede ordenar por una columna que no sale en el `SELECT`, y por un alias que sí
 - `distinct` colapsa `1.0` y `1.00`
 - la misma tabla en un autojoin abre el archivo una sola vez
 - `scan` sobre una tabla ya modificada en memoria devuelve las filas modificadas
@@ -286,7 +341,7 @@ La decodificación con `ValueCodec` guiada por el esquema ocurre dentro de
 
 ## Ticket 6.4 · Join
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.3
 
 **Archivos:**
@@ -323,13 +378,18 @@ señalen.
 
 ## Ticket 6.5 · Agregación
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.3, 5.3
 
 **Archivos:**
 
 - `engine/Aggregator.kt` (NUEVO)
 - `app/src/test/.../AggregatorTest.kt` (NUEVO)
+
+`Aggregator` recibe los valores **ya evaluados**, uno por fila del grupo, y no las
+filas: evaluar la expresión de adentro necesita el contexto, y eso es del
+evaluador. Así la cuenta de cada función queda en un archivo que no sabe nada de
+ámbitos ni de niveles.
 
 ```kotlin
 // Agrupa las filas por los valores de las expresiones de GROUP BY,
@@ -362,23 +422,30 @@ decir `0` sería inventar un dato. Es lo que dice el estándar y lo que hace SQL
 **`DISTINCT` dentro de una agregación**, como `COUNT(DISTINCT depto)`, quita
 repetidos antes de contar.
 
+**El contraste que vale la pena ver junto:** sin `GROUP BY` todo es un solo grupo,
+así que hay una fila aunque no haya datos. **Con** `GROUP BY` sobre cero filas no
+hay grupos, y por eso no hay ninguna fila. Son las dos caras de la misma regla y
+es fácil implementar una y romper la otra.
+
 **Aceptación:** una prueba por celda de la tabla, más
 
 - `SELECT COUNT(*) FROM users` sobre tabla vacía da una fila con `0`
 - `SELECT SUM(edad) FROM users` sobre tabla vacía da una fila con `NULL`
+- `GROUP BY` sobre cero filas no devuelve ninguna fila
 - `COUNT(DISTINCT depto)` no cuenta repetidos
+- se puede ordenar por una agregación nombrada con `AS`
 
 ---
 
 ## Ticket 6.6 · Subconsultas
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.2, 6.5, 6.0, 4.4
 
 **Archivos:**
 
 - `engine/Engine.kt` (NUEVO)
-- `app/src/test/.../SubconsultaTest.kt` (NUEVO)
+- `app/src/test/.../SubqueryTest.kt` (NUEVO)
 
 `Engine(session)` es el que arma la cadena de operadores desde una `Query` y la
 ejecuta. Toda lectura de datos pasa por la `Session`, así que el motor nunca abre
@@ -388,12 +455,9 @@ Es también el que decide cómo tratar cada subconsulta:
 
 ```kotlin
 // La fase 4 ya marco cuales son correlacionadas.
-private fun executeSubquery(query: Query, context: RowContext): ResultSet =
-    if (query.correlated) {
-        run(query, context)                      // por fila
-    } else {
-        cache.getOrPut(query) { run(query, context) }   // una vez
-    }
+fun subquery(query: Query, outer: RowContext): ResultSet =
+    if (query.correlated) run(query, outer)
+    else cache.getOrPut(query) { run(query, outer) }
 ```
 
 **El cacheo es lo que hace usable el `IN`:** una subconsulta no correlacionada
@@ -413,16 +477,39 @@ siempre lo mismo.
 la pena aquí, porque un `EXISTS` correlacionado corre por cada fila de afuera, y
 sin el corte recorrería la tabla entera cada vez solo para descartar el resultado.
 
+El corte **no aplica** cuando la subconsulta agrupa o lleva `LIMIT`: ahí tener
+filas o no depende de ejecutarla entera, y un `EXISTS (SELECT ... LIMIT 0)` es
+falso aunque la tabla esté llena. En esos casos se ejecuta normal.
+
+Y el `AND` también corta, que es lo que hace que en
+`WHERE id = 1 AND EXISTS (...)` el `EXISTS` se evalúe solo para la fila que ya
+pasó la primera condición.
+
 **La tabla derivada se ejecuta una sola vez**, antes del `FROM` de la consulta que
 la contiene, porque no puede ser correlacionada: su ámbito no ve el de afuera, ya
 que el `FROM` es lo primero que se evalúa.
 
+### El `ORDER BY` se resuelve antes de proyectar
+
+Sin agrupar, ordenar va **antes** del `SELECT` y no después, aunque el orden de
+evaluación de SQL diga lo contrario. La razón es que
+`SELECT name FROM users ORDER BY city` ordena por una columna que no sale: después
+de proyectar ya no existe. Ordenar antes la tiene a mano, y como el orden se
+conserva al proyectar, el resultado es el mismo.
+
+Lo que sí exige es traducir los alias: `ORDER BY doble` donde `doble` es un alias
+del `SELECT` se ordena por la expresión que lo define, porque antes de proyectar
+ese nombre todavía no existe. Agrupando pasa lo mismo, solo que ahí la expresión
+se evalúa sobre el grupo y puede ser una agregación.
+
 **Aceptación:**
 
-- `IN` no correlacionado ejecuta la interna una sola vez, verificable con un
-  contador
+- `IN` no correlacionado ejecuta la interna una sola vez, verificable con
+  `Session.executions`
 - `EXISTS` correlacionado ejecuta la interna una vez por fila de afuera
-- `EXISTS` corta: sobre una tabla de 1,000 filas donde la primera coincide, lee
-  una
+- `EXISTS` corta: sobre una tabla de 1,000 filas donde la primera coincide mira
+  una, y donde ninguna coincide las mira todas
+- una escalar sin filas da `NULL`, y con varias reporta error de ejecución
 - tres niveles de anidamiento dan el resultado correcto
-- una tabla derivada con agregación adentro funciona
+- una tabla derivada con agregación adentro funciona, se ejecuta una sola vez, y
+  se puede unir con una tabla real
