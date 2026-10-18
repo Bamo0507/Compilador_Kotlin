@@ -98,7 +98,7 @@ class NameResolver(
     private fun resolveStatement(statement: Statement) {
         when (statement) {
             is Insert -> {
-                working.table(statement.table)?.let { checkStructure(it, statement.location) }
+                checkStructure(statement.table, statement.location)
                 // Un INSERT no puede nombrar columnas de la tabla que llena, pero
                 // si traer una subconsulta.
                 statement.rows.flatten().forEach { resolveExpression(it, global, emptyList(), Clause("VALUES")) }
@@ -122,7 +122,7 @@ class NameResolver(
     private fun tableScope(name: String, location: LexemeLocation): Scope? {
         val table = working.table(name) ?: return null
 
-        checkStructure(table, location)
+        checkStructure(name, location)
         val scope = global.openChild(ScopeKind.QUERY, "statement@${location.line}")
         declare(scope, name, DeclarationKind.TABLE, table, offset = 0, location = location)
         return scope
@@ -177,13 +177,13 @@ class NameResolver(
      * afuera exista `FROM users u`.
      */
     private fun declareTable(source: TableSource, scope: Scope, offset: Int): Int {
-        val table = catalog.table(source.table)
+        val table = working.table(source.table)
         if (table == null) {
             report(source.location, "la tabla '${source.table}' no existe")
             return offset
         }
 
-        checkStructure(table, source.location)
+        checkStructure(source.table, source.location)
         declare(
             scope = scope,
             name = source.alias ?: source.table,
@@ -368,12 +368,15 @@ class NameResolver(
      * para que cuando alguien edite el archivo a mano, el mensaje diga que paso en
      * vez de reventar tres etapas mas adelante con otra cosa.
      */
-    private fun checkStructure(table: Table, location: LexemeLocation) {
-        if (!checked.add(table.name)) return
+    private fun checkStructure(name: String, location: LexemeLocation) {
+        if (!checked.add(name)) return
 
-        // Una tabla creada en este mismo script todavia no tiene archivo. Lo
-        // crea el motor al escribir, no hay nada que comparar.
-        val file = directory.csv(table.name)
+        // Se compara contra el esquema que hay EN DISCO, no contra el que va
+        // quedando: despues de un ALTER, el archivo todavia tiene las columnas
+        // viejas y eso es correcto hasta que se vuelque. Una tabla creada en este
+        // mismo script ni siquiera tiene archivo.
+        val table = catalog.table(name) ?: return
+        val file = directory.csv(name)
         if (!file.isFile) return
 
         val header = try {

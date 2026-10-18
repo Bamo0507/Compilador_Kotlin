@@ -115,7 +115,7 @@ class Session(
         for (statement in script.statements) {
             when (statement) {
                 is Query -> results += Engine(this).execute(statement)
-                else -> {}
+                else -> Writer(this).execute(statement)
             }
             if (diagnostics.hasErrors) break
         }

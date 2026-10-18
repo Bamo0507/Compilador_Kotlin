@@ -37,6 +37,11 @@ class Engine(private val session: Session) {
 
     fun execute(query: Query): ResultSet = run(query, RowContext.EMPTY)
 
+    // El valor de una expresion suelta. Lo usa el escritor para los valores de un
+    // INSERT y de un SET, que pueden traer una subconsulta adentro.
+    fun valueOf(expression: Expression, context: RowContext = RowContext.EMPTY): Value =
+        evaluator.evaluate(expression, context)
+
     /**
      * El orden es el de evaluacion de SQL: FROM, JOIN, WHERE, GROUP BY, HAVING,
      * SELECT, ORDER BY, DISTINCT, LIMIT.

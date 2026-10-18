@@ -2,7 +2,9 @@ package org.compiler.engine
 
 import org.compiler.catalog.Catalog
 import org.compiler.catalog.CatalogLoader
+import org.compiler.catalog.AutoIncrement
 import org.compiler.catalog.Column
+import org.compiler.catalog.Default
 import org.compiler.catalog.ForeignKey
 import org.compiler.catalog.NotNull
 import org.compiler.catalog.PrimaryKey
@@ -15,6 +17,8 @@ import org.compiler.frontend.ast.models.Script
 import org.compiler.frontend.semantic.NameResolver
 import org.compiler.frontend.semantic.SqlChecker
 import org.compiler.frontend.syntax.SqlSyntaxAnalyzer
+import org.compiler.runtime.DbmsPipeline
+import org.compiler.runtime.models.CompilationResult
 import org.compiler.storage.CsvWriter
 import org.compiler.storage.DataDirectory
 import org.compiler.types.BooleanType
@@ -66,6 +70,14 @@ val samplesTable = Table("samples", listOf(
     Column("flag", BooleanType, emptyList())
 ))
 
+// Para las reglas de escritura: una clave que se genera sola, un valor por
+// omision, un largo que se puede pasar y una escala que se puede redondear.
+val notesTable = Table("notes", listOf(
+    Column("id", IntType, listOf(PrimaryKey, AutoIncrement)),
+    Column("label", VarcharType(20), listOf(NotNull, Default("sin texto"))),
+    Column("score", DecimalType(5, 2), emptyList())
+))
+
 val usersRows = listOf(
     listOf("1", "Ana", "GT", "30"),
     listOf("2", "Beto", "GT", "40"),
@@ -90,6 +102,16 @@ fun database(root: File) {
     write(root, usersTable, usersRows)
     write(root, postsTable, postsRows)
 }
+
+// El pipeline completo, con volcado al directorio.
+fun pipeline(root: File, sql: String, write: Boolean = true): CompilationResult =
+    DbmsPipeline.run(sql, DataDirectory(root), write)
+
+// El archivo tal como quedo en disco, para ver que de verdad se escribio.
+fun lines(root: File, table: String): List<String> = File(root, "$table.csv").readLines()
+
+// Las filas de una tabla despues de correr un script, sin volcar.
+fun Outcome.rowsOf(table: String): List<Row> = session.rowsOf(table)
 
 class Outcome(
     val results: List<ResultSet>,

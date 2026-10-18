@@ -1,10 +1,13 @@
 package org.compiler.runtime.models
 
+import org.compiler.catalog.Catalog
 import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.diagnostics.Severity
+import org.compiler.engine.ExecutionResult
 import org.compiler.frontend.ast.models.Script
 import org.compiler.frontend.ast.models.TreeNodeView
+import org.compiler.frontend.semantic.symbols.Scope
 
 
 data class CompilationResult(
@@ -16,8 +19,20 @@ data class CompilationResult(
     // Etapa B: el AST propio. null si no parseo.
     val ast: Script? = null,
 
+    // Etapa C: la base como estaba al arrancar. null si no se llego a cargar.
+    val catalog: Catalog? = null,
+
+    // Etapa D: el arbol de ambitos, que la interfaz dibuja.
+    val scope: Scope? = null,
+
+    // Etapa E: lo que devolvio cada consulta. null si el analisis reporto algo y
+    // no se llego a ejecutar.
+    val execution: ExecutionResult? = null,
+
     val errors: List<CompilerError> = emptyList()
 ) {
+    val results get() = execution?.results.orEmpty()
+
     // Las ADVERTENCIA no cuentan: un script que solo tiene avisos se ejecuta.
     val hasErrors: Boolean get() = errors.any { it.severity == Severity.ERROR }
 

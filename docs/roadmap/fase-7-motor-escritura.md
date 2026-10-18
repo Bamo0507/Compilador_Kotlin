@@ -12,13 +12,13 @@ escribe nada.
 
 ## Ticket 7.1 · Las validaciones de escritura
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.3, 2.2
 
 **Archivos:**
 
-- `engine/Validaciones.kt` (NUEVO)
-- `app/src/test/.../ValidacionesTest.kt` (NUEVO)
+- `engine/WriteRules.kt` (NUEVO)
+- `app/src/test/.../WriteRulesTest.kt` (NUEVO)
 
 **Qué es esto, en simple:** lo que se revisa antes de aceptar una fila. Es lo que
 de verdad protege la base, porque por la decisión 4 el DBMS confía en lo que él
@@ -60,25 +60,45 @@ tabla vacía arranca en 1. Es simple y correcto sin estado persistido; el costo 
 que si se borra la última fila, el número se reusa. Se documenta como
 simplificación consciente.
 
+### Ajustar y validar son dos cosas
+
+Quedaron separadas porque se usan en momentos distintos. `prepare` ajusta cada
+celda a su columna, que es rellenar un `CHAR`, redondear un `DECIMAL` y rechazar lo
+que no cabe. `validate` mira la fila ya ajustada contra las reglas de la tabla.
+
+Un `INSERT` arma la fila y hace las dos. Un `UPDATE` ya tiene la fila y solo
+necesita las dos sobre el resultado, sin volver a rellenar lo que no tocó.
+
+**El `NULL` que la fase 5 no podía ver.** Un `NULL` escrito lo atrapa el
+semántico. El que sale de `(SELECT name FROM users WHERE id = 99)`, que no devolvió
+filas, solo se ve con los datos delante, y ese lo atrapa aquí.
+
 **Aceptación:** una prueba por paso, más
 
-- insertar en tabla vacía con `AUTOINCREMENT` da `1`
-- insertar una PK repetida reporta con el valor en el mensaje
-- una FK que apunta a un valor inexistente reporta con las dos tablas
-- `NULL` explícito en columna `NOT NULL` reporta
+- insertar en tabla vacía con `AUTOINCREMENT` da `1`, y el siguiente sigue desde el
+  mayor que ya hay
+- el valor generado respeta la clave primaria, porque se asigna antes de revisarla
+- insertar una PK repetida reporta con el valor en el mensaje, aunque la otra fila
+  la haya insertado una sentencia anterior del mismo script
+- una FK que apunta a un valor inexistente reporta con las dos tablas, y una en
+  nulo no se verifica
+- un `NULL` que aparece al ejecutar reporta
 - columna omitida con `DEFAULT` toma el valor por omisión
+- un texto calculado que no cabe reporta, un decimal con escala de más se redondea
+  y uno con parte entera de más reporta
 
 ---
 
 ## Ticket 7.2 · `INSERT`, `UPDATE` y `DELETE`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.1, 6.0
 
 **Archivos:**
 
 - `engine/Writer.kt` (NUEVO)
 - `engine/Session.kt` (MODIFICA)
+- `engine/Engine.kt` (MODIFICA, `valueOf` para una expresión suelta)
 - `app/src/test/.../WriterDmlTest.kt` (NUEVO)
 
 ```kotlin
@@ -108,8 +128,12 @@ La comparación es por posición en la tabla, no por valor.
 fila de `posts` la referencia.
 
 ```
-no se puede delete users.id = 3: lo referencian 4 rows de posts
+no se puede borrar users.id = 1: lo referencian 2 filas de posts
 ```
+
+**Un `UPDATE` que no alcanza ninguna fila no marca la tabla**, y por eso el volcado
+no la reescribe. Marcar al entrar sería más simple y haría que `UPDATE ... WHERE
+id = 99` reescribiera un archivo idéntico.
 
 **Aceptación:**
 
@@ -127,13 +151,13 @@ no se puede delete users.id = 3: lo referencian 4 rows de posts
 
 ## Ticket 7.3 · `CREATE`, `ALTER` y `DROP`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.2, 2.6
 
 **Archivos:**
 
 - `engine/Writer.kt` (MODIFICA)
-- `engine/Session.kt` (MODIFICA)
+- `frontend/semantic/NameResolver.kt` (MODIFICA, ver abajo)
 - `app/src/test/.../WriterDdlTest.kt` (NUEVO)
 
 Cada una toca **los dos archivos** de la tabla, en memoria, llamando a
@@ -157,19 +181,39 @@ opera sobre el catálogo en memoria y el `INSERT` ve la columna nueva. Es un cas
 que hay que probar explícitamente, porque es donde se nota si alguna parte del
 motor se quedó con el catálogo viejo.
 
+### Dos errores que este ticket destapó
+
+**La guarda de cordura se disparaba después de un `ALTER`.** Comparaba el header
+del CSV contra el esquema **como va quedando**, así que apenas una sentencia
+agregaba una columna, la siguiente reportaba que el archivo estaba editado a mano.
+Y tenía razón en que no coincidían: lo que estaba mal era contra qué comparaba. La
+guarda existe para detectar una edición externa, así que compara contra el esquema
+que hay **en disco**, el del catálogo inicial, y salta las tablas que nacieron en
+este mismo script.
+
+**El `ALTER` cargaba las filas después de cambiar el catálogo.** `rowsOf` decodifica
+guiándose por el esquema, así que al pedirlas después del cambio leía el archivo
+viejo con el esquema nuevo: un `ADD` dejaba la columna dos veces y un `DROP` se
+comía una de más. Las filas se materializan **antes** de tocar el catálogo.
+
+Los dos tienen la misma forma, que es la única cosa delicada de esta fase: hay dos
+esquemas a la vez, el que está en disco y el que va quedando en memoria, y cada
+operación tiene que saber cuál de los dos le toca.
+
 **Aceptación:**
 
 - `CREATE` y luego `INSERT` en el mismo script funciona
 - `ALTER ADD` con `DEFAULT` rellena las filas existentes
 - `ALTER ADD` sin `DEFAULT` deja nulos
-- `ALTER DROP` quita el campo de todas las filas
+- `ALTER ADD` y usar la columna nueva en la sentencia siguiente funciona
+- `ALTER DROP` quita el campo de todas las filas y lo que queda sigue alineado
 - `DROP` y `CREATE` de la misma tabla en un script deja la tabla nueva
 
 ---
 
 ## Ticket 7.4 · El volcado y la vuelta atrás
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.3
 
 **Archivos:**
@@ -182,13 +226,19 @@ motor se quedó con el catálogo viejo.
 // no hubo ningun error. Decision 5.
 fun flush(changes: Changes, directory: DataDirectory)
 
-// Lo que Session.cambios() devuelve, del ticket 6.0.
+// Lo que Session.changes() devuelve, del ticket 6.0.
 class Changes(
-    val modifiedSchemas: List<Table>,
-    val modifiedTables: Map<String, List<Row>>,
-    val droppedTables: List<String>
+    val rows: Map<String, List<Row>>,
+    val catalog: Catalog,
+    val schemas: List<String>,
+    val dropped: List<String>
 )
 ```
+
+Los esquemas viajan como **nombres** y no como `Table`, con el catálogo final al
+lado. El volcado necesita ese catálogo de todos modos, porque para escribir un CSV
+tiene que saber el orden y el tipo de cada columna, así que llevar las tablas
+sueltas además sería la misma información dos veces.
 
 **El `flush` no conoce la `Session`, solo su reporte.** Así se prueba pasándole un
 `Changes` armado a mano, sin montar una corrida entera.
@@ -227,28 +277,31 @@ está fuera del alcance a propósito. Se documenta.
 
 **Aceptación:**
 
-- un script cuya cuarta sentencia falla deja `data/` **idéntico**, comparado byte
-  por byte contra una copia tomada antes
+- un script cuya cuarta sentencia falla deja el directorio **idéntico**, comparado
+  byte por byte contra una copia tomada antes
 - un script que solo consulta no escribe ningún archivo
-- un script que toca una tabla de tres no reescribe las otras dos, verificable por
-  fecha de modificación
+- un script que toca una tabla de dos no reescribe la otra, ni reescribe el `.json`
+  de la que cambió si su esquema no cambió, verificable por fecha de modificación
 - todos los tests corren sobre un `DataDirectory` de `@TempDir`, nunca sobre
   `DEFAULT`
 - un `CREATE` seguido de un error deja el directorio sin la tabla nueva
+- lo que se escribió se vuelve a leer igual, con los nueve tipos guardables
 
 ---
 
 ## Ticket 7.5 · El pipeline completo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.4, 6.6
 
 **Archivos:**
 
 - `runtime/DbmsPipeline.kt` (MODIFICA)
 - `runtime/models/CompilationResult.kt` (MODIFICA)
-- `engine/ExecutionResult.kt` (NUEVO)
 - `app/src/test/.../DbmsPipelineTest.kt` (MODIFICA)
+
+`ExecutionResult` no necesitó archivo propio: nació con la `Session` en el ticket
+6.0, que es quien lo arma.
 
 ```kotlin
 object DbmsPipeline {
@@ -270,9 +323,10 @@ object DbmsPipeline {
         // Etapa C: catalogo. Lee los .json, ningun .csv.
         val catalog = CatalogLoader(directory, diagnostics).cargar()
 
-        // Etapa D: semantico. Corre AUNQUE C haya reportado, para que el
-        // usuario vea todos sus problemas de una vez.
-        SqlChecker(catalog, diagnostics).revisar(ast)
+        // Etapa D: semantico, en sus dos mitades. Corre AUNQUE C haya reportado,
+        // para que el usuario vea todos sus problemas de una vez.
+        val scope = NameResolver(catalog, directory, diagnostics).resolve(ast)
+        SqlChecker(catalog, directory, diagnostics).check(ast)
 
         // Etapa E: ejecucion, solo si no quedo ningun error.
         // hasErrors ignora las WARNING, asi que un script con avisos corre.
@@ -296,20 +350,34 @@ object DbmsPipeline {
 }
 ```
 
-**El `escribir = false` es para los tests** que quieren el resultado sin volcar.
-Los que sí prueban la escritura pasan un `directorio` de `@TempDir`, que es lo que
-evita que la batería toque el `data/` real.
+**El `write = false` es para los tests** que quieren el resultado sin volcar. Los
+que sí prueban la escritura pasan un `directory` de `@TempDir`, que es lo que evita
+que la batería toque el `data/` real.
 
-`CompilationResult` tiene todos los campos nulables a propósito, igual que en
-Compiscript: un fuente que no parsea no tiene AST, pero sí tiene errores, y la GUI
-debe poder mostrar resultados parciales.
+### Un error que solo se ve con las seis etapas juntas
+
+`CREATE TABLE users (...); SELECT * FROM users;` reportaba que la tabla no existe.
+La fase 5 ya había enseñado al resolutor a llevar un catálogo que avanza con el
+script, pero `declareTable`, que es quien resuelve el `FROM`, seguía preguntándole
+al catálogo **inicial**. El caso no salía antes porque los tests de la fase 5
+probaban `CREATE` seguido de `INSERT`, que va por otro camino.
+
+Es el valor de conectar el pipeline: ninguna de las dos fases podía ver el error
+desde adentro.
+
+`CompilationResult` tiene todos los campos nulables a propósito: un fuente que no
+parsea no tiene AST, pero sí tiene errores, y la GUI debe poder mostrar resultados
+parciales. Además del catálogo y la ejecución, lleva el **árbol de ámbitos**, que
+el resolutor ya devolvía y que el ticket 9.3 dibuja.
 
 **Aceptación:**
 
 - un script válido de extremo a extremo: `CREATE`, `INSERT`, `SELECT`, y el
-  `SELECT` devuelve lo insertado
+  `SELECT` devuelve lo insertado, que además quedó escrito en el archivo
 - un error de sintaxis devuelve resultado con errores y sin AST
 - un error semántico devuelve resultado con AST, con catálogo y sin ejecución
-- con `escribir = false`, el directorio nunca cambia
+- un error de ejecución deja el AST y el catálogo
+- el árbol de ámbitos llega al resultado
+- con `write = false`, el directorio nunca cambia
 - un script con solo advertencias se ejecuta y vuelca
 - ninguna prueba del pipeline usa `DataDirectory.DEFAULT`

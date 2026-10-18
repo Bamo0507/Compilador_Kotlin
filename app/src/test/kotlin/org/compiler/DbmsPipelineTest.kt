@@ -3,6 +3,8 @@ package org.compiler
 import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.diagnostics.Severity
+import org.compiler.engine.database
+import org.compiler.engine.lines
 import org.compiler.frontend.ast.models.CreateTable
 import org.compiler.frontend.ast.models.Query
 import org.compiler.models.LexemeLocation
@@ -21,9 +23,11 @@ import kotlin.test.assertTrue
 
 /**
  * El pipeline no tiene logica propia: lo que se prueba es la forma del resultado
- * que la GUI espera, y que ninguna entrada lo haga lanzar.
+ * que la GUI espera, que cada etapa corra cuando le toca, y que ninguna entrada lo
+ * haga lanzar.
  *
- * Las etapas se van conectando despues, y cada una trae sus propios tests.
+ * Ninguna prueba usa `DataDirectory.DEFAULT`: todas trabajan sobre un @TempDir,
+ * que es lo que evita que la bateria toque el `data/` de verdad.
  */
 class DbmsPipelineTest {
 
@@ -147,9 +151,81 @@ class DbmsPipelineTest {
     // descubre que no es fecha, y el AST llega completo junto con el error.
     @Test
     fun `un literal imposible reporta pero conserva el AST`(@TempDir temp: File) {
-        val result = DbmsPipeline.run("SELECT * FROM t WHERE d = DATE '2026-02-30';", DataDirectory(temp))
+        val result = DbmsPipeline.run(
+            "CREATE TABLE t (d DATE);\nSELECT * FROM t WHERE d = DATE '2026-02-30';",
+            DataDirectory(temp),
+            write = false
+        )
 
-        assertEquals(1, result.semanticErrors.size)
+        assertEquals(
+            listOf("'2026-02-30' no es una fecha valida: se espera AAAA-MM-DD"),
+            result.semanticErrors.map { it.message }
+        )
         assertNotNull(result.ast)
+    }
+
+    // ── Las seis etapas conectadas (ticket 7.5) ────────────────────────────
+
+    @Test
+    fun `un script valido de extremo a extremo devuelve lo insertado`(@TempDir temp: File) {
+        val result = DbmsPipeline.run(
+            """
+            CREATE TABLE tags (id INT PRIMARY KEY, label VARCHAR(10));
+            INSERT INTO tags VALUES (1, 'viral'), (2, 'nuevo');
+            SELECT label FROM tags ORDER BY id;
+            """.trimIndent(),
+            DataDirectory(temp)
+        )
+
+        assertFalse(result.hasErrors, "errores: ${result.errors}")
+        val rows = assertNotNull(result.execution).results.single().rows
+
+        assertEquals(listOf("viral", "nuevo"), rows.map { it.values.single().display() })
+        assertEquals(listOf("id,label", "1,viral", "2,nuevo"), lines(temp, "tags"))
+    }
+
+    // El semantico corta antes de ejecutar, pero el AST y el catalogo si llegan:
+    // la GUI tiene que poder mostrar resultados parciales.
+    @Test
+    fun `un error semantico conserva el AST y el catalogo y no ejecuta`(@TempDir temp: File) {
+        database(temp)
+        val result = DbmsPipeline.run("SELECT * FROM fantasma;", DataDirectory(temp))
+
+        assertTrue(result.hasErrors)
+        assertNotNull(result.ast)
+        assertEquals(setOf("posts", "users"), assertNotNull(result.catalog).tables.keys)
+        assertNull(result.execution)
+    }
+
+    @Test
+    fun `el arbol de ambitos llega al resultado`(@TempDir temp: File) {
+        database(temp)
+        val result = DbmsPipeline.run("SELECT * FROM users;", DataDirectory(temp))
+
+        val scope = assertNotNull(result.scope)
+        // En el orden en que el cargador recorre el directorio, que es alfabetico.
+        assertEquals(listOf("posts", "users"), scope.localSymbols().map { it.name })
+        assertEquals(1, scope.children.size, "una consulta, un ambito")
+    }
+
+    // La decision 11 de verdad: un script con solo avisos se ejecuta Y se vuelca.
+    @Test
+    fun `un script con solo advertencias se ejecuta y escribe`(@TempDir temp: File) {
+        database(temp)
+        val result = DbmsPipeline.run("DELETE FROM posts;", DataDirectory(temp))
+
+        assertFalse(result.hasErrors)
+        assertEquals(1, result.warnings.size)
+        assertEquals(listOf("uid,title,views"), lines(temp, "posts"))
+    }
+
+    @Test
+    fun `un error de ejecucion deja el AST y el catalogo`(@TempDir temp: File) {
+        database(temp)
+        val result = DbmsPipeline.run("INSERT INTO users (id, name) VALUES (1, 'Repetida');", DataDirectory(temp))
+
+        assertEquals(1, result.executionErrors.size)
+        assertNotNull(result.ast)
+        assertNotNull(result.catalog)
     }
 }
