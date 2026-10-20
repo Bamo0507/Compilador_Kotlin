@@ -109,7 +109,18 @@ data class PropertyAccess(
     // El miembro de la clase al que se resolvio, propio o heredado. Lo pone el
     // TypeChecker.
     var resolvedMember: Symbol? = null
+
+    // Solo cuando el objetivo es una lista: cual de sus dos operaciones es. Lo pone el
+    // TypeChecker.
+    var listOperation: ListOperation? = null
 }
+
+// lista.push(x) y lista.length
+enum class ListOperation { PUSH, LENGTH }
+
+// Los dos nombres que tiene una lista. Este es el unico lugar donde estan escritos.
+const val PUSH_NAME = "push"
+const val LENGTH_NAME = "length"
 
 // new Perro("Toby")
 data class ObjectCreation(

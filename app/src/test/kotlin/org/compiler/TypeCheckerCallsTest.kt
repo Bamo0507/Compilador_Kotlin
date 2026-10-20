@@ -5,18 +5,23 @@ import org.antlr.v4.runtime.CommonTokenStream
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.AstBuilder
 import org.compiler.frontend.ast.models.Expression
+import org.compiler.frontend.ast.models.FunctionCall
+import org.compiler.frontend.ast.models.ListOperation
 import org.compiler.frontend.ast.models.Program
+import org.compiler.frontend.ast.models.PropertyAccess
 import org.compiler.frontend.semantic.DeclarationCollector
 import org.compiler.frontend.semantic.TypeChecker
 import org.compiler.frontend.semantic.symbols.ArrayType
 import org.compiler.frontend.semantic.symbols.ClassType
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.ErrorType
+import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.FunctionType
 import org.compiler.frontend.semantic.symbols.IntegerType
 import org.compiler.frontend.semantic.symbols.Scope
 import org.compiler.frontend.semantic.symbols.StringType
 import org.compiler.frontend.semantic.symbols.Symbol
+import org.compiler.frontend.semantic.symbols.VoidType
 import org.compiler.models.LexemeLocation
 import org.compiler.parser.CompiscriptLexer
 import org.compiler.parser.CompiscriptParser
@@ -196,5 +201,80 @@ class TypeCheckerCallsTest {
         assertEquals(IntegerType, negative.type)
         assertEquals(ErrorType, notArray.type)
         assertEquals(3, diagnostics.count)
+    }
+
+    // ── push y length ─────────────────────────────────────────────────────
+
+    @Test
+    fun `push recibe un elemento de la lista y no devuelve nada`() {
+        val (checker, diagnostics, global) = checkerWith("")
+        declare(global, "notas", ArrayType(IntegerType))
+        declare(global, "precios", ArrayType(FloatType))
+
+        val push = expression("notas.push(30)")
+        val widened = expression("precios.push(3)")
+        checker.checkExpression(push)
+        checker.checkExpression(widened)
+
+        assertEquals(VoidType, push.type)
+        assertEquals(ListOperation.PUSH, ((push as FunctionCall).callee as PropertyAccess).listOperation)
+        assertEquals(VoidType, widened.type)
+        assertEquals(0, diagnostics.count)
+    }
+
+    @Test
+    fun `push con un elemento de otro tipo es error`() {
+        val (checker, diagnostics, global) = checkerWith("")
+        declare(global, "notas", ArrayType(IntegerType))
+
+        checker.checkExpression(expression("notas.push(\"treinta\")"))
+        checker.checkExpression(expression("notas.push(1, 2)"))
+
+        assertEquals(2, diagnostics.count)
+    }
+
+    @Test
+    fun `length es un entero de solo lectura`() {
+        val (checker, diagnostics, global) = checkerWith("")
+        declare(global, "notas", ArrayType(IntegerType))
+
+        val length = expression("notas.length")
+        checker.checkExpression(length)
+        checker.checkExpression(expression("notas.length = 5"))
+        checker.checkExpression(expression("notas.length()"))
+
+        assertEquals(IntegerType, length.type)
+        assertEquals(ListOperation.LENGTH, (length as PropertyAccess).listOperation)
+        assertEquals(2, diagnostics.count)
+    }
+
+    @Test
+    fun `push sin llamarlo y otros nombres sobre una lista son errores`() {
+        val (checker, diagnostics, global) = checkerWith("")
+        declare(global, "notas", ArrayType(IntegerType))
+
+        val withoutCall = expression("notas.push")
+        val unknown = expression("notas.pop()")
+        checker.checkExpression(withoutCall)
+        checker.checkExpression(unknown)
+
+        assertEquals(ErrorType, withoutCall.type)
+        assertEquals(ErrorType, unknown.type)
+        assertEquals(2, diagnostics.count)
+    }
+
+    @Test
+    fun `un metodo push de una clase sigue siendo un metodo`() {
+        val (checker, diagnostics, global) = checkerWith(
+            "class Pila { function push(x: integer): integer { return x; } }"
+        )
+        declare(global, "pila", ClassType("Pila"))
+
+        val call = expression("pila.push(1)")
+        checker.checkExpression(call)
+
+        assertEquals(IntegerType, call.type)
+        assertEquals(null, ((call as FunctionCall).callee as PropertyAccess).listOperation)
+        assertEquals(0, diagnostics.count)
     }
 }

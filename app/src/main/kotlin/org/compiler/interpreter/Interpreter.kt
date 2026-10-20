@@ -19,6 +19,7 @@ import org.compiler.frontend.ast.models.FunctionDeclaration
 import org.compiler.frontend.ast.models.Identifier
 import org.compiler.frontend.ast.models.If
 import org.compiler.frontend.ast.models.IndexAccess
+import org.compiler.frontend.ast.models.ListOperation
 import org.compiler.frontend.ast.models.Literal
 import org.compiler.frontend.ast.models.ObjectCreation
 import org.compiler.frontend.ast.models.OperatorGroup
@@ -31,13 +32,16 @@ import org.compiler.frontend.ast.models.Switch
 import org.compiler.frontend.ast.models.TernaryOperation
 import org.compiler.frontend.ast.models.ThisReference
 import org.compiler.frontend.ast.models.TryCatch
+import org.compiler.frontend.ast.models.TypeReference
 import org.compiler.frontend.ast.models.UnaryOperation
 import org.compiler.frontend.ast.models.UnaryOperator
 import org.compiler.frontend.ast.models.VariableDeclaration
 import org.compiler.frontend.ast.models.While
+import org.compiler.frontend.semantic.symbols.ArrayType
 import org.compiler.frontend.semantic.symbols.CONSTRUCTOR_NAME
 import org.compiler.frontend.semantic.symbols.FloatType
 import org.compiler.frontend.semantic.symbols.StringType
+import org.compiler.frontend.semantic.symbols.Type
 import org.compiler.frontend.semantic.wrapToInteger
 import org.compiler.models.LexemeLocation
 
@@ -221,8 +225,11 @@ class Interpreter {
 
     private fun evaluateLiteral(expr: Literal): RuntimeValue = toRuntimeValue(expr.value)
 
-    private fun evaluateArrayLiteral(expr: ArrayLiteral): RuntimeValue =
-        ArrayValue(expr.elements.map { evaluate(it) }.toMutableList())
+    private fun evaluateArrayLiteral(expr: ArrayLiteral): RuntimeValue {
+        val elementType = (expr.type as? ArrayType)?.element
+        val elements = expr.elements.map { convertedTo(elementType, evaluate(it)) }
+        return ArrayValue(elements.toMutableList())
+    }
 
     private fun evaluateIdentifier(expr: Identifier): RuntimeValue =
         environment.get(expr.name)
@@ -262,6 +269,11 @@ class Interpreter {
         // En o.m(a), como en Java: primero el objeto, despues los argumentos, y recien
         // al llamar se chequea que el objeto no sea null.
         val calleeExpression = expr.callee
+        if (calleeExpression is PropertyAccess &&
+            calleeExpression.listOperation == ListOperation.PUSH
+        ) {
+            return evaluatePush(calleeExpression, expr.arguments.single())
+        }
         if (calleeExpression is PropertyAccess) {
             val receiver = evaluate(calleeExpression.target)
             val arguments = expr.arguments.map { evaluate(it) }
@@ -296,7 +308,8 @@ class Interpreter {
 
         // Los parametros se ligan por POSICION, como validó el TypeChecker.
         callee.declaration.parameters.forEachIndexed { index, parameter ->
-            callEnvironment.define(parameter.name, arguments[index])
+            val parameterType = declaredTypeOf(parameter.declaredType)
+            callEnvironment.define(parameter.name, convertedTo(parameterType, arguments[index]))
         }
 
         callDepth += 1
@@ -305,7 +318,7 @@ class Interpreter {
                 executeBlock(callee.declaration.body, callEnvironment)
                 NullValue // llegó al final sin return
             } catch (signal: ReturnSignal) {
-                signal.value // hubo return
+                convertedTo(declaredTypeOf(callee.declaration.returnType), signal.value)
             }
         } finally {
             // En el finally para que una excepcion no deje el contador inflado: si
@@ -359,8 +372,8 @@ class Interpreter {
         environment = fieldEnvironment
         try {
             declaration.members.filterIsInstance<VariableDeclaration>().forEach { field ->
-                instance.fields[field.name] =
-                    field.initializer?.let { evaluate(it) } ?: defaultValueFor(field)
+                val value = field.initializer?.let { evaluate(it) } ?: defaultValueFor(field)
+                instance.fields[field.name] = convertedTo(declaredTypeOf(field.declaredType), value)
             }
         } finally {
             environment = previous
@@ -380,9 +393,24 @@ class Interpreter {
             else -> NullValue
         }
 
-    // Un acceso a propiedad devuelve un CAMPO o un METODO ligado.
-    private fun evaluatePropertyAccess(expr: PropertyAccess): RuntimeValue =
-        memberOf(evaluate(expr.target), expr)
+    // Un acceso a propiedad devuelve un CAMPO o un METODO ligado, o el largo de una lista.
+    private fun evaluatePropertyAccess(expr: PropertyAccess): RuntimeValue {
+        val target = evaluate(expr.target)
+        if (expr.listOperation == ListOperation.LENGTH) {
+            return IntValue(asArray(target, expr.location).elements.size.toLong())
+        }
+        return memberOf(target, expr)
+    }
+
+    // lista.push(x): primero la lista, despues el valor, y al agregar se chequea que la
+    // lista no sea null.
+    private fun evaluatePush(callee: PropertyAccess, argument: Expression): RuntimeValue {
+        val container = evaluate(callee.target)
+        val value = evaluate(argument)
+        val array = asArray(container, callee.location)
+        array.elements += convertedTo((callee.target.type as? ArrayType)?.element, value)
+        return NullValue
+    }
 
     private fun memberOf(target: RuntimeValue, expr: PropertyAccess): RuntimeValue {
         if (target !is ObjectValue) {
@@ -440,7 +468,7 @@ class Interpreter {
     private fun assign(target: Expression, valueExpression: Expression): RuntimeValue {
         when (target) {
             is Identifier -> {
-                val value = evaluate(valueExpression)
+                val value = convertedTo(target.type, evaluate(valueExpression))
                 if (!environment.assign(target.name, value)) {
                     throw RuntimeError(target.location,
                         "La variable '${target.name}' no existe en tiempo de ejecución")
@@ -450,7 +478,7 @@ class Interpreter {
 
             is PropertyAccess -> {
                 val container = evaluate(target.target)
-                val value = evaluate(valueExpression)
+                val value = convertedTo(target.type, evaluate(valueExpression))
                 asObject(container, target.location).fields[target.propertyName] = value
                 return value
             }
@@ -458,7 +486,7 @@ class Interpreter {
             is IndexAccess -> {
                 val container = evaluate(target.target)
                 val index = asLong(evaluate(target.index)).toInt()
-                val value = evaluate(valueExpression)
+                val value = convertedTo(target.type, evaluate(valueExpression))
                 val array = asArray(container, target.location)
                 array.elements[boundsCheckedIndex(array, index, target)] = value
                 return value
@@ -487,10 +515,8 @@ class Interpreter {
     private fun executeVariableDeclaration(stmt: VariableDeclaration) {
         // define y no assign: es una declaracion, crea un nombre NUEVO en este
         // entorno. Sin inicializador arranca en el cero de su tipo, como un campo.
-        environment.define(
-            stmt.name,
-            stmt.initializer?.let { evaluate(it) } ?: defaultValueFor(stmt)
-        )
+        val value = stmt.initializer?.let { evaluate(it) } ?: defaultValueFor(stmt)
+        environment.define(stmt.name, convertedTo(declaredTypeOf(stmt.declaredType), value))
     }
 
     private fun executeFunctionDeclaration(stmt: FunctionDeclaration) {
@@ -621,6 +647,15 @@ class Interpreter {
         is Boolean -> BoolValue(constant)
         else -> error("Constante de tipo inesperado: $constant")
     }
+
+    // Un entero que se guarda donde se declaro float se convierte, igual que el inttofloat
+    // del codigo intermedio: si no, print mostraria 3 donde la maquina muestra 3.0.
+    private fun convertedTo(type: Type?, value: RuntimeValue): RuntimeValue =
+        if (type == FloatType && value is IntValue) FloatValue(value.value.toDouble()) else value
+
+    // Solo importa si el tipo escrito es float: es el unico destino que convierte.
+    private fun declaredTypeOf(reference: TypeReference?): Type? =
+        if (reference?.name == FloatType.name) FloatType else null
 
     private fun asBoolean(value: RuntimeValue): Boolean =
         (value as? BoolValue)?.value ?: error("Se esperaba un boolean, no $value")

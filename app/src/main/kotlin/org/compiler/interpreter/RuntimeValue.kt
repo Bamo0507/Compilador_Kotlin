@@ -1,6 +1,7 @@
 package org.compiler.interpreter
 
 import org.compiler.frontend.ast.models.FunctionDeclaration
+import java.util.Locale
 
 // Un valor concreto durante la ejecución.
 sealed interface RuntimeValue {
@@ -13,7 +14,12 @@ data class IntValue(val value: Long) : RuntimeValue {
 }
 
 data class FloatValue(val value: Double) : RuntimeValue {
-    override fun display() = value.toString()
+    // Seis decimales sin los ceros sobrantes, y al menos uno: 3.5, 1.0, 0.333333. Es el
+    // formato del runtime de ARM, para que las dos salidas coincidan.
+    override fun display(): String {
+        val fixed = String.format(Locale.ROOT, "%.6f", value).trimEnd('0')
+        return if (fixed.endsWith('.')) "${fixed}0" else fixed
+    }
 }
 
 data class StringValue(val value: String) : RuntimeValue {

@@ -21,10 +21,13 @@ import org.compiler.frontend.ast.models.FunctionDeclaration
 import org.compiler.frontend.ast.models.Identifier
 import org.compiler.frontend.ast.models.If
 import org.compiler.frontend.ast.models.IndexAccess
+import org.compiler.frontend.ast.models.LENGTH_NAME
+import org.compiler.frontend.ast.models.ListOperation
 import org.compiler.frontend.ast.models.Literal
 import org.compiler.frontend.ast.models.Node
 import org.compiler.frontend.ast.models.OperatorGroup
 import org.compiler.frontend.ast.models.ObjectCreation
+import org.compiler.frontend.ast.models.PUSH_NAME
 import org.compiler.frontend.ast.models.Print
 import org.compiler.frontend.ast.models.Program
 import org.compiler.frontend.ast.models.PropertyAccess
@@ -458,6 +461,8 @@ class TypeChecker(
         val targetType = checkExpression(expr.target).type
         if (targetType == ErrorType) return decorate(expr, TypedValue(ErrorType))
 
+        if (targetType is ArrayType) return checkListOperation(expr, targetType, isCallee, isWrite)
+
         if (targetType !is ClassType) {
             report(expr, "No se puede acceder a '.${expr.propertyName}' sobre " +
                 "'${targetType.name}': no es un objeto")
@@ -482,6 +487,45 @@ class TypeChecker(
             member.lastUseLine = maxOf(member.lastUseLine ?: 0, expr.location.line)
         }
         return decorate(expr, TypedValue(member.type))
+    }
+
+    // Una lista solo tiene dos operaciones: push, que se llama como un metodo y recibe
+    // un elemento, y length, que se lee y no se escribe.
+    private fun checkListOperation(
+        expr: PropertyAccess,
+        listType: ArrayType,
+        isCallee: Boolean,
+        isWrite: Boolean
+    ): TypedValue {
+        val operation = when (expr.propertyName) {
+            PUSH_NAME -> ListOperation.PUSH
+            LENGTH_NAME -> ListOperation.LENGTH
+            else -> {
+                report(expr, "Una lista solo tiene '$PUSH_NAME' y '$LENGTH_NAME', " +
+                    "no '${expr.propertyName}'")
+                return decorate(expr, TypedValue(ErrorType))
+            }
+        }
+
+        if (operation == ListOperation.PUSH && !isCallee) {
+            reportFunctionAsValue(expr, "${describeCallee(expr.target)}.$PUSH_NAME")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+        if (operation == ListOperation.LENGTH && isWrite) {
+            report(expr, "'$LENGTH_NAME' es de solo lectura")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+        if (operation == ListOperation.LENGTH && isCallee) {
+            report(expr, "'$LENGTH_NAME' no es una función")
+            return decorate(expr, TypedValue(ErrorType))
+        }
+
+        expr.listOperation = operation
+        val type = when (operation) {
+            ListOperation.PUSH -> FunctionType(listOf(listType.element), VoidType)
+            ListOperation.LENGTH -> IntegerType
+        }
+        return decorate(expr, TypedValue(type))
     }
 
     // El salto obligado porque ClassType guarda solo

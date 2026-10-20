@@ -520,4 +520,108 @@ class InterpreterTest {
         assertEquals(listOf("argumento"), result.output)
         assertNotNull(result.runtimeError)
     }
+
+    // ── push, length y el formato de flotantes ────────────────────────────
+
+    @Test
+    fun `push agrega al final y length cuenta los elementos`() {
+        assertEquals(
+            listOf("0", "3", "30"),
+            output(
+                """
+                let notas: integer[] = [];
+                print(notas.length);
+                notas.push(10);
+                notas.push(20);
+                notas.push(30);
+                print(notas.length);
+                print(notas[2]);
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `un entero que entra a una lista de float se convierte`() {
+        assertEquals(
+            listOf("2.0"),
+            output(
+                """
+                let precios: float[] = [1.5];
+                precios.push(2);
+                print(precios[1]);
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `push y length sobre null son errores en ejecucion`() {
+        val push = run("let notas: integer[] = null; notas.push(1);")
+        val length = run("let notas: integer[] = null; print(notas.length);")
+
+        assertNotNull(push.runtimeError)
+        assertNotNull(length.runtimeError)
+    }
+
+    // Una copia de la referencia ve lo que se agrega por la otra: es la misma lista.
+    @Test
+    fun `push se ve desde todas las referencias a la lista`() {
+        assertEquals(
+            listOf("2"),
+            output(
+                """
+                let notas: integer[] = [1];
+                let copia: integer[] = notas;
+                notas.push(2);
+                print(copia.length);
+                """.trimIndent()
+            )
+        )
+    }
+
+    @Test
+    fun `los flotantes se imprimen con seis decimales sin ceros sobrantes`() {
+        assertEquals(
+            listOf("0.333333", "2.0", "3.5", "-0.25"),
+            output(
+                """
+                print(1.0 / 3.0);
+                print(2.0);
+                print(3.5);
+                print(-0.25);
+                """.trimIndent()
+            )
+        )
+    }
+
+    // El codigo intermedio convierte con inttofloat al guardar un entero donde se
+    // declaro float; el interprete tiene que imprimir lo mismo que la maquina.
+    @Test
+    fun `un entero guardado donde se declaro float se convierte`() {
+        assertEquals(
+            listOf("3.0", "4.0", "4.0", "5.0", "1.0", "6.0", "7.0", "8.0"),
+            output(
+                """
+                let x: float = 3;
+                print(x);
+                x = 4;
+                print(x);
+                function f(a: float): float { return a; }
+                print(f(4));
+                function g(): float { return 5; }
+                print(g());
+                let lista: float[] = [1, 2.5];
+                print(lista[0]);
+                class C { let p: float = 6; }
+                let c: C = new C();
+                print(c.p);
+                c.p = 7;
+                print(c.p);
+                lista[1] = 8;
+                print(lista[1]);
+                """.trimIndent()
+            )
+        )
+    }
 }

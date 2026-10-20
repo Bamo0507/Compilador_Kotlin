@@ -21,7 +21,7 @@ regenerados y revisados.
 
 ## Ticket 1.1: `push` y `length` en el semántico
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**
@@ -61,6 +61,7 @@ if (targetType is ArrayType) return checkListOperation(expr, targetType, isCalle
 | `lista.push(x)` como llamada | Tipo `(elemento) -> void`; `checkArguments` valida `x` con la misma regla de asignación, así que un `integer` entra a una lista de `float` |
 | `lista.length` como valor | `integer` |
 | `lista.length = 3` | Error: "'length' es de solo lectura" |
+| `lista.length()` | Error: "'length' no es una función" |
 | `lista.push` sin llamarlo, o `let n = lista.push(1)` | Error: "'push' solo se puede llamar" y el de siempre de `void` como valor |
 | `lista.otra` | Error: "Una lista solo tiene 'push' y 'length'" |
 
@@ -84,7 +85,7 @@ programa lo necesita y un valor de retorno obliga al backend a calcularlo siempr
 
 ## Ticket 1.2: El intérprete: `push`, `length` y el formato de flotantes
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1
 
 **Archivos:**
@@ -109,6 +110,13 @@ override fun display(): String =
         if (it.endsWith('.')) "${it}0" else it
     }
 ```
+
+**La conversión a `float`:** el TAC convierte con `inttofloat` cada entero que se guarda
+donde se declaró `float`, pero el intérprete guardaba el entero tal cual, y
+`let x: float = 3; print(x);` imprimía `3` donde la máquina imprime `3.0`. Un ayudante
+`convertedTo` hace la conversión en los mismos lugares que el TAC: declaración,
+asignación (variable, campo y elemento), argumento, `return`, elemento de una lista
+literal, inicializador de campo y `push`.
 
 ### Por qué
 
