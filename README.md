@@ -107,7 +107,7 @@ Abre el IDE, y equivale a `./gradlew runGui`.
 
 Al arrancar se carga un programa de demostración que ejercita clases, herencia,
 `this`, constructor, recursión, arreglos, `foreach` y `continue`. Asimismo, el
-selector que está sobre el editor permite cargar cualquiera de los 55 programas de
+selector que está sobre el editor permite cargar cualquiera de los 61 programas de
 la batería de pruebas, o empezar en blanco.
 
 ### Las tres vistas del IDE
@@ -166,7 +166,7 @@ basta `gcc -o programa programa.s && ./programa`.
 El reporte queda en `app/build/reports/tests/test/index.html`.
 
 La batería tiene dos niveles. Por un lado están las pruebas unitarias sobre cada
-componente por separado, y por otro, 55 programas `.cps` reales que atraviesan el
+componente por separado, y por otro, 61 programas `.cps` reales que atraviesan el
 compilador completo, es decir, al menos un caso exitoso y uno fallido por cada
 regla semántica.
 
@@ -241,8 +241,8 @@ Compilador_Kotlin/
 │   │   │   ├── gui/                          pantallas y componentes Compose
 │   │   │   └── GuiApp.kt                     entry point
 │   │   └── resources/programas/              los .cps, el selector y la batería
-│   │       ├── validos/                      28 programas que compilan
-│   │       └── invalidos/                    27 programas que deben fallar
+│   │       ├── validos/                      31 programas que compilan
+│   │       └── invalidos/                    30 programas que deben fallar
 │   └── test/kotlin/org/compiler/             pruebas de cada fase
 ├── docs/
 │   ├── roadmap/                              el plan por fases y tickets

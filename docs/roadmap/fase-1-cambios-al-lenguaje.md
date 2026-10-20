@@ -301,7 +301,7 @@ lo sabe; perderlo para reconstruirlo después sería trabajo repetido.
 
 ## Ticket 1.6: La batería y el documento del lenguaje intermedio
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.2, 1.4, 1.5
 
 **Archivos:**

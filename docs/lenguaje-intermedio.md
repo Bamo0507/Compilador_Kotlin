@@ -164,6 +164,7 @@ siguiente tabla las resume, con su forma y un ejemplo de cada una.
 | Retorno | `return` / `return x` | `return t1` | Termina la función, devolviendo un valor si tiene |
 | Lectura indexada | `x = y[i]` | `t2 = lista[t1]` | Lee el valor que está a `i` bytes del inicio de `y` |
 | Escritura indexada | `x[i] = y` | `lista[t1] = 5` | Escribe un valor a `i` bytes del inicio de `x` |
+| Agregar a una lista | `push_<tipo> x, y` | `push_i notas, t1` | Agrega un valor al final de una lista, y la hace crecer si está llena |
 | Impresión | `print_<tipo> x` | `print_i t1` | Imprime un valor de tipo simple |
 | Bloque protegido | `try L, e` / `endtry` | `try L1, e` | Abre y cierra la zona donde un error salta al manejador |
 | Error | `throw x` | `throw "División entre cero (línea 7)"` | Dispara un error en ejecución con su mensaje |
@@ -931,27 +932,81 @@ error.
 
 ## 24. Listas
 
-Una lista también vive en el montículo. Su casilla 0 guarda el largo, en 4 bytes, y los
-elementos empiezan en el primer desplazamiento después del largo que respete su
-alineación: en el 4 para enteros, booleanos y referencias, y en el 8 para flotantes. El
-elemento i está entonces en el inicio más i por el tamaño del elemento. Por ejemplo,
-crear una lista con los enteros 10, 20 y 30 pide 16 bytes, que son 4 del largo y 12 de
-los elementos, y después escribe un 3 en el desplazamiento 0 y cada elemento en los
-desplazamientos 4, 8 y 12.
+Una lista vive en el montículo, igual que un objeto, pero a diferencia de un objeto puede
+crecer después de creada. Esto plantea un problema, ya que si los elementos estuvieran en
+un solo bloque junto con el largo, agregar un elemento a una lista llena obligaría a
+mudarla a un bloque más grande, y cualquier variable que apuntara al bloque viejo quedaría
+apuntando a una dirección que ya no es la de la lista. Es decir, después de copiar una
+lista en otra variable y agregarle un elemento por la primera, la segunda vería la lista
+de antes.
 
-Para leer el elemento i, después de los chequeos de la sección 25, se calcula el
-desplazamiento en dos instrucciones, multiplicando el índice por el tamaño del elemento y
-sumándole el inicio, y después se lee con una copia indexada. Si el índice es una
-constante, el desplazamiento se calcula al compilar, de tal forma que el elemento 2 de una
-lista de enteros se lee directamente en el desplazamiento 12. Por otro lado, una lista de
-listas, como una matriz, guarda referencias, así que leer una casilla de la matriz son
-dos accesos encadenados: el primero devuelve la referencia a la fila y el segundo lee
-dentro de ella, cada uno con sus propios chequeos.
+Para evitarlo, una lista se divide en dos bloques. El primero es la ficha, que mide 12
+bytes y guarda el largo en su casilla 0, la capacidad en la 4 y la dirección del
+contenido en la 8. El segundo es el contenido, que guarda los elementos desde su propia
+casilla 0, de tal forma que el elemento i está en i por el tamaño del elemento. Las
+variables apuntan siempre a la ficha, que nunca se mueve, y lo único que se muda cuando
+la lista crece es el contenido. Así, todas las variables que comparten una lista siguen
+viendo la misma. Cabe mencionar que, como el contenido es un bloque propio y el
+montículo entrega cada bloque alineado a 8, los flotantes ya no necesitan relleno antes
+del primer elemento.
+
+| Fuente | Código intermedio |
+|---|---|
+| let notas: integer[] = [10, 20, 30]; | t1 = alloc 12 |
+| | t1[0] = 3 |
+| | t1[4] = 4 |
+| | t2 = alloc 16 |
+| | t1[8] = t2 |
+| | t2[0] = 10 |
+| | t2[4] = 20 |
+| | t2[8] = 30 |
+| | notas = t1 |
+
+Al crear una lista se reserva la ficha, se escriben el largo y la capacidad, se reserva
+el contenido y se escriben los elementos. La capacidad es la cantidad de elementos, pero
+como mínimo 4, para que las primeras inserciones no obliguen a mudar el contenido. Una
+lista vacía no reserva contenido: su capacidad es 0 y la dirección del contenido es null,
+ya que en ese punto todavía no se sabe cuánto mide uno de sus elementos.
+
+Para leer el elemento i, después de los chequeos de la sección 25, se lee la dirección
+del contenido desde la casilla 8 de la ficha, se multiplica el índice por el tamaño del
+elemento y se lee con una copia indexada sobre el contenido. Si el índice es una
+constante, el desplazamiento se calcula al compilar, de tal forma que el elemento 2 de
+una lista de enteros se lee en el desplazamiento 8 del contenido. La dirección del
+contenido se vuelve a leer en cada acceso, porque una inserción anterior pudo haberlo
+mudado. Por otro lado, una lista de listas, como una matriz, guarda referencias, así que
+leer una casilla de la matriz son dos accesos encadenados, cada uno con sus propios
+chequeos.
 
 Al escribir en una lista, la lista y el índice se evalúan antes que el valor, igual que
 en Java. Esto importa cuando el valor es una llamada que modifica el índice: si una
 función cambia i de 0 a 2 y su resultado se escribe en la posición i, el valor queda en la
 posición 0, que era la de antes de la llamada.
+
+Una lista tiene dos operaciones propias. La primera es su largo, que se escribe con
+length y se traduce como el chequeo de null seguido de una lectura de la casilla 0 de la
+ficha. La segunda es push, que agrega un elemento al final y se traduce con una
+instrucción propia, que lleva en su nombre el tipo del elemento, igual que la impresión.
+Se eligió una instrucción propia y no una secuencia de instrucciones porque agregar un
+elemento implica comparar el largo con la capacidad y, si la lista está llena, pedir un
+contenido del doble de tamaño, copiar los elementos y actualizar la ficha, y todo eso es
+una rutina de la máquina, igual que la concatenación de textos. Duplicar la capacidad
+cada vez es lo que hace que agregar elementos sea barato en promedio, ya que una lista
+que empieza con capacidad 4 solo se muda al agregar el elemento 5, el 9, el 17, y así
+sucesivamente.
+
+| Fuente | Código intermedio |
+|---|---|
+| notas.push(n + 1); | t1 = n + 1 |
+| | if notas != null goto L1 |
+| | throw "Acceso a null (línea 4)" |
+| | L1: |
+| | push_i notas, t1 |
+
+En una inserción se evalúa primero la lista y después el valor, y el chequeo de null va
+justo antes de agregar, igual que en una llamada a un método. Si el valor es una llamada
+que podría reasignar la variable de la lista, la lista se copia antes a un temporal, de
+modo que el elemento se agrega a la lista que había antes de la llamada.
 
 El foreach se traduce como un ciclo con un índice. La lista se evalúa una sola vez y se
 guarda en una variable oculta, y el índice en otra. Estas variables no pueden ser
@@ -960,11 +1015,13 @@ cada sentencia, así que van en el registro de activación como cualquier local,
 signo de dólar al inicio para que no choquen con los nombres del programa. Primero se
 copia la lista a su variable oculta, se chequea que no sea null y el índice arranca en 0.
 Luego, al inicio de cada vuelta, se lee el largo y, si el índice ya lo alcanzó, se salta
-al final. Después se calcula el desplazamiento del elemento, se copia a la variable del
-foreach y se ejecuta el cuerpo. Finalmente, en la etiqueta de continuación se incrementa
-el índice y se regresa al inicio. Un continue salta a esa etiqueta de continuación y un
-break al final. Cabe mencionar que la lectura del elemento no lleva chequeo de rango,
-porque el índice ya se comparó con el largo en la condición del ciclo.
+al final. Después se lee la dirección del contenido, se calcula el desplazamiento del
+elemento, se copia a la variable del foreach y se ejecuta el cuerpo. Finalmente, en la
+etiqueta de continuación se incrementa el índice y se regresa al inicio. Un continue
+salta a esa etiqueta de continuación y un break al final. Cabe mencionar que la lectura
+del elemento no lleva chequeo de rango, porque el índice ya se comparó con el largo en la
+condición del ciclo, y que el largo y el contenido se vuelven a leer en cada vuelta, ya
+que el cuerpo puede agregar elementos a la lista que se recorre.
 
 ## 25. Chequeos en ejecución
 
@@ -982,7 +1039,7 @@ referencia al propio objeto dentro de un método, porque un método solo se pued
 sobre un objeto que existe, así que esa referencia nunca es null.
 
 El tercero es el de rango, que se emite en cada acceso por índice: el índice tiene que
-ser al menos 0 y menor que el largo, que se lee de la casilla 0 de la lista. Por ejemplo,
+ser al menos 0 y menor que el largo, que se lee de la casilla 0 de la ficha de la lista. Por ejemplo,
 un acceso a la posición i de una lista en la línea 3 primero salta sobre el error si la
 lista no es null, y si lo es, lanza un acceso a null en la línea 3. Luego lee el largo,
 salta al error de rango si i es menor que 0, y salta a la lectura si i es menor que el
@@ -1048,7 +1105,8 @@ objeto y cuáles de sus campos son referencias que hay que seguir.
   vivan a la vez.
 - Los desplazamientos son positivos desde el inicio del registro, y la fase de
   assembler puede reubicarlos según cómo organice la pila.
-- Las listas tienen tamaño fijo: se crean con todos sus elementos y no crecen.
+- Las listas crecen solo al final, con push. Cuando el contenido se llena, se muda a uno
+  del doble de capacidad, y la ficha, a la que apuntan las variables, no se mueve.
 - Los textos son referencias de 4 bytes. Los literales viven en los datos estáticos,
   porque su contenido se conoce al compilar, y una concatenación pide su bloque en el
   montículo, porque su contenido solo se conoce al ejecutar.
