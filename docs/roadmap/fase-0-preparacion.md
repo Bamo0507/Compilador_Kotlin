@@ -47,7 +47,7 @@ quedaron sin marcar porque la documentación final se entregó en Google Docs.
 
 ## Ticket 0.2: El entorno ARM en Docker
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**
@@ -83,8 +83,8 @@ La imagen `compiscript-arm` se construye una vez desde `scripts/Dockerfile`:
 `debian:bookworm-slim` con `gcc` instalado. Así cada corrida no reinstala nada.
 
 `hola.s` es el programa mínimo con libc: imprime un entero y un flotante con `printf`
-y termina con código 0. Ya se probó durante la investigación, e imprime
-`int=42 double=3.500000`.
+y termina con código 0. El flotante sale de `.rodata` con `vldr` y pasa a r2 y r3 con
+`vmov`, como lo exige `printf`.
 
 ### Por qué
 
@@ -109,7 +109,7 @@ y termina con código 0. Ya se probó durante la investigación, e imprime
 
 ## Ticket 0.3: El documento de la etapa, secciones 1 y 2
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**

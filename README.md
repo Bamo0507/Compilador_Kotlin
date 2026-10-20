@@ -125,6 +125,36 @@ Se cambia entre ellas desde el menú **Vista**.
 - **Tabla de símbolos**, el árbol de ámbitos navegable con los símbolos de cada
   entorno, y el reporte de vivacidad.
 
+### Ejecutar el código ARM
+
+El compilador genera ensamblador ARM de 32 bits, que no corre directo en una Mac. Para
+eso se usa un contenedor Linux ARM con `gcc`, emulado con QEMU.
+
+Una sola vez, construir la imagen:
+
+```bash
+docker build -t compiscript-arm scripts
+```
+
+Con Colima, registrar antes el emulador de ARM. Hay que repetirlo cada vez que Colima
+reinicia:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install arm
+```
+
+Después, cada programa se ensambla y se corre con una línea, que devuelve el código de
+salida del programa:
+
+```bash
+scripts/arm.sh scripts/hola.s
+# int=42 double=3.500000
+```
+
+El `.s` tiene que estar en una carpeta dentro de `$HOME`, porque Colima solo comparte
+esas carpetas con el contenedor. En una Raspberry Pi real no hace falta nada de esto:
+basta `gcc -o programa programa.s && ./programa`.
+
 ---
 
 ## Pruebas
