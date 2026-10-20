@@ -1,7 +1,8 @@
 # Roadmap — Analizador Semántico de Compiscript
 
 > **Roadmap archivado.** Corresponde a la etapa del analizador semántico, que está
-> cerrada. La etapa actual, generación de código intermedio, tiene su índice en
+> cerrada. La etapa siguiente, generación de código intermedio, está archivada en
+> [`../intermedio/README.md`](../intermedio/README.md), y la actual tiene su índice en
 > [`../README.md`](../README.md).
 >
 > - Las decisiones 1 a 16 de este documento siguen vigentes. Las de la etapa actual se
