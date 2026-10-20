@@ -20,6 +20,7 @@ import org.compiler.frontend.intermediate.models.IndexedStore
 import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
+import org.compiler.frontend.intermediate.models.ListPush
 import org.compiler.frontend.intermediate.models.Name
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Param
@@ -96,7 +97,7 @@ class TacPrinterTest {
             "    t1 = inttofloat a",
             Unary(t1, TacUnaryOperator.INT_TO_FLOAT, a, OperandKind.INTEGER)
         )
-        assertLine("    a = t1", Copy(a, t1))
+        assertLine("    a = t1", Copy(a, t1, OperandKind.INTEGER))
     }
 
     // La etiqueta va pegada al margen: es lo que hace que los destinos se encuentren
@@ -115,11 +116,14 @@ class TacPrinterTest {
 
     @Test
     fun `las llamadas con y sin resultado`() {
-        assertLine("    param t1", Param(t1))
-        assertLine("    t2 = call factorial, 1", Call(t2, FunctionLabel("factorial"), 1))
-        assertLine("    call saludar, 0", Call(null, FunctionLabel("saludar"), 0))
-        assertLine("    return t1", Return(t1))
-        assertLine("    return", Return(null))
+        assertLine("    param t1", Param(t1, OperandKind.INTEGER))
+        assertLine(
+            "    t2 = call factorial, 1",
+            Call(t2, FunctionLabel("factorial"), 1, OperandKind.INTEGER)
+        )
+        assertLine("    call saludar, 0", Call(null, FunctionLabel("saludar"), 0, null))
+        assertLine("    return t1", Return(t1, OperandKind.INTEGER))
+        assertLine("    return", Return(null, null))
     }
 
     // El inicio y el fin de una funcion van pegados al margen, como las etiquetas.
@@ -131,8 +135,8 @@ class TacPrinterTest {
 
     @Test
     fun `la copia indexada`() {
-        assertLine("    t2 = a[t1]", IndexedLoad(t2, a, t1))
-        assertLine("    a[t1] = 5", IndexedStore(a, t1, Constant(5L)))
+        assertLine("    t2 = a[t1]", IndexedLoad(t2, a, t1, OperandKind.INTEGER))
+        assertLine("    a[t1] = 5", IndexedStore(a, t1, Constant(5L), OperandKind.INTEGER))
     }
 
     // ── Las familias de objetos ───────────────────────────────────────────
@@ -142,11 +146,16 @@ class TacPrinterTest {
         assertLine("    t1 = alloc 12", Allocate(t1, Constant(12L)))
     }
 
+    private val hablar = FunctionLabel("Perro.hablar")
+
     // La llamada indirecta nombra el temporal con la direccion, no una etiqueta.
     @Test
     fun `la llamada indirecta con y sin resultado`() {
-        assertLine("    t3 = call t2, 1", IndirectCall(Temporary(3), t2, 1))
-        assertLine("    call t2, 2", IndirectCall(null, t2, 2))
+        assertLine(
+            "    t3 = call t2, 1",
+            IndirectCall(Temporary(3), t2, 1, hablar, OperandKind.INTEGER)
+        )
+        assertLine("    call t2, 2", IndirectCall(null, t2, 2, hablar, null))
     }
 
     // La tabla es un dato estatico: va al margen, como begin_func.
@@ -161,7 +170,7 @@ class TacPrinterTest {
         assertLine("vtable Vacia:", VirtualTableDefinition("Vacia", emptyList()))
         assertLine(
             "    t1[0] = vtable.Perro",
-            IndexedStore(t1, Constant(0L), VirtualTableAddress("Perro"))
+            IndexedStore(t1, Constant(0L), VirtualTableAddress("Perro"), OperandKind.REFERENCE)
         )
     }
 
@@ -170,14 +179,32 @@ class TacPrinterTest {
         assertEquals(QuadrupleRow("alloc", "12", "", "t1"), Allocate(t1, Constant(12L)).toRow())
         assertEquals(
             QuadrupleRow("call", "t2", "1", "t3"),
-            IndirectCall(Temporary(3), t2, 1).toRow()
+            IndirectCall(Temporary(3), t2, 1, hablar, OperandKind.INTEGER).toRow()
         )
-        assertEquals(QuadrupleRow("call", "t2", "1", ""), IndirectCall(null, t2, 1).toRow())
+        assertEquals(
+            QuadrupleRow("call", "t2", "1", ""),
+            IndirectCall(null, t2, 1, hablar, null).toRow()
+        )
         assertEquals(
             QuadrupleRow("vtable", "Perro", "Perro.hablar, Animal.comer", ""),
             VirtualTableDefinition(
                 "Perro", listOf(FunctionLabel("Perro.hablar"), FunctionLabel("Animal.comer"))
             ).toRow()
+        )
+    }
+
+    // Como print, el sufijo dice cuanto mide lo que se guarda; strings, objetos y listas
+    // son todos una direccion.
+    @Test
+    fun `push lleva el tipo en su nombre`() {
+        assertLine("    push_i a, t1", ListPush(a, t1, OperandKind.INTEGER))
+        assertLine("    push_f a, 2.0", ListPush(a, Constant(2.0), OperandKind.FLOAT))
+        assertLine("    push_b a, true", ListPush(a, Constant(true), OperandKind.BOOLEAN))
+        assertLine("    push_r a, \"x\"", ListPush(a, Constant("x"), OperandKind.STRING))
+        assertLine("    push_r a, t1", ListPush(a, t1, OperandKind.REFERENCE))
+        assertEquals(
+            QuadrupleRow("push_i", "t1", "", "a"),
+            ListPush(a, t1, OperandKind.INTEGER).toRow()
         )
     }
 
@@ -226,7 +253,7 @@ class TacPrinterTest {
         Unary(Temporary(3), TacUnaryOperator.NEGATE, c, OperandKind.INTEGER),
         Arithmetic(Temporary(4), b, ArithmeticOperator.MULTIPLY, Temporary(3), OperandKind.INTEGER),
         Arithmetic(Temporary(5), t2, ArithmeticOperator.ADD, Temporary(4), OperandKind.INTEGER),
-        Copy(a, Temporary(5))
+        Copy(a, Temporary(5), OperandKind.INTEGER)
     )
 
     @Test

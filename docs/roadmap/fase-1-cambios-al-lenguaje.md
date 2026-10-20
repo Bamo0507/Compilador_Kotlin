@@ -134,7 +134,7 @@ literal, inicializador de campo y `push`.
 
 ## Ticket 1.3: Listas con ficha y contenido en el TAC
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**
@@ -197,7 +197,7 @@ contenido viejo. Es exactamente el puntero colgante que la ficha quiere evitar.
 
 ## Ticket 1.4: `push` y `length` en el TAC
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.1, 1.3
 
 **Archivos:**
@@ -252,7 +252,7 @@ flotante y un entero son instrucciones distintas.
 
 ## Ticket 1.5: El tipo de cada operando en el TAC
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 1.4
 
 **Archivos:**

@@ -19,6 +19,7 @@ import org.compiler.frontend.intermediate.models.IndexedStore
 import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
+import org.compiler.frontend.intermediate.models.ListPush
 import org.compiler.frontend.intermediate.models.Name
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Param
@@ -65,6 +66,7 @@ class QuadrupleTest {
         is Return -> "Return"
         is IndexedLoad -> "IndexedLoad"
         is IndexedStore -> "IndexedStore"
+        is ListPush -> "ListPush"
         is Print -> "Print"
         is TryBegin -> "TryBegin"
         TryEnd -> "TryEnd"
@@ -83,7 +85,7 @@ class QuadrupleTest {
     )
 
     @Test
-    fun `existen las 24 familias de cuadruplos`() {
+    fun `existen las 25 familias de cuadruplos`() {
         val t1 = Temporary(1)
         val one = Constant(1L)
         val label = Label(1)
@@ -93,7 +95,7 @@ class QuadrupleTest {
             Relational(t1, one, RelationalOperator.LESS, one, OperandKind.INTEGER),
             Concat(t1, Constant("a"), Constant("b")),
             Unary(t1, TacUnaryOperator.NEGATE, one, OperandKind.INTEGER),
-            Copy(t1, one),
+            Copy(t1, one, OperandKind.INTEGER),
             LabelDefinition(label),
             Goto(label),
             IfGoto(t1, label),
@@ -101,21 +103,22 @@ class QuadrupleTest {
             IfRelationalGoto(t1, RelationalOperator.LESS, one, OperandKind.INTEGER, label),
             FunctionBegin(FunctionLabel("f"), 16),
             FunctionEnd(FunctionLabel("f")),
-            Param(t1),
-            Call(t1, FunctionLabel("f"), 1),
-            Return(t1),
-            IndexedLoad(t1, t1, Constant(4L)),
-            IndexedStore(t1, Constant(4L), one),
+            Param(t1, OperandKind.INTEGER),
+            Call(t1, FunctionLabel("f"), 1, OperandKind.INTEGER),
+            Return(t1, OperandKind.INTEGER),
+            IndexedLoad(t1, t1, Constant(4L), OperandKind.INTEGER),
+            IndexedStore(t1, Constant(4L), one, OperandKind.INTEGER),
+            ListPush(t1, one, OperandKind.INTEGER),
             Print(t1, OperandKind.INTEGER),
             TryBegin(label, t1),
             TryEnd,
             Throw(Constant("error")),
             Allocate(t1, Constant(12L)),
-            IndirectCall(t1, t1, 1),
+            IndirectCall(t1, t1, 1, FunctionLabel("Perro.hablar"), OperandKind.INTEGER),
             VirtualTableDefinition("Perro", listOf(FunctionLabel("Perro.hablar")))
         )
 
-        assertEquals(24, oneOfEach.map { familyName(it) }.toSet().size)
+        assertEquals(25, oneOfEach.map { familyName(it) }.toSet().size)
     }
 
     // && y || son saltos en el TAC, no operaciones: no hay valor de enum para ellos.

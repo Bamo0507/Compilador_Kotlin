@@ -7,6 +7,10 @@ package org.compiler.frontend.intermediate.models
  * instruccion trae exactamente sus campos, y un `when` sin `else` no compila si se
  * olvida una familia. Ninguna tiene mas de cuatro campos con contenido, asi que todas
  * siguen siendo cuadruplos.
+ *
+ * Las que mueven un valor llevan ademas su tipo (`kind`). El TAC impreso no lo muestra,
+ * pero la maquina lo necesita: un flotante mide 8 bytes y se mueve con otras
+ * instrucciones que un entero, y un booleano mide 1.
  */
 sealed interface Quadruple
 
@@ -47,7 +51,8 @@ data class Unary(
 // x = y
 data class Copy(
     val result: Address,
-    val source: Address
+    val source: Address,
+    val kind: OperandKind
 ) : Quadruple
 
 // L:
@@ -87,7 +92,10 @@ data class FunctionBegin(
 data class FunctionEnd(val function: FunctionLabel) : Quadruple
 
 // param x
-data class Param(val value: Address) : Quadruple
+data class Param(
+    val value: Address,
+    val kind: OperandKind
+) : Quadruple
 
 // call f, n    /    x = call f, n. Sin resultado si la funcion es void.
 //
@@ -98,24 +106,47 @@ data class Call(
     val result: Address?,
     val function: FunctionLabel,
     val argumentCount: Int,
+    val resultKind: OperandKind?,
     val accessHops: Int? = null
-) : Quadruple
+) : Quadruple {
+    init {
+        require((result == null) == (resultKind == null)) { "Un resultado sin tipo, o al reves" }
+    }
+}
 
 // return    /    return x
-data class Return(val value: Address?) : Quadruple
+data class Return(
+    val value: Address?,
+    val kind: OperandKind?
+) : Quadruple {
+    init {
+        require((value == null) == (kind == null)) { "Un valor sin tipo, o al reves" }
+    }
+}
 
 // x = y[i]. El indice es un desplazamiento en bytes, no el numero del elemento.
 data class IndexedLoad(
     val result: Address,
     val base: Address,
-    val offset: Address
+    val offset: Address,
+    val kind: OperandKind
 ) : Quadruple
 
 // x[i] = y
 data class IndexedStore(
     val base: Address,
     val offset: Address,
-    val value: Address
+    val value: Address,
+    val kind: OperandKind
+) : Quadruple
+
+// push_<tipo> lista, x: agrega x al final de la lista. Si el contenido esta lleno, lo
+// muda a uno del doble de capacidad. Es una instruccion aparte porque en la maquina es
+// una rutina, igual que concat.
+data class ListPush(
+    val list: Address,
+    val value: Address,
+    val kind: OperandKind
 ) : Quadruple
 
 // print x. El tipo decide como se imprime: un entero y un string son llamadas al
@@ -142,11 +173,23 @@ data class Allocate(
     val size: Address
 ) : Quadruple
 
+// call t, n    /    x = call t, n: llama a la direccion que esta en t.
+//
+// method: el metodo que resolvio el verificador, aunque en ejecucion corra el de una
+// subclase. Todas las versiones de un metodo tienen la misma firma, asi que sus
+// registros de activacion empiezan igual, y la maquina necesita saber cuanto mide esa
+// parte para armar la llamada.
 data class IndirectCall(
     val result: Address?,
     val target: Address,
-    val argumentCount: Int
-) : Quadruple
+    val argumentCount: Int,
+    val method: FunctionLabel,
+    val resultKind: OperandKind?
+) : Quadruple {
+    init {
+        require((result == null) == (resultKind == null)) { "Un resultado sin tipo, o al reves" }
+    }
+}
 
 data class VirtualTableDefinition(
     val className: String,

@@ -1,11 +1,14 @@
 vtable Caja:
-begin_func $main, 32
+begin_func $main, 40
     cero = 0
-    t1 = alloc 16
+    t1 = alloc 12
     t1[0] = 3
-    t1[4] = 1
-    t1[8] = 2
-    t1[12] = 3
+    t1[4] = 4
+    t2 = alloc 16
+    t1[8] = t2
+    t2[0] = 1
+    t2[4] = 2
+    t2[8] = 3
     lista = t1
     i = 5
     caja = null
@@ -30,9 +33,9 @@ L6:
 L8:
     throw "Índice fuera de rango (línea 24)"
 L7:
-    t1 = i * 4
-    t1 = t1 + 4
-    t1 = lista[t1]
+    t1 = lista[8]
+    t2 = i * 4
+    t1 = t1[t2]
     print_i t1
     endtry
     goto L5

@@ -45,27 +45,33 @@ class TacGeneratorListTest {
         "if i < t1 goto L2",
         "L3:",
         "throw \"Índice fuera de rango (línea 2)\"",
-        "L2:"
+        "L2:",
+        "t1 = lista[8]"
     )
 
     // ── Creacion ───────────────────────────────────────────────────────────
 
-    // El largo en la casilla 0 y los enteros desde 4: 4 + 3 × 4 = 16 bytes.
+    // La ficha mide 12: longitud, capacidad y contenido. El contenido tiene la
+    // capacidad minima, 4, y los elementos desde su casilla 0: 4 × 4 = 16 bytes.
     @Test
-    fun `una lista de enteros pide 16 bytes y escribe largo y elementos`() {
+    fun `una lista de enteros pide la ficha y el contenido`() {
         assertEquals(
             listOf(
-                "t1 = alloc 16", "t1[0] = 3", "t1[4] = 10", "t1[8] = 20", "t1[12] = 30", "l = t1"
+                "t1 = alloc 12", "t1[0] = 3", "t1[4] = 4", "t2 = alloc 16", "t1[8] = t2",
+                "t2[0] = 10", "t2[4] = 20", "t2[8] = 30", "l = t1"
             ),
             tac("let l: integer[] = [10, 20, 30];", prelude = "")
         )
     }
 
-    // Un float mide 8 y se alinea a 8: los elementos empiezan en 8, no en 4.
+    // El contenido es un bloque propio, ya alineado a 8: un float no necesita relleno.
     @Test
-    fun `los elementos float empiezan en 8`() {
+    fun `los elementos float empiezan en la casilla 0 del contenido`() {
         assertEquals(
-            listOf("t1 = alloc 24", "t1[0] = 2", "t1[8] = 1.5", "t1[16] = 2.5", "f = t1"),
+            listOf(
+                "t1 = alloc 12", "t1[0] = 2", "t1[4] = 4", "t2 = alloc 32", "t1[8] = t2",
+                "t2[0] = 1.5", "t2[8] = 2.5", "f = t1"
+            ),
             tac("let f: float[] = [1.5, 2.5];", prelude = "")
         )
     }
@@ -73,24 +79,25 @@ class TacGeneratorListTest {
     // Un entero en una lista float se convierte al escribirse.
     @Test
     fun `un entero en una lista float se convierte`() {
-        assertTrue("t1[8] = 1.0" in tac("let f: float[] = [1, 2.5];", prelude = ""))
+        assertTrue("t2[0] = 1.0" in tac("let f: float[] = [1, 2.5];", prelude = ""))
     }
 
+    // Sin elementos no se sabe cuanto mide uno: el contenido lo pide el primer push.
     @Test
-    fun `una lista vacia solo pide la casilla del largo`() {
+    fun `una lista vacia solo pide la ficha`() {
         assertEquals(
-            listOf("t1 = alloc 4", "t1[0] = 0", "v = t1"),
+            listOf("t1 = alloc 12", "t1[0] = 0", "t1[4] = 0", "t1[8] = null", "v = t1"),
             tac("let v: integer[] = [];", prelude = "")
         )
     }
 
     // ── Acceso por indice ──────────────────────────────────────────────────
 
-    // inicio + i × tamaño, despues de los dos chequeos.
+    // Despues de los dos chequeos, el contenido y el desplazamiento i × tamaño.
     @Test
     fun `leer lista de i calcula el desplazamiento despues de los chequeos`() {
         assertEquals(
-            checksOfListI + listOf("t1 = i * 4", "t1 = t1 + 4", "t1 = lista[t1]", "print_i t1"),
+            checksOfListI + listOf("t2 = i * 4", "t1 = t1[t2]", "print_i t1"),
             tac("print(lista[i]);")
         )
     }
@@ -98,12 +105,12 @@ class TacGeneratorListTest {
     @Test
     fun `escribir lista de i usa la misma formula`() {
         assertEquals(
-            checksOfListI + listOf("t1 = i * 4", "t1 = t1 + 4", "lista[t1] = 5"),
+            checksOfListI + listOf("t2 = i * 4", "t1[t2] = 5"),
             tac("lista[i] = 5;")
         )
     }
 
-    // Con un indice constante el desplazamiento se calcula al compilar: 4 + 2 × 4 = 12.
+    // Con un indice constante el desplazamiento se calcula al compilar: 2 × 4 = 8.
     // Solo se compara con el largo: el negativo constante ya lo rechazo el TypeChecker.
     @Test
     fun `con un indice constante solo se compara con el largo`() {
@@ -116,7 +123,8 @@ class TacGeneratorListTest {
                 "if 2 < t1 goto L2",
                 "throw \"Índice fuera de rango (línea 2)\"",
                 "L2:",
-                "t1 = lista[12]",
+                "t1 = lista[8]",
+                "t1 = t1[8]",
                 "print_i t1"
             ),
             tac("print(lista[2]);")
@@ -131,7 +139,7 @@ class TacGeneratorListTest {
             prelude = "let banderas: boolean[] = [true, false]; let i: integer = 0;"
         )
 
-        assertTrue("t1 = i + 4" in code)
+        assertTrue("t1 = t1[i]" in code)
         assertTrue(code.none { it.contains("*") })
     }
 
@@ -146,17 +154,69 @@ class TacGeneratorListTest {
 
         assertEquals(2, code.count { it.startsWith("throw \"Acceso a null") })
         assertEquals(2, code.count { it.startsWith("throw \"Índice fuera de rango") })
-        assertTrue("t1 = m[t1]" in code)
+        assertTrue("t1 = t1[t2]" in code)
         assertTrue(
             "if t1 != null goto L4" in code,
             "la fila tambien se chequea:\n${code.joinToString("\n")}"
         )
-        assertTrue("t1 = t1[t2]" in code)
+        assertTrue("t1 = t2[t3]" in code)
+    }
+
+    // ── push y length ──────────────────────────────────────────────────────
+
+    // El valor primero, y el chequeo de null justo antes de agregar.
+    @Test
+    fun `push evalua el valor y chequea la lista antes de agregar`() {
+        assertEquals(
+            listOf(
+                "t1 = i + 1",
+                "if lista != null goto L1",
+                "throw \"Acceso a null (línea 2)\"",
+                "L1:",
+                "push_i lista, t1"
+            ),
+            tac("lista.push(i + 1);")
+        )
+    }
+
+    @Test
+    fun `un entero que entra a una lista float se convierte`() {
+        assertTrue(
+            "push_f precios, 2.0" in tac("precios.push(2);", prelude = "let precios: float[] = [];")
+        )
+    }
+
+    // Si el valor llama a una funcion, la lista se copia antes: la funcion podria
+    // reasignarla, y se agrega a la lista que habia antes de la llamada.
+    @Test
+    fun `push copia la lista antes de una llamada`() {
+        val code = tac(
+            "lista.push(f());",
+            prelude = "let lista: integer[] = [1]; function f(): integer { return 5; }"
+        )
+
+        assertEquals("t1 = lista", code.first())
+        assertEquals("push_i t1, t2", code.last())
+    }
+
+    @Test
+    fun `length lee la casilla 0 de la ficha`() {
+        assertEquals(
+            listOf(
+                "if lista != null goto L1",
+                "throw \"Acceso a null (línea 2)\"",
+                "L1:",
+                "t1 = lista[0]",
+                "print_i t1"
+            ),
+            tac("print(lista.length);")
+        )
     }
 
     // ── foreach ────────────────────────────────────────────────────────────
 
-    // $lista se evalua una vez; $i recorre con el largo; continue va a la etiqueta que
+    // $lista se evalua una vez; $i recorre con el largo; el contenido se relee en cada
+    // vuelta, porque el cuerpo puede mudarlo con un push; continue va a la etiqueta que
     // incrementa.
     @Test
     fun `foreach con continue salta al incremento`() {
@@ -170,9 +230,9 @@ class TacGeneratorListTest {
                 "L2:",
                 "t1 = \$lista[0]",
                 "if \$i >= t1 goto L4",
-                "t1 = \$i * 4",
-                "t1 = t1 + 4",
-                "n = \$lista[t1]",
+                "t1 = \$lista[8]",
+                "t2 = \$i * 4",
+                "n = t1[t2]",
                 "if n != 20 goto L5",
                 "goto L3",
                 "L5:",
@@ -190,7 +250,7 @@ class TacGeneratorListTest {
     fun `break en un foreach sale al final`() {
         val code = tac("foreach (n in lista) { break; }")
 
-        assertTrue("goto L4" in code.subList(code.indexOf("n = \$lista[t1]"), code.size))
+        assertTrue("goto L4" in code.subList(code.indexOf("n = t1[t2]"), code.size))
         assertEquals("L4:", code.last())
     }
 

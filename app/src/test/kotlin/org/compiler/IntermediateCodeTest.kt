@@ -1,12 +1,17 @@
 package org.compiler
 
+import org.compiler.frontend.intermediate.ExpressionDag
 import org.compiler.frontend.intermediate.TacPrinter
+import org.compiler.frontend.intermediate.models.Copy
+import org.compiler.frontend.intermediate.models.IndexedLoad
+import org.compiler.frontend.intermediate.models.Name
 import org.compiler.runtime.CompilerPipeline
 import org.compiler.samples.SampleProgram
 import org.compiler.samples.SamplePrograms
 import org.junit.jupiter.api.DynamicTest
 import org.junit.jupiter.api.TestFactory
 import java.io.File
+import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -50,6 +55,29 @@ class IntermediateCodeTest {
                     assertTrue(program.exists(), "${golden.name} no tiene su ${program.name}")
                 }
             }
+
+    // El tipo que lleva cada instruccion para la maquina no se imprime, asi que los
+    // dorados no lo verifican. Cuando el destino es una variable, tiene que ser el de
+    // su Symbol.
+    @TestFactory
+    fun `el tipo de cada copia y cada carga coincide con el de su variable`(): List<DynamicTest> =
+        validPrograms().map { sample ->
+            DynamicTest.dynamicTest(sample.name) {
+                val tac = assertNotNull(CompilerPipeline.compile(sample.source).tac)
+                tac.instructions.forEach { quadruple ->
+                    val (destination, kind) = when (quadruple) {
+                        is Copy -> quadruple.result to quadruple.kind
+                        is IndexedLoad -> quadruple.result to quadruple.kind
+                        else -> return@forEach
+                    }
+                    if (destination !is Name) return@forEach
+                    assertEquals(
+                        ExpressionDag.kindOf(destination.symbol.type), kind,
+                        "${sample.id}: ${TacPrinter.line(quadruple).trim()}"
+                    )
+                }
+            }
+        }
 
     private fun validPrograms(): List<SampleProgram> {
         val programs = SamplePrograms.all.filter { it.id.startsWith(VALID_PREFIX) }

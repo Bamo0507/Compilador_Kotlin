@@ -1,10 +1,13 @@
-begin_func $main, 32
-    t1 = alloc 20
+begin_func $main, 40
+    t1 = alloc 12
     t1[0] = 4
-    t1[4] = 50
-    t1[8] = 90
-    t1[12] = 100
-    t1[16] = 70
+    t1[4] = 4
+    t2 = alloc 16
+    t1[8] = t2
+    t2[0] = 50
+    t2[4] = 90
+    t2[8] = 100
+    t2[12] = 70
     notas = t1
     $lista = notas
     if $lista != null goto L1
@@ -14,9 +17,9 @@ L1:
 L2:
     t1 = $lista[0]
     if $i >= t1 goto L4
-    t1 = $i * 4
-    t1 = t1 + 4
-    n = $lista[t1]
+    t1 = $lista[8]
+    t2 = $i * 4
+    n = t1[t2]
     if n >= 60 goto L5
     goto L3
 L5:

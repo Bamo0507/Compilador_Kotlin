@@ -396,6 +396,14 @@ class StorageAllocator {
 
         // ARM de 32 bits: una direccion mide 4 bytes y la pila se alinea a 8.
         const val POINTER_SIZE = 4
+
+        // La ficha de una lista: la longitud, la capacidad y la direccion del contenido,
+        // que vive aparte para poder mudarlo cuando crece sin mover la ficha.
+        const val LIST_LENGTH_OFFSET = 0
+        const val LIST_CAPACITY_OFFSET = 4
+        const val LIST_CONTENT_OFFSET = 8
+        const val LIST_HEADER_SIZE = 12
+        const val LIST_MINIMUM_CAPACITY = 4
         const val STACK_ALIGNMENT = 8
 
         // Un temporal puede guardar un entero y despues un float, porque el pool recicla

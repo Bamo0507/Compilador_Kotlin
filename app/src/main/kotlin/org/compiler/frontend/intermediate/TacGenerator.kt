@@ -20,6 +20,7 @@ import org.compiler.frontend.ast.models.FunctionDeclaration
 import org.compiler.frontend.ast.models.Identifier
 import org.compiler.frontend.ast.models.If
 import org.compiler.frontend.ast.models.IndexAccess
+import org.compiler.frontend.ast.models.ListOperation
 import org.compiler.frontend.ast.models.ObjectCreation
 import org.compiler.frontend.ast.models.OperatorGroup
 import org.compiler.frontend.ast.models.Program
@@ -56,6 +57,7 @@ import org.compiler.frontend.intermediate.models.IndexedStore
 import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
+import org.compiler.frontend.intermediate.models.ListPush
 import org.compiler.frontend.intermediate.models.Name
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Param
@@ -365,12 +367,14 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         val initializer = declaration.initializer
         if (initializer == null) {
-            instructions += Copy(target, Constant(defaultValueOf(symbol.type)))
+            val zero = Constant(defaultValueOf(symbol.type))
+            instructions += Copy(target, zero, ExpressionDag.kindOf(symbol.type))
             return
         }
 
         // `let g: float = n;` con n entero: el valor se convierte antes de copiarse.
-        copyInto(target, convertedTo(ExpressionDag.kindOf(symbol.type), initializer))
+        val kind = ExpressionDag.kindOf(symbol.type)
+        copyInto(target, convertedTo(kind, initializer), kind)
     }
 
     // `x = e`, `p.campo = e` o `lista[i] = e`. Los dos ultimos escriben en memoria,
@@ -379,8 +383,8 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         when (val target = statement.target) {
             is Identifier -> {
                 val symbol = symbolOf(target)
-                val converted = convertedTo(ExpressionDag.kindOf(symbol.type), statement.value)
-                copyInto(nameOf(symbol), converted)
+                val kind = ExpressionDag.kindOf(symbol.type)
+                copyInto(nameOf(symbol), convertedTo(kind, statement.value), kind)
             }
             is PropertyAccess -> temporaries.consume(generateFieldStore(target, statement.value))
             is IndexAccess -> temporaries.consume(generateElementStore(target, statement.value))
@@ -539,7 +543,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         if (subject !is Name || casesArePure) return subject
 
         val snapshot = temporaries.newTemp(readers)
-        instructions += Copy(snapshot, subject)
+        instructions += Copy(snapshot, subject, kindOf(subject))
         return snapshot
     }
 
@@ -590,10 +594,13 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         instructions += LabelDefinition(endLabel)
     }
 
-    private fun copyInto(target: Address, value: Address) {
-        instructions += Copy(target, value)
+    private fun copyInto(target: Address, value: Address, kind: OperandKind) {
+        instructions += Copy(target, value, kind)
         temporaries.consume(value)
     }
+
+    // El tipo de una variable, para copiarla: lo dice su Symbol.
+    private fun kindOf(name: Name): OperandKind = ExpressionDag.kindOf(name.symbol.type)
 
     // ══════════════════════════════════════════════════════════════════════
     //  Expresiones: a traves del GDA
@@ -640,7 +647,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
                 // `x = (y = 5)`: emite `y = 5`, y el valor de la asignacion es lo que
                 // quedo en y. El padre lee Name(y), no un temporal.
                 is DagNode.Assign -> {
-                    copyInto(dagNode.target, emit(dagNode.value))
+                    copyInto(dagNode.target, emit(dagNode.value), kindOf(dagNode.target))
                     dagNode.target
                 }
 
@@ -676,7 +683,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
             val later = operands.drop(position + 1)
             if (address is Name && later.any { mayModify(dag, it, address.symbol) }) {
                 val snapshot = temporaries.newTemp(uses = 1)
-                instructions += Copy(snapshot, address)
+                instructions += Copy(snapshot, address, kindOf(address))
                 addresses += snapshot
             } else {
                 addresses += address
@@ -740,6 +747,10 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // podria modificarla.
     private fun generateCall(call: FunctionCall, wantsResult: Boolean): Address? {
         val callee = call.callee
+        if (callee is PropertyAccess && callee.listOperation == ListOperation.PUSH) {
+            generatePush(call, callee)
+            return null
+        }
         if (callee is PropertyAccess) return generateMethodCall(call, callee, wantsResult)
 
         // El TypeChecker solo deja llamar a un nombre o a un metodo.
@@ -751,20 +762,25 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val parameterTypes = (function.type as FunctionType).parameters
 
         val arguments = evaluateArguments(call.arguments, parameterTypes)
-
-        arguments.forEach { argument ->
-            instructions += Param(argument)
-            temporaries.consume(argument)
-        }
+        emitParams(arguments, parameterTypes)
 
         val accessHops = accessHopsTo(function)
         if (!wantsResult) {
-            instructions += Call(null, label, arguments.size, accessHops)
+            instructions += Call(null, label, arguments.size, null, accessHops)
             return null
         }
         val result = temporaries.newTemp(uses = 1)
-        instructions += Call(result, label, arguments.size, accessHops)
+        val resultKind = ExpressionDag.kindOf((function.type as FunctionType).returns)
+        instructions += Call(result, label, arguments.size, resultKind, accessHops)
         return result
+    }
+
+    // Un param por argumento, cada uno con el tipo de su parametro.
+    private fun emitParams(arguments: List<Address>, parameterTypes: List<Type>) {
+        arguments.zip(parameterTypes).forEach { (argument, type) ->
+            instructions += Param(argument, ExpressionDag.kindOf(type))
+            temporaries.consume(argument)
+        }
     }
 
     // Cada argumento convertido al tipo de su parametro. Una variable se copia antes si
@@ -807,13 +823,11 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // return x: si sale de un try, primero quita su manejador, uno por cada try abierto
     // en esta funcion.
     private fun generateReturn(statement: ReturnStatement) {
-        val returnType = currentReturnType
-        val value = statement.value?.let { expression ->
-            convertedTo(ExpressionDag.kindOf(returnType), expression)
-        }
+        val kind = ExpressionDag.kindOf(currentReturnType)
+        val value = statement.value?.let { expression -> convertedTo(kind, expression) }
 
         repeat(openTries) { instructions += TryEnd }
-        instructions += Return(value)
+        instructions += Return(value, value?.let { kind })
         value?.let { temporaries.consume(it) }
     }
 
@@ -827,11 +841,11 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val kind = ExpressionDag.kindOf(expression.type)
 
         generateCondition(expression.condition, null, elseLabel)
-        copyInto(result, convertedTo(kind, expression.ifTrue))
+        copyInto(result, convertedTo(kind, expression.ifTrue), kind)
         instructions += Goto(endLabel)
 
         instructions += LabelDefinition(elseLabel)
-        copyInto(result, convertedTo(kind, expression.ifFalse))
+        copyInto(result, convertedTo(kind, expression.ifFalse), kind)
         instructions += LabelDefinition(endLabel)
 
         return result
@@ -845,11 +859,11 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val endLabel = newLabel()
 
         generateCondition(expression, null, falseLabel)
-        instructions += Copy(result, Constant(true))
+        instructions += Copy(result, Constant(true), OperandKind.BOOLEAN)
         instructions += Goto(endLabel)
 
         instructions += LabelDefinition(falseLabel)
-        instructions += Copy(result, Constant(false))
+        instructions += Copy(result, Constant(false), OperandKind.BOOLEAN)
         instructions += LabelDefinition(endLabel)
 
         return result
@@ -998,7 +1012,7 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         if (address !is Name) return address
 
         val snapshot = temporaries.newTemp(uses = 1)
-        instructions += Copy(snapshot, address)
+        instructions += Copy(snapshot, address, kindOf(address))
         return snapshot
     }
 
@@ -1057,22 +1071,21 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         val instance = temporaries.newTemp(uses = 1)
         instructions += Allocate(instance, Constant(layout.size.toLong()))
-        instructions += IndexedStore(instance, Constant(0L), VirtualTableAddress(layout.className))
-        instructions += Param(instance)
-        instructions += Call(null, initializerLabelOf(layout.className), 1)
+        instructions += IndexedStore(
+            instance, Constant(0L), VirtualTableAddress(layout.className), OperandKind.REFERENCE
+        )
+        instructions += Param(instance, OperandKind.REFERENCE)
+        instructions += Call(null, initializerLabelOf(layout.className), 1, null)
 
         val constructorScope = constructorScopeOf(classScope) ?: return instance
         val constructor = checkNotNull(constructorScope.parent?.lookupLocal(CONSTRUCTOR_NAME))
         val parameterTypes = (constructor.type as FunctionType).parameters
 
         val arguments = evaluateArguments(expression.arguments, parameterTypes)
-        instructions += Param(instance)
-        arguments.forEach { argument ->
-            instructions += Param(argument)
-            temporaries.consume(argument)
-        }
+        instructions += Param(instance, OperandKind.REFERENCE)
+        emitParams(arguments, parameterTypes)
         val label = storageLayout.functions.getValue(constructorScope).function
-        instructions += Call(null, label, arguments.size + 1)
+        instructions += Call(null, label, arguments.size + 1, null)
         return instance
     }
 
@@ -1108,17 +1121,20 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val depth = classScope.functionDepth() + 1
         generateFunction(record, returnType = null, depth = depth, thisParameter) {
             declaration.superclassName?.let { superclass ->
-                instructions += Param(thisName())
-                instructions += Call(null, initializerLabelOf(superclass), 1)
+                instructions += Param(thisName(), OperandKind.REFERENCE)
+                instructions += Call(null, initializerLabelOf(superclass), 1, null)
             }
 
             declaration.members.filterIsInstance<VariableDeclaration>().forEach { field ->
                 val symbol = checkNotNull(classScope.lookupLocal(field.name))
+                val kind = ExpressionDag.kindOf(symbol.type)
                 val value = field.initializer
-                    ?.let { convertedTo(ExpressionDag.kindOf(symbol.type), it) }
+                    ?.let { convertedTo(kind, it) }
                     ?: Constant(defaultValueOf(symbol.type))
 
-                instructions += IndexedStore(thisName(), Constant(fieldOffsetOf(symbol)), value)
+                instructions += IndexedStore(
+                    thisName(), Constant(fieldOffsetOf(symbol)), value, kind
+                )
                 temporaries.consume(value)
                 checkNoLiveTemporaries(field.location.line)
             }
@@ -1138,6 +1154,8 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     // el acceso no depende de la clase real del objeto. Sobre `this` no hay chequeo:
     // nunca es null.
     private fun generateFieldRead(expression: PropertyAccess): Address {
+        if (expression.listOperation == ListOperation.LENGTH) return generateLength(expression)
+
         val field = checkNotNull(expression.resolvedMember) {
             "'.${expression.propertyName}' sin resolver"
         }
@@ -1146,7 +1164,9 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         temporaries.consume(instance)
         val result = temporaries.newTemp(uses = 1)
-        instructions += IndexedLoad(result, instance, Constant(fieldOffsetOf(field)))
+        instructions += IndexedLoad(
+            result, instance, Constant(fieldOffsetOf(field)), ExpressionDag.kindOf(field.type)
+        )
         return result
     }
 
@@ -1156,10 +1176,11 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     private fun generateFieldStore(target: PropertyAccess, value: Expression): Address {
         val field = checkNotNull(target.resolvedMember) { "'.${target.propertyName}' sin resolver" }
         val instance = readBefore(generateExpression(target.target), value)
-        val stored = convertedTo(ExpressionDag.kindOf(field.type), value)
+        val kind = ExpressionDag.kindOf(field.type)
+        val stored = convertedTo(kind, value)
 
         if (target.target !is ThisReference) emitNullCheck(instance, target.location.line)
-        instructions += IndexedStore(instance, Constant(fieldOffsetOf(field)), stored)
+        instructions += IndexedStore(instance, Constant(fieldOffsetOf(field)), stored, kind)
         temporaries.consume(instance)
         return stored
     }
@@ -1191,7 +1212,8 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         }
         val parameterTypes = (method.type as FunctionType).parameters
         val className = (callee.target.type as ClassType).className
-        val slot = layoutOf(storageLayout.classes.getValue(className)).slotOf(method.name)
+        val classLayout = layoutOf(storageLayout.classes.getValue(className))
+        val slot = classLayout.slotOf(method.name)
         check(slot >= 0) { "'${method.name}' no esta en la tabla de '$className'" }
 
         // El objeto se evalua antes que los argumentos, y se copia si alguno lo cambia.
@@ -1202,25 +1224,26 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         if (callee.target !is ThisReference) emitNullCheck(instance, call.location.line)
         val table = temporaries.newTemp(uses = 1)
-        instructions += IndexedLoad(table, instance, Constant(0L))
+        instructions += IndexedLoad(table, instance, Constant(0L), OperandKind.REFERENCE)
         temporaries.consume(table)
         val target = temporaries.newTemp(uses = 1)
         val slotOffset = Constant(slot.toLong() * StorageAllocator.POINTER_SIZE)
-        instructions += IndexedLoad(target, table, slotOffset)
+        instructions += IndexedLoad(target, table, slotOffset, OperandKind.REFERENCE)
 
-        (listOf(instance) + arguments).forEach { argument ->
-            instructions += Param(argument)
-            temporaries.consume(argument)
-        }
+        instructions += Param(instance, OperandKind.REFERENCE)
+        temporaries.consume(instance)
+        emitParams(arguments, parameterTypes)
 
         temporaries.consume(target)
         val argumentCount = arguments.size + 1
+        val staticMethod = classLayout.methods[slot]
         if (!wantsResult) {
-            instructions += IndirectCall(null, target, argumentCount)
+            instructions += IndirectCall(null, target, argumentCount, staticMethod, null)
             return null
         }
         val result = temporaries.newTemp(uses = 1)
-        instructions += IndirectCall(result, target, argumentCount)
+        val resultKind = ExpressionDag.kindOf((method.type as FunctionType).returns)
+        instructions += IndirectCall(result, target, argumentCount, staticMethod, resultKind)
         return result
     }
 
@@ -1228,48 +1251,75 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     //  Listas: creacion, acceso por indice y foreach
     // ══════════════════════════════════════════════════════════════════════
 
-    // Una lista en memoria: el largo en la casilla 0, y los elementos desde el primer
-    // multiplo de su tamaño despues de ella: 4 para enteros, booleanos y referencias,
-    // 8 para flotantes.
-    private fun elementsStartOf(elementSize: Int): Int =
-        StorageAllocator.align(StorageAllocator.POINTER_SIZE, elementSize)
+    // Una lista en memoria es una ficha y un contenido. La ficha guarda la longitud, la
+    // capacidad y la direccion del contenido; el contenido guarda los elementos desde su
+    // casilla 0. Las variables apuntan a la ficha, que nunca se muda: cuando la lista
+    // crece, solo se muda el contenido.
+    //
+    // El contenido es un bloque aparte que entrega el administrador de memoria alineado a
+    // 8, asi que un flotante no necesita relleno.
+    private data class ElementSlot(val content: Address, val offset: Address)
 
     private fun elementSizeOf(listType: Type?): Int {
         val element = (listType as? ArrayType)?.element ?: error("Indexar algo que no es una lista")
         return StorageAllocator.sizeOf(element)
     }
 
-    //      t1 = alloc 16
+    //      t1 = alloc 12
     //      t1[0] = 3
-    //      t1[4] = 10
-    //      t1[8] = 20
-    //      t1[12] = 30
+    //      t1[4] = 4
+    //      t2 = alloc 16
+    //      t1[8] = t2
+    //      t2[0] = 10
+    //      t2[4] = 20
+    //      t2[8] = 30
     //
-    // Una lista vacia pide solo la casilla del largo.
+    // La capacidad es la cantidad de elementos, y al menos 4. Una lista vacia no tiene
+    // contenido: su tipo es null[] y no se sabe cuanto mide un elemento, asi que el
+    // contenido lo pide el primer push.
     private fun generateNewList(expression: ArrayLiteral): Address {
         val elementType = (expression.type as ArrayType).element
         val count = expression.elements.size
-        val elementSize = if (count == 0) 0 else StorageAllocator.sizeOf(elementType)
-        val start = if (count == 0) StorageAllocator.POINTER_SIZE else elementsStartOf(elementSize)
+        val capacity = if (count == 0) 0 else maxOf(count, StorageAllocator.LIST_MINIMUM_CAPACITY)
 
         val list = temporaries.newTemp(uses = 1)
-        instructions += Allocate(list, Constant((start + count * elementSize).toLong()))
-        instructions += IndexedStore(list, Constant(0L), Constant(count.toLong()))
+        instructions += Allocate(list, Constant(StorageAllocator.LIST_HEADER_SIZE.toLong()))
+        val length = Constant(count.toLong())
+        val slots = Constant(capacity.toLong())
+        storeInHeader(list, StorageAllocator.LIST_LENGTH_OFFSET, length, OperandKind.INTEGER)
+        storeInHeader(list, StorageAllocator.LIST_CAPACITY_OFFSET, slots, OperandKind.INTEGER)
+
+        if (count == 0) {
+            storeInHeader(
+                list, StorageAllocator.LIST_CONTENT_OFFSET, Constant(null), OperandKind.REFERENCE
+            )
+            return list
+        }
+
+        val elementSize = StorageAllocator.sizeOf(elementType)
+        val content = temporaries.newTemp(uses = 1)
+        instructions += Allocate(content, Constant((capacity * elementSize).toLong()))
+        storeInHeader(list, StorageAllocator.LIST_CONTENT_OFFSET, content, OperandKind.REFERENCE)
 
         val kind = ExpressionDag.kindOf(elementType)
         expression.elements.forEachIndexed { index, element ->
             val value = convertedTo(kind, element)
-            val offset = Constant((start + index * elementSize).toLong())
-            instructions += IndexedStore(list, offset, value)
+            val offset = Constant((index * elementSize).toLong())
+            instructions += IndexedStore(content, offset, value, kind)
             temporaries.consume(value)
         }
+        temporaries.consume(content)
         return list
     }
 
+    private fun storeInHeader(list: Address, offset: Int, value: Address, kind: OperandKind) {
+        instructions += IndexedStore(list, Constant(offset.toLong()), value, kind)
+    }
+
     //      <chequeos de null y de rango>
-    //      t1 = i * 4
-    //      t1 = t1 + 4
-    //      t1 = lista[t1]
+    //      t1 = lista[8]
+    //      t2 = i * 4
+    //      t1 = t1[t2]
     //
     // matriz[i][j] son dos accesos encadenados: el primero devuelve la referencia a la
     // fila, y el segundo la chequea igual que a cualquier lista.
@@ -1277,12 +1327,14 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val list = readBefore(generateExpression(expression.target), expression.index)
         val index = generateExpression(expression.index)
         val elementSize = elementSizeOf(expression.target.type)
-        val offset = elementOffset(list, index, elementSize, expression.location.line)
+        val slot = elementSlot(list, index, elementSize, expression.location.line)
 
         temporaries.consume(list)
-        temporaries.consume(offset)
+        temporaries.consume(slot.content)
+        temporaries.consume(slot.offset)
         val result = temporaries.newTemp(uses = 1)
-        instructions += IndexedLoad(result, list, offset)
+        val kind = ExpressionDag.kindOf((expression.target.type as ArrayType).element)
+        instructions += IndexedLoad(result, slot.content, slot.offset, kind)
         return result
     }
 
@@ -1297,16 +1349,20 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val elementType = (target.target.type as ArrayType).element
         val stored = convertedTo(ExpressionDag.kindOf(elementType), value)
         val elementSize = StorageAllocator.sizeOf(elementType)
-        val offset = elementOffset(list, index, elementSize, target.location.line)
+        val slot = elementSlot(list, index, elementSize, target.location.line)
 
-        instructions += IndexedStore(list, offset, stored)
+        instructions += IndexedStore(
+            slot.content, slot.offset, stored, ExpressionDag.kindOf(elementType)
+        )
         temporaries.consume(list)
-        temporaries.consume(offset)
+        temporaries.consume(slot.content)
+        temporaries.consume(slot.offset)
         return stored
     }
 
     /**
-     * Los chequeos de un acceso por indice y el desplazamiento en bytes del elemento.
+     * Los chequeos de un acceso por indice, el contenido de la lista y el desplazamiento
+     * en bytes del elemento dentro de el.
      *
      *      if lista != null goto L1
      *      throw "Acceso a null (línea 7)"
@@ -1314,19 +1370,28 @@ class TacGenerator(private val storageLayout: StorageLayout) {
      *      if i < 0 goto L2
      *      if i < t1 goto L3
      *  L2: throw "Índice fuera de rango (línea 7)"
-     *  L3: ...
+     *  L3: t1 = lista[8]
+     *      t2 = i * 4
      *
      * Con un indice constante no se compara con 0, porque el TypeChecker ya rechazo
      * los negativos constantes, y el desplazamiento se calcula al compilar: lista[2]
-     * es lista[12]. La comparacion con el largo se conserva: el largo no se conoce.
+     * es t1[8]. La comparacion con el largo se conserva: el largo no se conoce.
      *
      * Consume el indice; la lista no, porque la lee despues quien llama.
      */
-    private fun elementOffset(list: Address, index: Address, elementSize: Int, line: Int): Address {
+    private fun elementSlot(
+        list: Address,
+        index: Address,
+        elementSize: Int,
+        line: Int
+    ): ElementSlot {
         emitNullCheck(list, line)
 
         val length = temporaries.newTemp(uses = 1)
-        instructions += IndexedLoad(length, list, Constant(0L))
+        instructions += IndexedLoad(
+            length, list, Constant(StorageAllocator.LIST_LENGTH_OFFSET.toLong()),
+            OperandKind.INTEGER
+        )
 
         val inRange = newLabel()
         val constantIndex = (index as? Constant)?.value as? Long
@@ -1348,31 +1413,72 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         instructions += Throw(Constant("Índice fuera de rango (línea $line)"))
         instructions += LabelDefinition(inRange)
 
-        val start = elementsStartOf(elementSize)
-        if (constantIndex != null) return Constant(start + constantIndex * elementSize)
-        return byteOffsetOf(index, elementSize, start)
+        val content = contentOf(list)
+        val offset = if (constantIndex != null) {
+            Constant(constantIndex * elementSize)
+        } else {
+            byteOffsetOf(index, elementSize)
+        }
+        return ElementSlot(content, offset)
     }
 
-    // inicio + i × tamaño, en dos instrucciones. Con elementos de 1 byte no hay
-    // multiplicacion.
-    private fun byteOffsetOf(index: Address, elementSize: Int, start: Int): Address {
-        var scaled = index
-        if (elementSize != 1) {
-            temporaries.consume(index)
-            val product = temporaries.newTemp(uses = 1)
-            instructions += Arithmetic(
-                product, index, ArithmeticOperator.MULTIPLY, Constant(elementSize.toLong()),
-                OperandKind.INTEGER
-            )
-            scaled = product
-        }
+    // La direccion del contenido, leida de la ficha. Se lee en cada acceso porque un push
+    // puede haberlo mudado.
+    private fun contentOf(list: Address): Address {
+        val content = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(
+            content, list, Constant(StorageAllocator.LIST_CONTENT_OFFSET.toLong()),
+            OperandKind.REFERENCE
+        )
+        return content
+    }
 
-        temporaries.consume(scaled)
+    // i × tamaño. Con elementos de 1 byte el indice ya es el desplazamiento.
+    private fun byteOffsetOf(index: Address, elementSize: Int): Address {
+        if (elementSize == 1) return index
+
+        temporaries.consume(index)
         val offset = temporaries.newTemp(uses = 1)
         instructions += Arithmetic(
-            offset, scaled, ArithmeticOperator.ADD, Constant(start.toLong()), OperandKind.INTEGER
+            offset, index, ArithmeticOperator.MULTIPLY, Constant(elementSize.toLong()),
+            OperandKind.INTEGER
         )
         return offset
+    }
+
+    //      if lista != null goto L1
+    //      throw "Acceso a null (línea 7)"
+    //  L1: push_i lista, t1
+    //
+    // Primero la lista y despues el valor, y el chequeo de null al agregar, como en una
+    // llamada a metodo. La lista se copia antes si el valor podria cambiarla.
+    private fun generatePush(call: FunctionCall, callee: PropertyAccess) {
+        val argument = call.arguments.single()
+        val listAddress = generateExpression(callee.target)
+        val list = if (ExpressionDag.isPure(argument)) listAddress else snapshotIfName(listAddress)
+
+        val elementType = (callee.target.type as ArrayType).element
+        val kind = ExpressionDag.kindOf(elementType)
+        val value = convertedTo(kind, argument)
+
+        emitNullCheck(list, call.location.line)
+        instructions += ListPush(list, value, kind)
+        temporaries.consume(list)
+        temporaries.consume(value)
+    }
+
+    // El largo esta en la casilla 0 de la ficha.
+    private fun generateLength(expression: PropertyAccess): Address {
+        val list = generateExpression(expression.target)
+        emitNullCheck(list, expression.location.line)
+
+        temporaries.consume(list)
+        val result = temporaries.newTemp(uses = 1)
+        instructions += IndexedLoad(
+            result, list, Constant(StorageAllocator.LIST_LENGTH_OFFSET.toLong()),
+            OperandKind.INTEGER
+        )
+        return result
     }
 
     //      $lista = <lista>          se evalua una vez
@@ -1380,9 +1486,9 @@ class TacGenerator(private val storageLayout: StorageLayout) {
     //      $i = 0
     //  L1: t1 = $lista[0]            el largo
     //      if $i >= t1 goto L3
-    //      t1 = $i * 4
-    //      t1 = t1 + 4
-    //      n = $lista[t1]
+    //      t1 = $lista[8]            el contenido, releido en cada vuelta
+    //      t2 = $i * 4
+    //      n = t1[t2]
     //      S
     //  L2: $i = $i + 1
     //      goto L1
@@ -1401,9 +1507,9 @@ class TacGenerator(private val storageLayout: StorageLayout) {
         val index = nameOf(hidden.index)
         val line = statement.location.line
 
-        copyInto(list, generateExpression(statement.iterable))
+        copyInto(list, generateExpression(statement.iterable), OperandKind.REFERENCE)
         emitNullCheck(list, line)
-        instructions += Copy(index, Constant(0L))
+        instructions += Copy(index, Constant(0L), OperandKind.INTEGER)
 
         val startLabel = newLabel()
         val continueLabel = newLabel()
@@ -1411,16 +1517,23 @@ class TacGenerator(private val storageLayout: StorageLayout) {
 
         instructions += LabelDefinition(startLabel)
         val length = temporaries.newTemp(uses = 1)
-        instructions += IndexedLoad(length, list, Constant(0L))
+        instructions += IndexedLoad(
+            length, list, Constant(StorageAllocator.LIST_LENGTH_OFFSET.toLong()),
+            OperandKind.INTEGER
+        )
         instructions += IfRelationalGoto(
             index, RelationalOperator.GREATER_EQUAL, length, OperandKind.INTEGER, endLabel
         )
         temporaries.consume(length)
 
         val elementSize = StorageAllocator.sizeOf(variable.type)
-        val offset = byteOffsetOf(index, elementSize, elementsStartOf(elementSize))
-        instructions += IndexedLoad(nameOf(variable), list, offset)
+        val content = contentOf(list)
+        val offset = byteOffsetOf(index, elementSize)
+        temporaries.consume(content)
         temporaries.consume(offset)
+        instructions += IndexedLoad(
+            nameOf(variable), content, offset, ExpressionDag.kindOf(variable.type)
+        )
 
         withinLoop(LoopLabels(breakLabel = endLabel, continueLabel = continueLabel, openTries)) {
             generateBlock(statement.body)

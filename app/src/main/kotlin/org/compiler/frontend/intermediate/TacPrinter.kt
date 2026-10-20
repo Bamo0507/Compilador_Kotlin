@@ -18,6 +18,7 @@ import org.compiler.frontend.intermediate.models.IndexedLoad
 import org.compiler.frontend.intermediate.models.IndexedStore
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
+import org.compiler.frontend.intermediate.models.ListPush
 import org.compiler.frontend.intermediate.models.Name
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Param
@@ -80,6 +81,8 @@ object TacPrinter {
             "${address(quadruple.base)}[${address(quadruple.offset)}]"
         is IndexedStore -> "${address(quadruple.base)}[${address(quadruple.offset)}] = " +
             address(quadruple.value)
+        is ListPush -> "${pushOperator(quadruple.kind)} ${address(quadruple.list)}, " +
+            address(quadruple.value)
         is Print -> "${printOperator(quadruple.kind)} ${address(quadruple.value)}"
         is TryBegin -> "try ${label(quadruple.handler)}, ${address(quadruple.exceptionVariable)}"
         TryEnd -> "endtry"
@@ -125,6 +128,15 @@ object TacPrinter {
     private fun unarySymbol(unary: Unary): String = when (unary.operator) {
         TacUnaryOperator.NEGATE -> unary.operator.symbol + unary.kind.suffix
         TacUnaryOperator.NOT, TacUnaryOperator.INT_TO_FLOAT -> unary.operator.symbol
+    }
+
+    // Guardar un entero, un flotante o un booleano son instrucciones distintas en la
+    // maquina; strings, objetos y listas son todos una direccion.
+    private fun pushOperator(kind: OperandKind): String = when (kind) {
+        OperandKind.INTEGER -> "push_i"
+        OperandKind.FLOAT -> "push_f"
+        OperandKind.BOOLEAN -> "push_b"
+        OperandKind.STRING, OperandKind.REFERENCE -> "push_r"
     }
 
     private fun printOperator(kind: OperandKind): String = when (kind) {
@@ -179,6 +191,9 @@ object TacPrinter {
         )
         is IndexedStore -> QuadrupleRow(
             "[]=", address(quadruple.offset), address(quadruple.value), address(quadruple.base)
+        )
+        is ListPush -> QuadrupleRow(
+            pushOperator(quadruple.kind), address(quadruple.value), "", address(quadruple.list)
         )
         is Print -> QuadrupleRow(printOperator(quadruple.kind), address(quadruple.value), "", "")
         is TryBegin -> QuadrupleRow(

@@ -1,6 +1,6 @@
 vtable Animal: Animal.hablar
 vtable Perro: Perro.hablar
-begin_func $main, 32
+begin_func $main, 40
     t1 = alloc 8
     t1[0] = vtable.Perro
     param t1
@@ -17,11 +17,14 @@ L1:
     param perro
     t1 = call t1, 1
     print_s t1
-    t1 = alloc 16
+    t1 = alloc 12
     t1[0] = 3
-    t1[4] = 90
-    t1[8] = 85
-    t1[12] = 100
+    t1[4] = 4
+    t2 = alloc 16
+    t1[8] = t2
+    t2[0] = 90
+    t2[4] = 85
+    t2[8] = 100
     notas = t1
     $lista = notas
     if $lista != null goto L2
@@ -31,9 +34,9 @@ L2:
 L3:
     t1 = $lista[0]
     if $i >= t1 goto L5
-    t1 = $i * 4
-    t1 = t1 + 4
-    nota = $lista[t1]
+    t1 = $lista[8]
+    t2 = $i * 4
+    nota = t1[t2]
     if nota >= 60 goto L6
     goto L4
 L6:
