@@ -1,0 +1,27 @@
+{
+    "columns": {
+        "id": {
+            "type": "INT",
+            "constraints": [
+                {
+                    "constraint": "PRIMARY_KEY"
+                }
+            ]
+        },
+        "nombre": {
+            "type": "VARCHAR(40)",
+            "constraints": [
+                {
+                    "constraint": "NOT_NULL"
+                },
+                {
+                    "constraint": "UNIQUE"
+                }
+            ]
+        }
+    },
+    "indexes": {
+        "pk_deptos": "id",
+        "uq_deptos_nombre": "nombre"
+    }
+}

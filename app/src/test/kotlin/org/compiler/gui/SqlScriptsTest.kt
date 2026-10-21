@@ -60,4 +60,36 @@ class SqlScriptsTest {
     fun `un identificador que no existe devuelve null`() {
         assertEquals(null, SqlScripts.byId("no-existe"))
     }
+
+    // La subcarpeta donde cae el archivo es el encabezado que lo agrupa en el
+    // menu: agregar un .sql no pide tocar codigo ni para el nombre ni para el
+    // grupo.
+    @Test
+    fun `cada script hereda el grupo de su carpeta`() {
+        val enCarpeta = SqlScripts.all.filter { it.id.contains('/') }
+
+        assertTrue(enCarpeta.isNotEmpty(), "ningun script vive en una subcarpeta")
+        enCarpeta.forEach { script ->
+            assertTrue(script.group.isNotBlank(), "${script.id} sin grupo")
+        }
+    }
+
+    // La hoja en blanco no lleva encabezado, y va primero.
+    @Test
+    fun `el grupo vacio encabeza el menu`() {
+        val grupos = SqlScripts.grouped()
+
+        assertEquals("", grupos.keys.first())
+        assertEquals(listOf(SqlScripts.BLANK_ID), grupos.getValue("").map { it.id })
+    }
+
+    // Los grupos salen en el orden de la carpeta, que es el de los numeros al
+    // frente: el recorrido completo primero y los invalidos al final.
+    @Test
+    fun `los grupos salen en orden`() {
+        val grupos = SqlScripts.grouped().keys.toList()
+
+        assertEquals("COMPLETO", grupos[1])
+        assertTrue(grupos.last().startsWith("ADVERTENCIAS"))
+    }
 }

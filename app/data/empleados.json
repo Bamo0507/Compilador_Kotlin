@@ -5,6 +5,9 @@
             "constraints": [
                 {
                     "constraint": "PRIMARY_KEY"
+                },
+                {
+                    "constraint": "AUTOINCREMENT"
                 }
             ]
         },
@@ -16,25 +19,36 @@
                 }
             ]
         },
-        "puesto": {
-            "type": "VARCHAR(30)",
-            "constraints": []
+        "depto": {
+            "type": "INT",
+            "constraints": [
+                {
+                    "constraint": "FOREIGN_KEY",
+                    "table": "deptos",
+                    "column": "id"
+                }
+            ]
         },
         "salario": {
             "type": "DECIMAL(10,2)",
+            "constraints": [
+                {
+                    "constraint": "DEFAULT",
+                    "value": "12000.00"
+                }
+            ]
+        },
+        "activo": {
+            "type": "BOOLEAN",
             "constraints": []
         },
         "ingreso": {
             "type": "DATE",
             "constraints": []
-        },
-        "activo": {
-            "type": "BOOLEAN",
-            "constraints": []
         }
     },
     "indexes": {
         "pk_empleados": "id",
-        "idx_puesto": "puesto"
+        "idx_empleados_depto": "depto"
     }
 }

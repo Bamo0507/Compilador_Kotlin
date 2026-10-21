@@ -1,0 +1,36 @@
+-- NOMBRE: Borrar filas con una condicion
+-- ESPERADO: sin errores
+-- FILAS: 4
+
+-- El DELETE lleva WHERE a proposito: sin el, el DBMS avisa que la sentencia
+-- afecta la tabla entera.
+
+CREATE TABLE deptos (
+  id     INT PRIMARY KEY,
+  nombre VARCHAR(40) NOT NULL UNIQUE
+);
+
+CREATE TABLE empleados (
+  id      INT PRIMARY KEY AUTOINCREMENT,
+  nombre  VARCHAR(60) NOT NULL,
+  depto   INT REFERENCES deptos(id),
+  salario DECIMAL(10,2),
+  activo  BOOLEAN
+);
+
+INSERT INTO deptos VALUES (1, 'Ventas'), (2, 'Soporte'), (3, 'Datos');
+
+INSERT INTO empleados (nombre, depto, salario, activo) VALUES
+  ('Ana',   1, 25000.00, TRUE),
+  ('Bruno', 1, 18000.00, TRUE),
+  ('Cora',  2, 21000.50, FALSE),
+  ('Dan',   2, 19500.00, TRUE),
+  ('Elsa',  3, 31000.00, TRUE),
+  ('Fabio', 3, NULL,     TRUE);
+
+DELETE FROM empleados WHERE salario < 20000.00;
+
+SELECT id, nombre, salario FROM empleados ORDER BY id;
+
+DROP TABLE empleados;
+DROP TABLE deptos;

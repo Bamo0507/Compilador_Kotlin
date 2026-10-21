@@ -94,7 +94,7 @@ class AppStateTest {
     @Test
     fun `cargar un ejemplo lo pone en el editor`(@TempDir temp: File) {
         val state = state(temp)
-        val script = SqlScript("demo", "Demo", "SELECT * FROM users;")
+        val script = SqlScript("demo", "Demo", "", "SELECT * FROM users;")
 
         state.loadScript(script)
 

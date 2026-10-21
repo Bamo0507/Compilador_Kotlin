@@ -36,10 +36,11 @@ import androidx.compose.ui.unit.dp
 import org.compiler.samples.SqlScript
 import org.compiler.samples.SqlScripts
 
-// Alto de una fila del menu. El maximo del menu son cinco filas, de tal forma que
-// siempre se ve que hay mas abajo y la lista no tapa el editor completo.
+// Alto de una fila del menu. El tope es de doce filas: con noventa y tantos casos
+// repartidos en veinte grupos, cinco filas obligaban a desplazarse a ciegas, y mas
+// de doce taparian el editor completo.
 private val ITEM_HEIGHT = 44.dp
-private const val VISIBLE_ITEMS = 5
+private const val VISIBLE_ITEMS = 12
 
 @Composable
 fun ScriptSelector(
@@ -94,18 +95,34 @@ fun ScriptSelector(
             onDismissRequest = { expanded = false },
             modifier = Modifier.heightIn(max = ITEM_HEIGHT * VISIBLE_ITEMS)
         ) {
-            SqlScripts.all.forEach { script ->
-                ScriptItem(
-                    script = script,
-                    isSelected = script.id == selected?.id,
-                    onClick = {
-                        expanded = false
-                        onSelect(script)
-                    }
-                )
+            SqlScripts.grouped().forEach { (group, scripts) ->
+                if (group.isNotEmpty()) GroupHeader(group)
+                scripts.forEach { script ->
+                    ScriptItem(
+                        script = script,
+                        isSelected = script.id == selected?.id,
+                        onClick = {
+                            expanded = false
+                            onSelect(script)
+                        }
+                    )
+                }
             }
         }
     }
+}
+
+// Encabezado de grupo: no se puede hacer clic, solo corta la lista. Sin el, los
+// noventa y tantos casos serian una tira sin principio ni fin.
+@Composable
+private fun GroupHeader(title: String) {
+    Text(
+        text = title,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        fontWeight = FontWeight.SemiBold,
+        modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 10.dp, bottom = 4.dp)
+    )
 }
 
 @Composable

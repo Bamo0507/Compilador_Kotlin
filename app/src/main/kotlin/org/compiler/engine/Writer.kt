@@ -26,6 +26,7 @@ import org.compiler.frontend.ast.models.Statement
 import org.compiler.frontend.ast.models.Update
 import org.compiler.models.LexemeLocation
 import org.compiler.types.BoolValue
+import org.compiler.types.NullValue
 
 /**
  * Las sentencias que cambian algo.
@@ -187,11 +188,22 @@ class Writer(private val session: Session) {
         val column = statement.column.toColumn()
 
         // Las filas se cargan ANTES de cambiar el catalogo: si no, se decodificaria
-        // el archivo viejo con el esquema nuevo y la columna aparecería dos veces.
+        // el archivo viejo con el esquema nuevo y la columna apareceria dos veces.
         val rows = session.rowsOf(table.name)
-        session.applyCatalog(session.catalog.addColumn(table.name, column))
-
         val filler = rules.fillerFor(column)
+
+        // La fase 5 cuenta las filas del archivo, que todavia no existe cuando la
+        // tabla se lleno en este mismo script. Aqui ya estan, asi que esta es la
+        // unica vez que se puede saber.
+        if (filler == NullValue && !column.nullable && rows.isNotEmpty()) {
+            report(
+                statement.column.location,
+                "agregar '${column.name}' NOT NULL dejaria ${rows.size} filas invalidas, use DEFAULT"
+            )
+            return NOTHING
+        }
+
+        session.applyCatalog(session.catalog.addColumn(table.name, column))
         rows.replaceAll { Row(it.values + filler) }
         session.markModified(table.name)
         return "columna '${column.name}' agregada"

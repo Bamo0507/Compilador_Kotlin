@@ -1,7 +1,6 @@
-id,nombre,puesto,salario,ingreso,activo
-1,Ana Lucia Morales,Gerente,19500.00,2021-03-15,true
-2,Beto Ramirez,Analista,9800.50,2023-07-01,true
-3,Maria Fernanda de los Angeles Quintanilla,Desarrolladora,12000.00,2022-11-20,true
-4,Diego Castillo,Analista,9800.50,2024-01-08,false
-5,Elena Paz,,7250.75,2025-05-30,true
-6,Franco Ruiz,"",7250.75,2025-09-12,false
+id,nombre,depto,salario,activo,ingreso
+1,Ana,1,27500.00,true,2021-03-01
+2,Bruno,1,19800.00,true,2022-07-15
+4,Dan,2,19500.00,true,2023-11-02
+5,Elsa,3,31000.00,true,2019-05-30
+6,Fabio,3,12000.00,true,

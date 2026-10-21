@@ -1,101 +1,129 @@
-# Analizador Semántico de Compiscript
+# DBMS sobre CSV
 
-Compilador para Compiscript, un lenguaje basado en un subconjunto de TypeScript,
-implementado en Kotlin sobre la JVM. Toma un archivo `.cps`, lo analiza léxica,
-sintáctica y semánticamente, y lo ejecuta, todo desde un IDE de escritorio escrito
-en Compose Multiplatform.
+Manejador de base de datos escrito en Kotlin que pasa el SQL por las mismas
+etapas de un compilador, léxico, sintáctico, semántico y ejecución, y guarda cada
+tabla como un archivo CSV que se puede abrir con cualquier editor de texto.
 
-Proyecto 2 del curso de Construcción de Compiladores, Universidad del Valle de
-Guatemala.
+Todo se maneja desde un IDE de escritorio escrito en Compose Multiplatform: se
+escribe el script, se corre, y la ventana muestra las rejillas de resultados, los
+errores, el catálogo de la base y los árboles del análisis.
+
+Proyecto del curso de Diseño de Lenguajes de Programación, Universidad del Valle
+de Guatemala.
 
 ---
 
 ## Qué hace
 
-El compilador no es una sola pasada que lo hace todo, sino una cadena de fases
-donde cada una agrega información sobre el mismo AST en vez de construir uno
-nuevo. Es decir, el árbol se construye una única vez y de ahí en adelante las
-fases lo van decorando, primero con los ámbitos y los símbolos, luego con los
-tipos, después con los valores constantes que se pueden resolver desde
-compilación, y al final el intérprete lo recorre confiando en todo eso. Bajo esta
-idea cada fase queda pequeña y se puede probar por separado, ya que no tiene que
-volver a hacer el trabajo de la anterior.
+El motor no es un intérprete que lee el texto y actúa, sino una cadena de seis
+etapas donde cada una agrega información sobre el mismo AST en lugar de construir
+uno nuevo. El árbol se arma una sola vez, el análisis de nombres lo decora con los
+ámbitos y los símbolos, el de tipos con el tipo de cada expresión, y el motor lo
+recorre al final confiando en todo eso. Cada etapa queda chica y se prueba por
+separado, porque no tiene que rehacer el trabajo de la anterior.
 
-| Fase | Componentes | Produce |
+| Etapa | Componentes | Produce |
 |---|---|---|
-| 1, léxico y sintáctico | `CompiscriptLexer`, `CompiscriptParser` (ANTLR), `AstBuilder` | el árbol de análisis y el AST propio |
-| 2, semántico, pasada 1 | `DeclarationCollector` | el árbol de ámbitos y símbolos |
-| 2, semántico, pasada 2 | `TypeChecker`, `TypeRules`, `TypeResolver` | el AST decorado con tipos y constantes plegadas |
-| 2, flujo y vivacidad | `FlowAnalyzer`, `LivenessReportBuilder` | errores de flujo y el reporte de vivacidad |
-| 3, ejecución | `Interpreter`, `Environment`, `RuntimeValue` | la salida del programa |
+| A, sintáctica | `SqlLexer`, `SqlParser` (ANTLR), `DiagnosticsErrorListener` | el árbol de análisis |
+| B, AST | `SqlAstBuilder` | el AST propio |
+| C, catálogo | `CatalogLoader` | el esquema de la base, leído de los `.json` |
+| D, semántica | `NameResolver`, `SqlChecker` | el AST decorado con símbolos y tipos |
+| E, ejecución | `Session`, `Engine`, `Writer` | las rejillas y los cambios en memoria |
+| F, volcado | `Flush` | los archivos del directorio `data/` |
 
-Todo se orquesta desde una sola llamada, `CompilerPipeline.compile(fuente)`, que
-devuelve un `CompilationResult` con el árbol de ANTLR, el AST, la tabla de
-símbolos, la vivacidad, los errores y la salida. Se hizo de esta forma para que la
-interfaz gráfica no tuviera que orquestar nada, es decir, la GUI llama una vez y
-de ahí en adelante solo lee campos.
+![Arquitectura](docs/arquitectura.png)
 
-El diagrama completo de la implementación está en `docs/arquitectura.excalidraw`.
+El diagrama editable está en `docs/arquitectura.excalidraw`, que se abre en
+excalidraw.com o en la extensión de VS Code.
 
-### Lo que valida el analizador semántico
+Todo se orquesta desde una sola llamada, `DbmsPipeline.run(fuente, directorio)`,
+que devuelve un `CompilationResult` con el árbol de ANTLR, el AST, el catálogo, el
+árbol de ámbitos, los resultados y los errores. La interfaz llama una vez y de ahí
+en adelante solo lee campos.
 
-- **Tipos**, aritmética sobre `integer` y `float`, operadores lógicos sobre
-  `boolean`, comparaciones, asignaciones, `const` inicializada, listas e índices.
-- **Ámbitos**, resolución local y global, variables no declaradas, redeclaración,
-  bloques anidados, y un entorno nuevo por cada función, clase y bloque.
-- **Funciones**, cantidad y tipo de argumentos, tipo de retorno, recursión,
-  funciones anidadas con closures, y redeclaración.
-- **Control de flujo**, condiciones booleanas, `break` y `continue` dentro de
-  bucles, `return` dentro de funciones, código inalcanzable, y que todos los
-  caminos de una función retornen.
-- **Clases**, atributos y métodos accedidos con `.`, invocación del constructor,
-  herencia, uso de `this`, y ciclos de herencia.
+**La etapa sintáctica es la única que corta.** Sin árbol no hay nada que analizar.
+Todas las demás reportan y siguen, así que un script con cinco problemas los
+muestra los cinco de una vez y no uno por corrida.
 
 ---
 
-## Requisitos
+## El SQL que entiende
 
-### JDK 21
+| | Incluye |
+|---|---|
+| DDL | `CREATE TABLE`, `ALTER TABLE` para agregar y quitar columnas, `DROP TABLE` |
+| Índices | `CREATE INDEX`, `DROP INDEX`, de una sola columna |
+| DML | `INSERT` de varias filas, `UPDATE`, `DELETE` |
+| Consultas | `SELECT`, `FROM`, alias, `JOIN ... ON`, `WHERE`, `ORDER BY`, `DISTINCT`, `LIMIT` |
+| Agregación | `COUNT`, `SUM`, `AVG`, `MIN`, `MAX`, `GROUP BY`, `HAVING` |
+| Subconsultas | escalares, `IN`, `EXISTS`, correlacionadas, y en el `FROM` |
+| Tipos | `INT`, `FLOAT`, `DECIMAL`/`NUMERIC`, `CHAR`, `VARCHAR`, `TEXT`, `DATE`, `TIME`, `BOOLEAN` |
+| Restricciones | `PRIMARY KEY`, `NOT NULL`, `NULL`, `UNIQUE`, `FOREIGN KEY`, `AUTOINCREMENT`, `DEFAULT` |
 
-El proyecto fija el toolchain en Java 21, así que cualquier distribución sirve, ya
-sea Amazon Corretto, Eclipse Temurin u Oracle.
+Queda fuera a propósito: transacciones explícitas, vistas, disparadores, `LEFT` y
+`RIGHT JOIN`, `UNION`, `CHECK`, usuarios, índices compuestos y planificación por
+costos.
 
-```bash
-java -version
-# debe imprimir "21.x.x"
+Las palabras clave quedan reservadas, así que una columna no se puede llamar
+`date`, `key`, `text` ni `count`.
+
+---
+
+## Cómo se guarda la base
+
+**El directorio es el catálogo.** Si existe `users.csv`, existe la tabla `users`.
+No hay un archivo global que liste las tablas, porque sería información derivada
+de algo que el sistema de archivos ya sabe, y toda copia se puede quedar vieja.
+
+Cada tabla son dos archivos. El CSV guarda el encabezado y las filas, y el JSON
+guarda el tipo y las restricciones de cada columna, más los índices que tiene. El
+CSV no puede cargar tipos y el JSON no debería cargar datos.
+
+```
+data/users.csv
+──────────────
+id,nombre,correo,activo
+1,Ana,ana@ej.com,true
+2,Bruno,bruno@ej.com,true
 ```
 
-Si tienes varias versiones instaladas, exporta `JAVA_HOME` apuntando al JDK 21:
-
-```bash
-# macOS Corretto
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/amazon-corretto-21.jdk/Contents/Home
-
-# macOS Temurin (Adoptium)
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
-
-# Linux (ajusta el path según tu distro)
-export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
-
-# Windows PowerShell
-$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21"
+```json
+{
+    "columns": {
+        "id":     { "type": "INT",         "constraints": [ { "constraint": "PRIMARY_KEY" },
+                                                            { "constraint": "AUTOINCREMENT" } ] },
+        "nombre": { "type": "VARCHAR(40)", "constraints": [ { "constraint": "NOT_NULL" } ] },
+        "correo": { "type": "VARCHAR(60)", "constraints": [ { "constraint": "UNIQUE" } ] },
+        "activo": { "type": "BOOLEAN",     "constraints": [ { "constraint": "DEFAULT", "value": "true" } ] }
+    },
+    "indexes": {
+        "pk_users": "id",
+        "uq_users_correo": "correo"
+    }
+}
 ```
 
-Si prefieres no exportarlo cada vez, copia `gradle.properties.local.template` a
-`gradle.properties.local` y ajusta el path local, como se explica en la sección de
-overrides.
+Un índice es un tercer archivo, con extensión `.idx` para que el directorio no lo
+confunda con una tabla. Es un CSV de dos columnas ordenado por valor, donde el
+segundo número es el byte en que arranca esa fila dentro del `.csv`:
 
-### Gradle
+```
+data/pk_users.idx
+─────────────────
+value,offset
+1,25
+2,48
+```
 
-No es necesario instalarlo, dado que el proyecto incluye el wrapper (`./gradlew`),
-y la versión se resuelve automáticamente desde
-`gradle/wrapper/gradle-wrapper.properties`.
+Con eso, `WHERE id = 2` salta al byte 48 y lee una sola fila en vez de recorrer el
+archivo completo. La clave primaria y las columnas `UNIQUE` traen su índice sin
+que nadie escriba un `CREATE INDEX`, bajo los nombres reservados `pk_<tabla>` y
+`uq_<tabla>_<columna>`.
 
-### ANTLR
-
-Tampoco es necesario instalarlo. El plugin `antlr` de Gradle genera el lexer y el
-parser a partir de `app/src/main/antlr/Compiscript.g4` en cada build, de tal forma
-que basta con clonar el repositorio y compilar.
+**El DBMS es el único que escribe.** El CSV se eligió por legible, no por
+editable. Hay una guarda que compara el encabezado del archivo contra el esquema y
+avisa si alguien lo tocó por fuera, pero es eso, una guarda de cordura, no un
+mecanismo de reconciliación. Lo que se valida de verdad es lo que entra.
 
 ---
 
@@ -105,27 +133,46 @@ que basta con clonar el repositorio y compilar.
 ./gradlew run
 ```
 
-Abre el IDE, y equivale a `./gradlew runGui`.
+Abre el IDE. Si tienes varias versiones de Java instaladas, exporta `JAVA_HOME`
+apuntando a un JDK 21 antes de correrlo:
 
-Al arrancar se carga un programa de demostración que ejercita clases, herencia,
-`this`, constructor, recursión, arreglos, `foreach` y `continue`. Asimismo, el
-selector que está sobre el editor permite cargar cualquiera de los 38 programas de
-la batería de pruebas, o empezar en blanco.
+```bash
+# macOS Corretto
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/amazon-corretto-21.jdk/Contents/Home
 
-### Las tres vistas del IDE
+# macOS Temurin (Adoptium)
+export JAVA_HOME=/Library/Java/JavaVirtualMachines/temurin-21.jdk/Contents/Home
+
+# Linux, ajusta el path según tu distro
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk
+
+# Windows PowerShell
+$env:JAVA_HOME = "C:\Program Files\Eclipse Adoptium\jdk-21"
+```
+
+Gradle y ANTLR no hay que instalarlos. El proyecto trae el wrapper, y el plugin
+`antlr` genera el lexer y el parser desde `app/src/main/antlr/Sql.g4` en cada
+build, así que basta con clonar y compilar.
+
+Al arrancar se carga el recorrido completo del SQL, un script que se arma su
+propia base, la consulta de todas las formas posibles y la borra al final. El
+selector que está sobre el editor permite cargar cualquiera de los 95 scripts de
+la batería, agrupados por tema, o empezar en blanco.
+
+### Las cuatro vistas
 
 Se cambia entre ellas desde el menú **Vista**.
 
-- **Editor**, el código, la lista de errores etiquetados por nivel (léxico,
-  sintáctico o semántico) y la consola de salida. Los errores salen ordenados por
-  línea y columna en vez de agrupados por fase, ya que el usuario lee su código de
-  arriba hacia abajo, y al hacer clic sobre uno el editor salta a esa línea.
-- **Árboles**, el árbol sintáctico de ANTLR y el AST propio, lado a lado. En el
-  AST cada expresión muestra el tipo que le asignó la fase semántica y, si es
-  constante, su valor ya calculado, de tal forma que esta pantalla es la evidencia
-  visual del trabajo del analizador.
-- **Tabla de símbolos**, el árbol de ámbitos navegable con los símbolos de cada
-  entorno, y el reporte de vivacidad.
+- **Editor**, el script con resaltado de sintaxis, una rejilla por cada `SELECT`,
+  una línea por cada sentencia que escribió algo, la lista de errores y el resumen
+  de lo que se volcó al disco. Los errores salen ordenados por línea en vez de
+  agrupados por etapa, porque el script se lee de arriba hacia abajo, y al hacer
+  clic sobre uno el editor salta a esa línea.
+- **Catálogo**, las tablas de la base con sus columnas, tipos, restricciones e
+  índices.
+- **Árboles**, el árbol sintáctico de ANTLR, el AST propio y el árbol de ámbitos,
+  que es donde se ve qué resolvió el análisis de nombres.
+- **Tokens**, la tira de tokens tal como la produjo el lexer.
 
 ---
 
@@ -138,29 +185,40 @@ Se cambia entre ellas desde el menú **Vista**.
 El reporte queda en `app/build/reports/tests/test/index.html`.
 
 La batería tiene dos niveles. Por un lado están las pruebas unitarias sobre cada
-componente por separado, y por otro, 38 programas `.cps` reales que atraviesan el
-compilador completo, es decir, al menos un caso exitoso y uno fallido por cada
-regla semántica.
+componente por separado, y por otro, 95 scripts `.sql` reales que atraviesan el
+pipeline completo: 40 que tienen que correr limpios, 52 que tienen que fallar, uno
+por regla, y 3 que solo advierten y por eso sí se ejecutan.
 
-Cada programa declara su propia especificación en comentarios, de tal forma que el
-archivo es su propia documentación, y agregar un caso es agregar un archivo sin
-tener que tocar código de pruebas. Cabe mencionar que ese archivo nuevo también
-aparece automáticamente en el selector del IDE. Por ejemplo:
+Cada script declara su propia especificación en comentarios, así que el archivo es
+su propia documentación, y agregar un caso es agregar un archivo sin tocar código
+de pruebas. Ese archivo nuevo aparece también en el selector del IDE, bajo el
+grupo de la carpeta donde cayó.
 
-```cps
-// NOMBRE: Código inalcanzable
-// ESPERADO: linea 6, "Código inalcanzable"
+```sql
+-- NOMBRE: Subconsulta correlacionada
+-- ESPERADO: sin errores
+-- FILAS: 2
 ```
 
-```cps
-// NOMBRE: Tipos: aritmética
-// SALIDA: 8
-// SALIDA: 120
+```sql
+-- NOMBRE: Columna del SELECT sin agrupar
+-- ESPERADO: error
+-- MENSAJE: no esta en el GROUP BY
+-- LINEA: 16
 ```
 
-- `// NOMBRE:`, el nombre que aparece en el selector del IDE.
-- `// ESPERADO:`, el error que el programa debe producir y en qué línea.
-- `// SALIDA:`, cada línea que el programa debe imprimir, en orden.
+- `NOMBRE`, el nombre que aparece en el selector del IDE.
+- `ESPERADO`, una de tres: `sin errores`, `error` o `advertencia`.
+- `FILAS`, cuántas filas devuelve el último `SELECT` del script.
+- `MENSAJE` y `LINEA`, un fragmento del error esperado y dónde sale. Se verifica
+  el fragmento y no el texto completo, para que mejorar la redacción de un mensaje
+  no rompa la batería.
+
+**Cada script es autosuficiente.** Crea sus tablas, las llena, las consulta y las
+borra, así que se puede correr en cualquier orden, las veces que haga falta, y
+sobre una base vacía. La batería verifica justamente eso, que el directorio quede
+como estaba, lo cual de paso prueba que un script que falla a la mitad no deja
+rastro.
 
 ---
 
@@ -183,13 +241,64 @@ Los instaladores quedan en `app/build/compose/binaries/main/<formato>/`.
 
 ---
 
-## Overrides por desarrollador
+## Las decisiones de diseño
 
-Para que cada integrante configure su JDK sin afectar el repositorio:
+Están desarrolladas en `docs/roadmap/README.md`. En una línea cada una:
 
-1. Copia `gradle.properties.local.template` a `gradle.properties.local`.
-2. Edita los valores locales, por ejemplo `org.gradle.java.home`.
-3. `gradle.properties.local` está en `.gitignore`, así que no se commitea.
+1. **Proyecto hermano, no evolución.** Compiscript queda congelado en `main` y
+   aquí se reaprovechan los cimientos, no el lenguaje.
+2. **El directorio es el catálogo.** Si existe el `.csv`, existe la tabla.
+3. **Dos archivos por tabla**, porque el CSV no puede cargar tipos y el JSON no
+   debería cargar datos.
+4. **El DBMS es el único que escribe**, y lo que se valida de verdad es lo que
+   entra.
+5. **Se escribe al final**, así que si cualquier sentencia falla el directorio
+   queda intacto, que es atomicidad por script sin agregar `BEGIN` ni `COMMIT` a
+   la gramática.
+6. **Las restricciones son una jerarquía sellada**, de modo que los estados
+   imposibles no compilan.
+7. **El JSON es uniforme**, cada regla es un objeto con discriminador.
+8. **El semántico decora y el motor no vuelve a preguntar**, así que cada columna
+   se lee indexando un arreglo y no buscando un nombre por fila.
+9. **`CHAR` se guarda sin relleno**, que se aplica al leer, para que el CSV siga
+   siendo legible.
+10. **Una `Session` por corrida es la dueña del estado**, y su caché de lectura y
+    su almacén de escritura son el mismo mapa, de forma que un `SELECT` después de
+    un `INSERT` ve la fila nueva.
+11. **Los índices guardan desplazamientos en bytes**, se reconstruyen enteros en
+    cada volcado en vez de parcharse, y en memoria son un `TreeMap` del JDK, que
+    resuelve igualdad y rangos.
+12. **`PRIMARY KEY` y `UNIQUE` generan su índice**, y lo que gana no son las
+    escrituras sino las consultas.
+13. **Las advertencias son una severidad, no un colector aparte**, así que un
+    script que solo advierte se ejecuta igual.
+
+---
+
+## Simplificaciones conscientes
+
+Son las decisiones donde se eligió lo simple sabiendo lo que se dejaba fuera.
+
+- **El join es por bucles anidados**, sin usar índices. Es cuadrático, y es el
+  único lugar al que hay que volver si el volumen de datos crece.
+- **`AUTOINCREMENT` reúsa números.** El siguiente valor es el máximo más uno, así
+  que borrar la última fila devuelve ese número a la circulación.
+- **El volcado es atómico por tabla, no entre tablas.** No hay diario de
+  transacciones, así que un script que modifica dos tablas y falla al escribir la
+  segunda deja la primera ya escrita. Lo que sí está garantizado es que un error
+  antes del volcado no escribe nada.
+- **La escala del `DECIMAL` al multiplicar no sigue el estándar al pie de la
+  letra.** La precisión crece como manda el estándar, pero al dividir se eligieron
+  seis decimales de más, que es lo que hace SQL Server, porque el estándar deja
+  ese caso sin definir.
+- **Si hay índice utilizable, se usa**, sin medir si conviene. Un `WHERE` que casa
+  con la mitad de la tabla hace la mitad de los saltos, y eso puede salir más
+  lento que leer el archivo de corrido. Un DBMS real guarda estadísticas de
+  cardinalidad para decidirlo; aquí no hay planificador por costos.
+- **Un `WHERE` usa un solo índice.** Si hay dos columnas indexadas se toma la
+  primera y el resto se filtra normal.
+- **El paquete raíz sigue llamándose `org.compiler`**, que es herencia del
+  proyecto del que salió este.
 
 ---
 
@@ -199,44 +308,44 @@ Para que cada integrante configure su JDK sin afectar el repositorio:
 Compilador_Kotlin/
 ├── app/src/
 │   ├── main/
-│   │   ├── antlr/Compiscript.g4              gramática, genera lexer y parser
+│   │   ├── antlr/Sql.g4                      gramática, genera lexer y parser
 │   │   ├── kotlin/org/compiler/
+│   │   │   ├── types/                        Type, Value, TypeRules, ValueCodec
+│   │   │   ├── catalog/                      Catalog, Table, Column, Index, SchemaJson
+│   │   │   ├── storage/                      DataDirectory, CsvReader, CsvWriter, IndexFile
 │   │   │   ├── frontend/
-│   │   │   │   ├── syntax/                   SyntaxAnalyzer, listener de errores
-│   │   │   │   ├── ast/                      AstBuilder y los nodos del AST
-│   │   │   │   └── semantic/                 las dos pasadas, flujo y vivacidad
-│   │   │   │       └── symbols/              Scope, Symbol, Type
-│   │   │   ├── interpreter/                  Interpreter, Environment, RuntimeValue
-│   │   │   ├── runtime/                      CompilerPipeline, CompilationResult
-│   │   │   ├── samples/                      cargador de los programas de ejemplo
+│   │   │   │   ├── syntax/                   analizador sintáctico y listener de errores
+│   │   │   │   ├── ast/                      SqlAstBuilder y los nodos del AST
+│   │   │   │   └── semantic/                 NameResolver, SqlChecker
+│   │   │   │       └── symbols/              Scope, Symbol
+│   │   │   ├── engine/                       Session, Engine, Writer, WriteRules, Flush
+│   │   │   ├── runtime/                      DbmsPipeline, CompilationResult
+│   │   │   ├── samples/                      cargador de los scripts de ejemplo
 │   │   │   ├── diagnostics/                  Diagnostics, CompilerError
 │   │   │   ├── gui/                          pantallas y componentes Compose
 │   │   │   └── GuiApp.kt                     entry point
-│   │   └── resources/programas/              los .cps, el selector y la batería
-│   │       ├── validos/                      16 programas que compilan
-│   │       └── invalidos/                    22 programas que deben fallar
-│   └── test/kotlin/org/compiler/             pruebas de cada fase
+│   │   └── resources/scripts/                los .sql, el selector y la batería
+│   └── test/kotlin/org/compiler/             pruebas de cada etapa
+│       └── bateria/                          las dos suites que leen los .sql
+├── data/                                     la base: un .csv, un .json y los .idx por tabla
 ├── docs/
 │   ├── roadmap/                              el plan por fases y tickets
-│   ├── reglas-de-tipos.md                    las reglas del sistema de tipos
-│   └── arquitectura.excalidraw               diagrama de la implementación
+│   ├── arquitectura.excalidraw               diagrama editable de las etapas
+│   └── arquitectura.png                      el mismo diagrama, ya exportado
 ├── gradle/libs.versions.toml                 version catalog
 └── app/build.gradle.kts                      config del módulo
 ```
 
-Cabe mencionar que los `.cps` viven en `src/main/resources` y no en
-`src/test/resources` a propósito, porque los recursos de pruebas no existen en
-tiempo de ejecución, y se busca que el IDE los pueda leer. De esta forma queda una
-sola copia que el selector muestra y las pruebas verifican, así que las dos nunca
-se pueden desincronizar.
+Los `.sql` viven en `src/main/resources` y no en `src/test/resources` a propósito,
+porque los recursos de pruebas no existen en tiempo de ejecución y el selector del
+IDE no podría leerlos. Así queda una sola copia que el IDE muestra y las pruebas
+verifican, de modo que las dos nunca se pueden desincronizar.
 
 ---
 
 ## Integrantes
 
 - Bryan Alberto Martínez Orellana, 23542
-- Adriana Sophia Contreras Palacios, 23044
-- Brandon Werner Rivera Cabrera, 23088
 
 ---
 
@@ -246,4 +355,3 @@ se pueden desincronizar.
 - [ANTLR 4](https://www.antlr.org/), generador del lexer y el parser
 - [Kotlin docs](https://kotlinlang.org/docs/home.html)
 - [Compose Multiplatform](https://www.jetbrains.com/lp/compose-multiplatform/), framework de la GUI
-- [Ing. Pablo Koch](https://gt.linkedin.com/in/pablo-koch-075839119)
