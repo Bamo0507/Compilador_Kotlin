@@ -1,0 +1,40 @@
+{
+    "columns": {
+        "id": {
+            "type": "INT",
+            "constraints": [
+                {
+                    "constraint": "PRIMARY_KEY"
+                }
+            ]
+        },
+        "nombre": {
+            "type": "VARCHAR(60)",
+            "constraints": [
+                {
+                    "constraint": "NOT_NULL"
+                }
+            ]
+        },
+        "puesto": {
+            "type": "VARCHAR(30)",
+            "constraints": []
+        },
+        "salario": {
+            "type": "DECIMAL(10,2)",
+            "constraints": []
+        },
+        "ingreso": {
+            "type": "DATE",
+            "constraints": []
+        },
+        "activo": {
+            "type": "BOOLEAN",
+            "constraints": []
+        }
+    },
+    "indexes": {
+        "pk_empleados": "id",
+        "idx_puesto": "puesto"
+    }
+}

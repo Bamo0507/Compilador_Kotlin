@@ -13,7 +13,20 @@ class CatalogLoader(
     private val directory: DataDirectory,
     private val diagnostics: Diagnostics
 ) {
+    /**
+     * Las tablas que no se pudieron cargar, con el por que.
+     *
+     * Van aparte de los diagnosticos porque la vista del catalogo las necesita
+     * ASOCIADAS a su tabla: un `users.csv` sin su `users.json` no esta en el
+     * catalogo, y si la vista solo mostrara lo que si cargo, un directorio roto
+     * se veria igual que uno sano.
+     */
+    val problems: Map<String, String> get() = broken
+
+    private val broken = linkedMapOf<String, String>()
+
     fun load(): Catalog {
+        broken.clear()
         val names = directory.tables()
         val tables = linkedMapOf<String, Table>()
 
@@ -26,24 +39,24 @@ class CatalogLoader(
         names.forEach { name ->
             val file = directory.json(name)
             if (!file.isFile) {
-                report("$name.csv no tiene esquema")
+                reportTable(name, "$name.csv no tiene esquema")
                 return@forEach
             }
 
             val schema = try {
                 SchemaJson.decode(file.readText(Charsets.UTF_8))
             } catch (error: IOException) {
-                report("el esquema de $name no se pudo leer: ${error.message}")
+                reportTable(name, "el esquema de $name no se pudo leer: ${error.message}")
                 return@forEach
             } catch (error: IllegalArgumentException) {
-                report("el esquema de $name no se pudo leer: ${error.message}")
+                reportTable(name, "el esquema de $name no se pudo leer: ${error.message}")
                 return@forEach
             }
 
             val columns = schema.columns.mapNotNull { (columnName, definition) ->
                 val column = definition.toColumn(columnName)
                 if (column == null || column.type == NullType || column.type == ErrorType) {
-                    report("tipo '${definition.type}' no reconocido en $name.$columnName")
+                    reportTable(name, "tipo '${definition.type}' no reconocido en $name.$columnName")
                     return@mapNotNull null
                 }
 
@@ -90,5 +103,12 @@ class CatalogLoader(
     private fun report(message: String) {
         // Los errores del catalogo vienen de archivos, no de una posicion SQL.
         diagnostics.report(CompilerError.SemanticError(LexemeLocation(1, 1), message))
+    }
+
+    // El mismo error, ademas anotado contra su tabla. La primera razon es la que
+    // se muestra: las siguientes suelen ser consecuencia de la primera.
+    private fun reportTable(table: String, message: String) {
+        report(message)
+        broken.putIfAbsent(table, message)
     }
 }

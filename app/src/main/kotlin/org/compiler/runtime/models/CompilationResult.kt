@@ -22,12 +22,20 @@ data class CompilationResult(
     // Etapa C: la base como estaba al arrancar. null si no se llego a cargar.
     val catalog: Catalog? = null,
 
+    // Las tablas que la etapa C no pudo leer, con su motivo. No estan en el
+    // catalogo, asi que la vista las necesita por aqui o no se verian.
+    val catalogProblems: Map<String, String> = emptyMap(),
+
     // Etapa D: el arbol de ambitos, que la interfaz dibuja.
     val scope: Scope? = null,
 
-    // Etapa E: lo que devolvio cada consulta. null si el analisis reporto algo y
-    // no se llego a ejecutar.
+    // Etapa E: lo que dejo cada sentencia. null si el analisis reporto algo y no
+    // se llego a ejecutar.
     val execution: ExecutionResult? = null,
+
+    // Etapa F: los archivos que el volcado escribio, en orden. Vacia si no se
+    // escribio nada, que es lo que el panel de cambios tiene que poder decir.
+    val written: List<String> = emptyList(),
 
     val errors: List<CompilerError> = emptyList()
 ) {

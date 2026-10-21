@@ -37,7 +37,8 @@ object DbmsPipeline {
         val ast = SqlAstBuilder(diagnostics).visit(parseTree) as Script
 
         // Etapa C. Lee los .json, ningun .csv: esquema ansioso, datos perezosos.
-        val catalog = CatalogLoader(directory, diagnostics).load()
+        val loader = CatalogLoader(directory, diagnostics)
+        val catalog = loader.load()
 
         // Etapa D. Las dos mitades del semantico corren aunque C haya reportado,
         // para que el usuario vea todos sus problemas de una vez.
@@ -51,8 +52,10 @@ object DbmsPipeline {
 
         // Etapa F. Solo si E tampoco fallo. Es la vuelta atras: una sentencia que
         // revienta a la mitad deja el directorio intacto, porque nada se escribio.
-        if (write && execution != null && !diagnostics.hasErrors) {
+        val written = if (write && execution != null && !diagnostics.hasErrors) {
             Flush.flush(session.changes(), directory)
+        } else {
+            emptyList()
         }
 
         return CompilationResult(
@@ -60,8 +63,10 @@ object DbmsPipeline {
             parseTreeView = parseTreeView,
             ast = ast,
             catalog = catalog,
+            catalogProblems = loader.problems,
             scope = scope,
             execution = execution,
+            written = written,
             errors = diagnostics.all()
         )
     }

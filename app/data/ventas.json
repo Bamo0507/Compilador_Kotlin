@@ -1,0 +1,29 @@
+{
+    "columns": {
+        "folio": {
+            "type": "INT",
+            "constraints": [
+                {
+                    "constraint": "PRIMARY_KEY"
+                }
+            ]
+        },
+        "empleado": {
+            "type": "INT",
+            "constraints": [
+                {
+                    "constraint": "FOREIGN_KEY",
+                    "table": "empleados",
+                    "column": "id"
+                }
+            ]
+        },
+        "monto": {
+            "type": "DECIMAL(10,2)",
+            "constraints": []
+        }
+    },
+    "indexes": {
+        "pk_ventas": "folio"
+    }
+}

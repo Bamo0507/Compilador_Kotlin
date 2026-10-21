@@ -33,6 +33,7 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.dp
@@ -65,7 +66,11 @@ fun CodeEditor(
     modifier: Modifier = Modifier,
     label: String? = null,
     enabled: Boolean = true,
-    highlightedLine: Int? = null
+    highlightedLine: Int? = null,
+
+    // El resaltado de SQL. Se apaga en un campo deshabilitado, donde todo el texto
+    // va atenuado y los colores solo confundirian.
+    highlightSyntax: Boolean = true
 ) {
     val verticalScroll = rememberScrollState()
     val horizontalScroll = rememberScrollState()
@@ -80,6 +85,13 @@ fun CodeEditor(
         isFocused -> colors.primary
         else -> colors.outlineVariant
     }
+    // Una capa de color encima del MISMO campo: el cursor y la seleccion siguen
+    // funcionando porque el texto no cambia, solo su estilo.
+    val sqlColors = rememberSqlColors()
+    val visual = remember(sqlColors, enabled, highlightSyntax) {
+        if (enabled && highlightSyntax) SqlHighlighter(sqlColors) else VisualTransformation.None
+    }
+
     val editorTextStyle = TextStyle(
         color = contentColor,
         fontFamily = FontFamily.Monospace,
@@ -138,6 +150,7 @@ fun CodeEditor(
                     enabled = enabled,
                     interactionSource = interactionSource,
                     textStyle = editorTextStyle,
+                    visualTransformation = visual,
                     cursorBrush = SolidColor(colors.primary),
                     modifier = Modifier
                         .fillMaxWidth()

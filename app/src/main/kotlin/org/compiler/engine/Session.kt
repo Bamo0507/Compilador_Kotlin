@@ -180,16 +180,29 @@ class Session(
      * queda intacto.
      */
     fun run(script: Script): ExecutionResult {
-        val results = mutableListOf<ResultSet>()
+        val outcomes = mutableListOf<StatementOutcome>()
 
-        for (statement in script.statements) {
-            when (statement) {
-                is Query -> results += Engine(this).execute(statement)
-                else -> Writer(this).execute(statement)
+        script.statements.forEachIndexed { index, statement ->
+            val number = index + 1
+            val label = labelOf(statement)
+
+            if (statement is Query) {
+                // Una consulta SIEMPRE deja su rejilla, aunque haya reportado algo
+                // en el camino: `SELECT age / 0` avisa de la division y de todos
+                // modos devuelve sus filas, con un nulo donde no se pudo calcular.
+                outcomes += StatementOutcome.Rows(number, label, Engine(this).execute(statement))
+            } else {
+                val detail = Writer(this).execute(statement)
+
+                // Una escritura que fallo NO deja reporte: decir "2 rows
+                // insertadas" de algo que no va a llegar al disco seria mentir. El
+                // panel de cambios dice que el script se corto aqui.
+                if (!diagnostics.hasErrors) outcomes += StatementOutcome.Written(number, label, detail)
             }
-            if (diagnostics.hasErrors) break
+
+            if (diagnostics.hasErrors) return ExecutionResult(outcomes, this)
         }
-        return ExecutionResult(results, this)
+        return ExecutionResult(outcomes, this)
     }
 
     private fun load(table: String): MutableList<Row> {
@@ -243,6 +256,11 @@ class Changes(
 )
 
 class ExecutionResult(
-    val results: List<ResultSet>,
+    // Una por sentencia que termino bien, en el orden del script.
+    val outcomes: List<StatementOutcome>,
     val session: Session
-)
+) {
+    // Solo las consultas. Es lo que ya leian las pruebas y el resto del motor.
+    val results: List<ResultSet>
+        get() = outcomes.filterIsInstance<StatementOutcome.Rows>().map { it.result }
+}

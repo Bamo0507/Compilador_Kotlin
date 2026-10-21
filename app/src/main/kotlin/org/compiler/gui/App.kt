@@ -18,6 +18,9 @@ import androidx.compose.ui.unit.dp
 import org.compiler.gui.components.AppView
 import org.compiler.gui.components.FileMenu
 import org.compiler.gui.components.ViewMenu
+import org.compiler.gui.screens.CatalogScreen
+import org.compiler.gui.screens.TokensScreen
+import org.compiler.gui.screens.TreesScreen
 import org.compiler.gui.screens.WorkspaceScreen
 import org.compiler.gui.state.AppState
 
@@ -44,6 +47,21 @@ fun App() {
 
                 when (selectedView) {
                     AppView.WORKSPACE -> WorkspaceScreen(
+                        state = appState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    AppView.CATALOG -> CatalogScreen(
+                        state = appState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    AppView.TREES -> TreesScreen(
+                        state = appState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    AppView.TOKENS -> TokensScreen(
                         state = appState,
                         modifier = Modifier.fillMaxSize()
                     )

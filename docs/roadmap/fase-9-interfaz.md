@@ -22,7 +22,7 @@ Compiscript sirve casi completa.
 
 ## Ticket 9.1 · Rejilla de resultados
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 7.5
 
 **Archivos:**
@@ -68,7 +68,7 @@ CREATE TABLE eventos     table creada
 
 ## Ticket 9.2 · Vista del catálogo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 9.1
 
 **Archivos:**
@@ -114,7 +114,7 @@ demuestra que las restricciones se guardan de verdad.
 
 ## Ticket 9.3 · Árboles del script
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 9.1
 
 **Archivos:**
@@ -153,7 +153,7 @@ nodos de expresión triviales, como un literal solo, en una sola etiqueta.
 
 ## Ticket 9.4 · Resaltado y selector de scripts
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 9.1
 
 **Archivos:**
@@ -192,7 +192,7 @@ dos o tres scripts de juguete y muestra solo Default y En blanco. No bloquea.
 
 ## Ticket 9.5 · Estado y panel de cambios
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 9.1, 9.2
 
 **Archivos:**
@@ -255,7 +255,7 @@ decisión 5 resuelve.
 
 ## Ticket 9.6 · Vista de tokens
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 9.1
 
 **Archivos:**

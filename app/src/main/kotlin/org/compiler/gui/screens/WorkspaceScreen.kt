@@ -10,12 +10,14 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ErrorOutline
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -23,10 +25,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import org.compiler.gui.components.ChangeSummaryView
 import org.compiler.gui.components.CodeEditor
 import org.compiler.gui.components.ErrorList
-import org.compiler.gui.components.OutputConsole
+import org.compiler.gui.components.ResultGrid
 import org.compiler.gui.components.PlayButton
+import org.compiler.gui.components.ScriptSelector
+import org.compiler.gui.components.changeSummaryOf
 import org.compiler.gui.state.AppState
 
 @Composable
@@ -47,6 +52,11 @@ fun WorkspaceScreen(
         state.errorMessage?.let { message -> ErrorBanner(message) }
 
         val result = state.result
+
+        // El resumen se deriva del resultado, no se guarda: asi no puede quedar uno
+        // viejo a la vista despues de una corrida nueva.
+        val summary = remember(result) { changeSummaryOf(result) }
+        ChangeSummaryView(summary = summary)
 
         Row(
             modifier = Modifier.fillMaxSize(),
@@ -87,13 +97,14 @@ fun WorkspaceScreen(
                 }
 
                 WorkspacePanel(
-                    title = "Salida",
+                    title = "Resultados",
                     modifier = Modifier
                         .fillMaxWidth()
                         .weight(1f)
                 ) {
-                    OutputConsole(
-                        output = emptyList(),
+                    ResultGrid(
+                        outcomes = result?.execution?.outcomes ?: emptyList(),
+                        hasRun = result != null,
                         hasErrors = result?.hasErrors == true,
                         modifier = Modifier.fillMaxSize()
                     )
@@ -139,6 +150,11 @@ private fun WorkspaceToolbar(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+        // ScriptSelector(
+        //     selected = state.selectedScript,
+        //     onSelect = { state.loadScript(it) },
+        //     modifier = Modifier.width(260.dp)
+        // )
         PlayButton(
             isRunning = state.isRunning,
             onClick = {
