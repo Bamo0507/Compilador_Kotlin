@@ -25,6 +25,30 @@ object Operators {
         return ResultSet(columns, session.rowsOf(table).toList())
     }
 
+    /**
+     * Las filas que el indice señala, sin cargar la tabla.
+     *
+     * Devuelve null cuando no hay que usar el indice, y entonces el motor hace un
+     * `scan` normal. Son dos casos:
+     *
+     * - **La tabla ya esta en memoria.** Volver a abrir el archivo para saltar a
+     *   unas filas seria mas lento que filtrar las que ya se tienen.
+     * - **El .idx no esta o no se pudo leer.** El resultado tiene que ser el mismo
+     *   con indice y sin el, asi que ante la duda se lee todo.
+     *
+     * Las filas que trae NO van al cache: son una parte de la tabla, y marcarla
+     * como cargada haria que la consulta siguiente viera solo esas.
+     */
+    fun scanByIndex(session: Session, table: String, plan: IndexPlan): ResultSet? {
+        if (session.isLoaded(table)) return null
+
+        val schema = session.catalog.table(table) ?: return null
+        val entries = session.entriesOf(plan.index) ?: return null
+        val columns = schema.columns.map { ResultColumn(it.name, it.type, table) }
+
+        return ResultSet(columns, session.rowsAt(table, plan.offsets(entries)))
+    }
+
     fun filter(input: ResultSet, keep: (Row) -> Boolean): ResultSet = input.with(input.rows.filter(keep))
 
     fun project(columns: List<ResultColumn>, rows: List<Row>): ResultSet = ResultSet(columns, rows)

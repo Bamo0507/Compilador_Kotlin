@@ -6,6 +6,7 @@ import org.compiler.catalog.Column
 import org.compiler.catalog.Constraint
 import org.compiler.catalog.Default
 import org.compiler.catalog.ForeignKey
+import org.compiler.catalog.Index
 import org.compiler.catalog.NotNull
 import org.compiler.catalog.Nullable
 import org.compiler.catalog.PrimaryKey
@@ -21,9 +22,11 @@ import org.compiler.frontend.ast.models.AlterTableDrop
 import org.compiler.frontend.ast.models.Binary
 import org.compiler.frontend.ast.models.ColumnDefinition
 import org.compiler.frontend.ast.models.ColumnReference
+import org.compiler.frontend.ast.models.CreateIndex
 import org.compiler.frontend.ast.models.CreateTable
 import org.compiler.frontend.ast.models.Delete
 import org.compiler.frontend.ast.models.DerivedSource
+import org.compiler.frontend.ast.models.DropIndex
 import org.compiler.frontend.ast.models.DropTable
 import org.compiler.frontend.ast.models.Exists
 import org.compiler.frontend.ast.models.Expression
@@ -93,6 +96,8 @@ class SqlChecker(
                 is AlterTableAdd -> checkAlterAdd(statement)
                 is AlterTableDrop -> checkAlterDrop(statement)
                 is DropTable -> checkDropTable(statement)
+                is CreateIndex -> checkCreateIndex(statement)
+                is DropIndex -> checkDropIndex(statement)
             }
             catalog = catalog.after(statement)
         }
@@ -527,6 +532,75 @@ class SqlChecker(
         }
         referenceTo(table.name, statement.column)?.let {
             report(statement.location, "'${table.name}.${statement.column}' es referenciada por '$it'")
+        }
+
+        // Borrar la columna dejaria el indice apuntando a nada. Se exige borrarlo
+        // primero para que la decision sea de quien escribe el script y no del
+        // compilador borrando archivos por su cuenta.
+        table.indexOn(statement.column)?.takeIf { !it.auto }?.let {
+            report(
+                statement.location,
+                "'${table.name}.${statement.column}' esta indexada por '${it.name}', " +
+                    "hay que borrar el indice primero"
+            )
+        }
+    }
+
+    // ── Los indices ────────────────────────────────────────────────────────
+
+    private fun checkCreateIndex(statement: CreateIndex) {
+        val table = tableOf(statement.table, statement.location) ?: return
+
+        if (catalog.index(statement.name) != null) {
+            report(statement.location, "ya existe un indice llamado '${statement.name}'")
+        }
+        if (Index.isReserved(statement.name)) {
+            report(
+                statement.location,
+                "'${statement.name}' es un nombre reservado para indices automaticos"
+            )
+        }
+
+        // La gramatica acepta varias columnas para poder dar ESTE mensaje: con un
+        // solo Identifier, `ON carros(marca, anio)` diria "se esperaba ')'".
+        if (statement.columns.size != 1) {
+            report(
+                statement.location,
+                "los indices son de una sola columna, se recibieron ${statement.columns.size}"
+            )
+            return
+        }
+
+        val column = statement.columns.single()
+        if (table.column(column) == null) {
+            report(statement.location, "'${table.name}' no tiene columna '$column'")
+            return
+        }
+
+        // Advertencia y no error: el indice nuevo funcionaria, solo que duplica
+        // trabajo. Con los indices automaticos es la que evita indexar otra vez lo
+        // que la clave primaria ya traia.
+        table.indexOn(column)?.let {
+            warn(statement.location, "'${table.name}.$column' ya esta indexada por '${it.name}'")
+        }
+    }
+
+    private fun checkDropIndex(statement: DropIndex) {
+        val index = catalog.index(statement.name)
+        if (index == null) {
+            report(statement.location, "no existe un indice llamado '${statement.name}'")
+            return
+        }
+
+        // Un indice automatico respalda una restriccion. Si se pudiera borrar, la
+        // restriccion quedaria sin indice y nada volveria a crearlo.
+        if (index.auto) {
+            val support = if (index.name == Index.primaryKeyName(index.table)) {
+                "la clave primaria"
+            } else {
+                "el UNIQUE de '${index.table}.${index.column}'"
+            }
+            report(statement.location, "'${index.name}' respalda $support y no se puede borrar")
         }
     }
 

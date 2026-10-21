@@ -99,7 +99,7 @@ usa**.
 
 ## Ticket 8.1 · `CREATE INDEX` y `DROP INDEX`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.6
 
 **Archivos:**
@@ -149,7 +149,7 @@ guarda la lista completa de columnas.
 
 ## Ticket 8.2 · El modelo `Index` y el catálogo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.2, 2.3
 
 **Archivos:**
@@ -229,7 +229,7 @@ impide crearlos o borrarlos a mano.
 
 ## Ticket 8.3 · Desplazamientos y lectura por salto
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.4
 
 **Archivos:**
@@ -276,7 +276,7 @@ Doce líneas, en un solo lugar.
 
 ## Ticket 8.4 · El archivo `.idx`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 8.2, 8.3
 
 **Archivos:**
@@ -322,7 +322,7 @@ que ya rige para los `.csv`.
 
 ## Ticket 8.5 · Reglas semánticas
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 8.1, 8.2, 5.5
 
 **Archivos:**
@@ -365,7 +365,7 @@ tabla creada en el mismo script funciona, porque el catálogo muta en memoria.
 
 ## Ticket 8.6 · El planificador y la reconstrucción
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 8.4, 6.3, 7.4
 
 **Archivos:**

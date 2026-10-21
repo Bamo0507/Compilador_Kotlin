@@ -200,10 +200,27 @@ class WriteRules(private val session: Session) {
             index != excluding && ValueOrder.compare(row.values.getOrNull(position) ?: NullValue, value) == 0
         }
 
+    /**
+     * Si el valor existe en la tabla referida.
+     *
+     * Una columna referida es unica por la regla de la fase 5, asi que SIEMPRE
+     * tiene indice: es uno de los automaticos. Con el, la validacion es una
+     * busqueda en el arbol en vez de cargar la tabla entera, que era lo que la
+     * fase 7 tenia que hacer.
+     *
+     * Si la tabla ya esta en memoria se busca ahi, por la misma razon de siempre:
+     * reabrir el archivo seria mas lento.
+     */
     private fun present(reference: ForeignKey, value: Value): Boolean {
         val target = session.catalog.table(reference.table) ?: return true
         val position = target.indexOf(reference.column)
         if (position < 0) return true
+
+        if (!session.isLoaded(reference.table)) {
+            val index = target.indexOn(reference.column)
+            val entries = index?.let { session.entriesOf(it) }
+            if (entries != null) return entries.containsKey(value)
+        }
 
         return session.rowsOf(reference.table).any {
             ValueOrder.compare(it.values.getOrNull(position) ?: NullValue, value) == 0

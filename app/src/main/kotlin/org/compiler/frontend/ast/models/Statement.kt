@@ -42,6 +42,24 @@ class DropTable(
     override val location: LexemeLocation
 ) : Statement
 
+/**
+ * `CREATE INDEX idx_marca ON carros(marca)`.
+ *
+ * Guarda la LISTA de columnas aunque solo se soporte una. La gramatica las acepta
+ * para que el mensaje lo de el semantico y no el parser.
+ */
+class CreateIndex(
+    val name: String,
+    val table: String,
+    val columns: List<String>,
+    override val location: LexemeLocation
+) : Statement
+
+class DropIndex(
+    val name: String,
+    override val location: LexemeLocation
+) : Statement
+
 // DML -------------------------------------------------------------------------
 
 class Insert(

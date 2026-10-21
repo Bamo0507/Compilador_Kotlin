@@ -64,7 +64,13 @@ class SchemaJsonTest {
         ))
 
         val root = Json.parseToJsonElement(SchemaJson.encode(table)).jsonObject
-        assertEquals(setOf("columns"), root.keys)
+
+        // Desde la fase 8 tambien va la seccion de indices: esta tabla tiene
+        // PRIMARY KEY, asi que trae el suyo.
+        assertEquals(setOf("columns", "indexes"), root.keys)
+        assertEquals(mapOf("pk_users" to "id"), root.getValue("indexes").jsonObject.mapValues {
+            it.value.jsonPrimitive.content
+        })
         val columns = root.getValue("columns").jsonObject
         assertEquals("VARCHAR(80)", columns.getValue("name").jsonObject.getValue("type").jsonPrimitive.content)
         val idConstraints = columns.getValue("id").jsonObject.getValue("constraints").jsonArray

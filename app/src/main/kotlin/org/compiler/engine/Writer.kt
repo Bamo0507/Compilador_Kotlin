@@ -1,6 +1,9 @@
 package org.compiler.engine
 
 import org.compiler.catalog.Column
+import org.compiler.catalog.Index
+import org.compiler.catalog.addIndex
+import org.compiler.catalog.dropIndex
 import org.compiler.catalog.Table
 import org.compiler.catalog.addColumn
 import org.compiler.catalog.addTable
@@ -11,8 +14,10 @@ import org.compiler.frontend.ast.models.AlterTableAdd
 import org.compiler.frontend.ast.models.AlterTableDrop
 import org.compiler.frontend.ast.models.Assignment
 import org.compiler.frontend.ast.models.ColumnDefinition
+import org.compiler.frontend.ast.models.CreateIndex
 import org.compiler.frontend.ast.models.CreateTable
 import org.compiler.frontend.ast.models.Delete
+import org.compiler.frontend.ast.models.DropIndex
 import org.compiler.frontend.ast.models.DropTable
 import org.compiler.frontend.ast.models.Expression
 import org.compiler.frontend.ast.models.Insert
@@ -43,6 +48,8 @@ class Writer(private val session: Session) {
             is AlterTableAdd -> addColumn(statement)
             is AlterTableDrop -> dropColumn(statement)
             is DropTable -> drop(statement)
+            is CreateIndex -> createIndex(statement)
+            is DropIndex -> dropIndex(statement)
 
             // Las consultas las ejecuta el motor, no el escritor.
             is Query -> {}
@@ -128,11 +135,30 @@ class Writer(private val session: Session) {
 
     // ── DDL ────────────────────────────────────────────────────────────────
 
+    // La tabla nace con los indices que sus restricciones implican: el propio
+    // Table los deriva de PRIMARY KEY y UNIQUE.
     private fun create(statement: CreateTable) {
         val table = Table(statement.name, statement.columns.map { it.toColumn() })
 
         session.applyCatalog(session.catalog.addTable(table))
         session.createTable(table)
+    }
+
+    // El indice se marca como modificado para que el volcado lo escriba: la tabla
+    // existe y sus filas no cambiaron, pero su .idx todavia no.
+    private fun createIndex(statement: CreateIndex) {
+        val column = statement.columns.singleOrNull() ?: return
+        val index = Index(statement.name, statement.table, column, auto = false)
+
+        session.applyCatalog(session.catalog.addIndex(index))
+        session.markModified(statement.table)
+    }
+
+    private fun dropIndex(statement: DropIndex) {
+        val index = session.catalog.index(statement.name) ?: return
+
+        session.applyCatalog(session.catalog.dropIndex(statement.name))
+        session.dropIndexFile(index)
     }
 
     /**
@@ -165,7 +191,11 @@ class Writer(private val session: Session) {
         session.markModified(table.name)
     }
 
+    // Los .idx de la tabla se van con ella: un indice es parte de su esquema, y
+    // dejarlos seria dejar metadatos huerfanos.
     private fun drop(statement: DropTable) {
+        session.catalog.table(statement.table)?.indexes?.forEach { session.dropIndexFile(it) }
+
         session.applyCatalog(session.catalog.dropTable(statement.table))
         session.forgetTable(statement.table)
     }

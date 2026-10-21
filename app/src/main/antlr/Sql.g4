@@ -41,6 +41,7 @@ literal
 
 statement
   : createTable ';'  | alterTable ';' | dropTable ';'
+  | createIndex ';'  | dropIndex ';'
   | insert ';'    | update ';'   | delete ';'
   | query ';'
   ;
@@ -69,6 +70,13 @@ alterTable
   ;
 
 dropTable : 'DROP' 'TABLE' Identifier ;
+
+// columnList y no un solo Identifier: si la gramatica aceptara una sola columna,
+// `ON carros(marca, anio)` daria "se esperaba ')'", que no explica nada. Aceptando
+// la lista, el semantico puede decir "los indices son de una sola columna".
+createIndex : 'CREATE' 'INDEX' Identifier 'ON' Identifier '(' columnList ')' ;
+
+dropIndex   : 'DROP' 'INDEX' Identifier ;
 
 // DML ---------------------------------------------------------------------
 

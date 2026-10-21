@@ -42,6 +42,15 @@ object CsvReader {
         return header.filterNotNull()
     }
 
+    /**
+     * El parser, para quien ya tiene el texto en la mano.
+     *
+     * Lo usa RowReader con UNA linea: separar campos tiene las mismas reglas de
+     * comillas y comas que el archivo entero, y duplicarlas seria pedir que se
+     * desincronicen.
+     */
+    internal fun read(source: String, name: String): List<List<String?>> = parse(source, name)
+
     private fun parse(source: String, name: String): List<List<String?>> {
         val records = mutableListOf<List<String?>>()
         val record = mutableListOf<String?>()

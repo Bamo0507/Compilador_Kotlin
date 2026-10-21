@@ -20,6 +20,7 @@ import org.compiler.frontend.syntax.SqlSyntaxAnalyzer
 import org.compiler.runtime.DbmsPipeline
 import org.compiler.runtime.models.CompilationResult
 import org.compiler.storage.CsvWriter
+import org.compiler.storage.IndexFile
 import org.compiler.storage.DataDirectory
 import org.compiler.types.BooleanType
 import org.compiler.types.CharType
@@ -29,7 +30,9 @@ import org.compiler.types.FloatType
 import org.compiler.types.IntType
 import org.compiler.types.TextType
 import org.compiler.types.TimeType
+import org.compiler.types.NullValue
 import org.compiler.types.Value
+import org.compiler.types.ValueCodec
 import org.compiler.types.VarcharType
 import java.io.File
 import kotlin.test.assertEquals
@@ -92,9 +95,23 @@ val postsRows = listOf(
     listOf("3", "Solo", "10")
 )
 
+/**
+ * La tabla en disco: su .json, su .csv y el .idx de cada indice.
+ *
+ * Los indices se escriben tambien porque una tabla con PRIMARY KEY SIEMPRE tiene
+ * el suyo: una base de prueba sin ellos seria un estado que el sistema real nunca
+ * produce, y los tests estarian probando contra algo que no existe.
+ */
 fun write(root: File, table: Table, rows: List<List<String?>>) {
     File(root, "${table.name}.json").writeText(SchemaJson.encode(table))
-    CsvWriter.write(File(root, "${table.name}.csv"), table.columns.map { it.name }, rows)
+    val offsets = CsvWriter.write(File(root, "${table.name}.csv"), table.columns.map { it.name }, rows)
+
+    table.indexes.forEach { index ->
+        val position = table.indexOf(index.column)
+        val type = table.columns[position].type
+        val values = rows.map { ValueCodec.decode(it.getOrNull(position), type) ?: NullValue }
+        IndexFile.write(File(root, index.fileName), type, IndexFile.build(values, offsets))
+    }
 }
 
 // Las dos tablas con las que se prueba casi todo.

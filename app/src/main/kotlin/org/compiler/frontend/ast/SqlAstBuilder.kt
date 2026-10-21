@@ -61,6 +61,18 @@ class SqlAstBuilder(private val diagnostics: Diagnostics) : SqlBaseVisitor<Node>
     override fun visitDropTable(ctx: DropTableContext): Node =
         DropTable(ctx.Identifier().text, locationOf(ctx))
 
+    // 'CREATE' 'INDEX' Identifier 'ON' Identifier: el primero es el indice.
+    override fun visitCreateIndex(ctx: CreateIndexContext): Node =
+        CreateIndex(
+            name = ctx.Identifier(0).text,
+            table = ctx.Identifier(1).text,
+            columns = ctx.columnList().Identifier().map { it.text },
+            location = locationOf(ctx)
+        )
+
+    override fun visitDropIndex(ctx: DropIndexContext): Node =
+        DropIndex(ctx.Identifier().text, locationOf(ctx))
+
     override fun visitInsert(ctx: InsertContext): Node =
         Insert(
             table = ctx.Identifier().text,

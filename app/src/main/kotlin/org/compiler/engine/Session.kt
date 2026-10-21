@@ -1,6 +1,7 @@
 package org.compiler.engine
 
 import org.compiler.catalog.Catalog
+import org.compiler.catalog.Index
 import org.compiler.catalog.Table
 import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
@@ -9,6 +10,8 @@ import org.compiler.frontend.ast.models.Script
 import org.compiler.models.LexemeLocation
 import org.compiler.storage.CsvReader
 import org.compiler.storage.DataDirectory
+import org.compiler.storage.IndexFile
+import org.compiler.storage.RowReader
 import org.compiler.types.NullValue
 import org.compiler.types.Value
 import org.compiler.types.ValueCodec
@@ -40,6 +43,10 @@ class Session(
     private val loaded = mutableMapOf<String, MutableList<Row>>()
     private val modified = mutableSetOf<String>()
 
+    // Los .idx que hay que borrar del disco al volcar. Un DROP INDEX no toca el
+    // archivo en el momento, igual que ninguna otra sentencia toca el disco.
+    private val droppedIndexes = mutableListOf<Index>()
+
     // Las tres cuentas de la corrida. Sirven para la defensa, y son lo que deja
     // probar que el cache de subconsultas y el corte del EXISTS funcionan de
     // verdad y no solo en el papel.
@@ -52,6 +59,11 @@ class Session(
 
     // Filas que el motor miro para decidir si pasaban un filtro.
     var examined = 0
+        private set
+
+    // Filas traidas por desplazamiento, sin recorrer el archivo. Es la cuenta que
+    // deja PROBAR que el indice se uso: un WHERE sobre mil filas que lee una.
+    var indexedReads = 0
         private set
 
     internal fun countExecution() {
@@ -74,6 +86,63 @@ class Session(
     fun markModified(table: String) {
         modified.add(table)
     }
+
+    fun dropIndexFile(index: Index) {
+        droppedIndexes.add(index)
+    }
+
+    // Si la tabla ya esta en memoria. Si lo esta, filtrar ahi es mas barato que
+    // volver a abrir el archivo para saltar a unas filas.
+    fun isLoaded(table: String): Boolean = table in loaded
+
+    /**
+     * Las filas que estan en los desplazamientos dados, sin cargar la tabla.
+     *
+     * No puebla el cache a proposito: son una PARTE de la tabla, y marcarla como
+     * cargada haria que la consulta siguiente viera solo esas. Distinguir una
+     * carga parcial de una completa seria estado de mas para lo que da.
+     */
+    fun rowsAt(table: String, offsets: List<Long>): List<Row> {
+        val schema = catalog.table(table) ?: return emptyList()
+        val file = directory.csv(table)
+        if (!file.isFile) return emptyList()
+
+        return offsets.mapNotNull { offset ->
+            indexedReads++
+            try {
+                decode(schema, RowReader.readAt(file, offset), 0)
+            } catch (error: IOException) {
+                report("${file.name} no se pudo leer en el byte $offset: ${error.message}")
+                null
+            }
+        }
+    }
+
+    /**
+     * Las entradas de un indice, leidas de su .idx la primera vez que se piden.
+     *
+     * Carga perezosa: el catalogo no abre ningun .idx, y uno se abre solo cuando
+     * una consulta lo va a usar. Es el mismo *esquema ansioso, datos perezosos*
+     * que ya rige para los .csv.
+     */
+    fun entriesOf(index: Index): java.util.TreeMap<Value, MutableList<Long>>? {
+        indexCache[index.name]?.let { return it }
+
+        val column = catalog.table(index.table)?.column(index.column) ?: return null
+        val file = directory.index(index.name)
+        if (!file.isFile) return null
+
+        val entries = try {
+            IndexFile.read(file, column.type)
+        } catch (error: IOException) {
+            report("${file.name} no se pudo leer: ${error.message}")
+            return null
+        }
+        indexCache[index.name] = entries
+        return entries
+    }
+
+    private val indexCache = mutableMapOf<String, java.util.TreeMap<Value, MutableList<Long>>>()
 
     fun applyCatalog(updated: Catalog) {
         catalog = updated
@@ -98,7 +167,8 @@ class Session(
             rows = modified.associateWith { rowsOf(it).toList() },
             catalog = catalog,
             schemas = schemas.toList(),
-            dropped = dropped
+            dropped = dropped,
+            droppedIndexes = droppedIndexes.toList()
         )
     }
 
@@ -168,7 +238,8 @@ class Changes(
     val rows: Map<String, List<Row>>,
     val catalog: Catalog,
     val schemas: List<String>,
-    val dropped: List<String>
+    val dropped: List<String>,
+    val droppedIndexes: List<Index> = emptyList()
 )
 
 class ExecutionResult(

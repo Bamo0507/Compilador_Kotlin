@@ -54,7 +54,16 @@ class CatalogLoader(
                 }
                 column
             }
-            tables[name] = Table(name, columns)
+            val indexes = schema.indexes.orEmpty().mapNotNull { (indexName, column) ->
+                if (columns.none { it.name == column }) {
+                    report("el indice '$indexName' de $name apunta a la columna '$column', que no existe")
+                    return@mapNotNull null
+                }
+                // Que un indice sea automatico se deduce de su nombre: son los dos
+                // prefijos que el catalogo se reserva, y nadie mas los puede usar.
+                Index(indexName, name, column, auto = Index.isReserved(indexName))
+            }
+            tables[name] = Table(name, columns, indexes)
         }
 
         val catalog = Catalog(tables)

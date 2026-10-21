@@ -64,21 +64,33 @@ class Engine(private val session: Session) {
     // ── El FROM ────────────────────────────────────────────────────────────
 
     private fun from(query: Query, outer: RowContext): ResultSet {
-        var result = sourceOf(query.source, outer)
+        var result = sourceOf(query.source, outer, query.where)
 
         query.joins.forEach { join ->
-            val right = sourceOf(join.source, outer)
+            val right = sourceOf(join.source, outer, where = null)
             result = Operators.join(result, right) { passes(join.condition, outer.nest(it)) }
         }
         return result
     }
 
-    private fun sourceOf(source: FromSource, outer: RowContext): ResultSet = when (source) {
-        is TableSource -> Operators.scan(session, source.table)
+    /**
+     * `where` solo se pasa en el primer origen del FROM: es el unico que se puede
+     * leer por indice. Los de un JOIN se recorren enteros contra cada fila de la
+     * izquierda, asi que ahi el indice no ahorraria lecturas.
+     */
+    private fun sourceOf(source: FromSource, outer: RowContext, where: Expression?): ResultSet = when (source) {
+        is TableSource -> byIndex(source.table, where) ?: Operators.scan(session, source.table)
 
         // Una tabla derivada no puede ser correlacionada, asi que se ejecuta una
         // vez y el cache la sirve de ahi en adelante.
         is DerivedSource -> subquery(source.query, outer)
+    }
+
+    // El resultado es el mismo con indice y sin el: el WHERE se evalua igual sobre
+    // las filas que vuelven. El indice solo decide CUALES se leen del disco.
+    private fun byIndex(table: String, where: Expression?): ResultSet? {
+        val plan = IndexPlanner.plan(table, where, session.catalog) ?: return null
+        return Operators.scanByIndex(session, table, plan)
     }
 
     // ── Sin agrupar ────────────────────────────────────────────────────────

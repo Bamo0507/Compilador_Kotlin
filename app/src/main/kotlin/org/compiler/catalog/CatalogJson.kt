@@ -16,4 +16,8 @@ internal val catalogJson = Json {
     prettyPrint = true
 
     encodeDefaults = true
+
+    // Un null no se escribe. Es lo que hace que una tabla sin indices quede sin la
+    // clave "indexes" en vez de con `"indexes": null`.
+    explicitNulls = false
 }

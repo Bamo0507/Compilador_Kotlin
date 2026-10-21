@@ -57,6 +57,9 @@ class SubqueryTest {
      *
      * El AND tambien corta: `id = 1` falso ya decide la fila, asi que el EXISTS
      * solo se evalua para el usuario 1.
+     *
+     * Desde la fase 8, `u.id = 1` ademas usa el indice de la clave primaria, asi
+     * que de users se lee UNA fila en vez de las cuatro.
      */
     @Test
     fun `el EXISTS para en la primera coincidencia`(@TempDir root: File) {
@@ -69,7 +72,7 @@ class SubqueryTest {
         )
 
         assertEquals(listOf(listOf("Ana")), outcome.grid)
-        assertEquals(5, outcome.session.examined, "cuatro usuarios y una sola fila de las mil")
+        assertEquals(2, outcome.session.examined, "un usuario, por el indice, y una sola fila de las mil")
     }
 
     @Test
@@ -83,7 +86,7 @@ class SubqueryTest {
         )
 
         assertEquals(emptyList(), outcome.grid)
-        assertEquals(1004, outcome.session.examined)
+        assertEquals(1001, outcome.session.examined, "un usuario, por el indice, y las mil filas de many")
     }
 
     // ── La escalar ─────────────────────────────────────────────────────────

@@ -47,6 +47,8 @@ class AstModelsTest {
         is AlterTableAdd -> "alter add"
         is AlterTableDrop -> "alter drop"
         is DropTable -> "drop"
+        is CreateIndex -> "create index"
+        is DropIndex -> "drop index"
         is Insert -> "insert"
         is Update -> "update"
         is Delete -> "delete"

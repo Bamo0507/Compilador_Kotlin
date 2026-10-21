@@ -15,8 +15,23 @@ import org.compiler.types.TimeType
 import org.compiler.types.Type
 import org.compiler.types.VarcharType
 
+/**
+ * El .json de una tabla.
+ *
+ * Los indices van AQUI y no en un indexes.json global, por la misma razon que no
+ * hay un tables.json: un archivo global es informacion derivada que se puede
+ * quedar vieja. Ademas, un DROP TABLE se lleva sus indices sin dejar metadatos
+ * huerfanos.
+ *
+ * `indexes` es el nombre del indice contra la columna que indexa. Si la tabla no
+ * tiene ninguno, la clave no se escribe: un objeto vacio seria ruido en un archivo
+ * que el punto es poder leer a ojo.
+ */
 @Serializable
-data class SchemaDefinition(val columns: Map<String, SchemaColumn>)
+data class SchemaDefinition(
+    val columns: Map<String, SchemaColumn>,
+    val indexes: Map<String, String>? = null
+)
 
 @Serializable
 data class SchemaColumn(
@@ -30,9 +45,14 @@ data class SchemaColumn(
 
 object SchemaJson {
     fun encode(table: Table): String {
-        val schema = SchemaDefinition(table.columns.associate { column ->
-            column.name to SchemaColumn(column.type.name, column.constraints)
-        })
+        val schema = SchemaDefinition(
+            columns = table.columns.associate { column ->
+                column.name to SchemaColumn(column.type.name, column.constraints)
+            },
+            indexes = table.indexes
+                .takeIf { it.isNotEmpty() }
+                ?.associate { it.name to it.column }
+        )
         return catalogJson.encodeToString(schema)
     }
 

@@ -17,11 +17,23 @@ class DataDirectory(private val path: File) {
 
     fun json(table: String) = File(root(), "$table.json")
 
+    // El archivo se llama como el INDICE: dos tablas pueden tener un indice sobre
+    // una columna con el mismo nombre.
+    fun index(name: String) = File(root(), "$name.idx")
+
     // La existencia de la tabla la da el CSV, no el JSON: el directorio ES el
     // catalogo, asi que no hay un archivo aparte que se pueda quedar viejo.
     fun tables(): List<String> =
         root().listFiles().orEmpty()
             .filter { it.isFile && it.extension == "csv" }
+            .map { it.nameWithoutExtension }
+            .sorted()
+
+    // Los .idx que hay en el directorio. No son tablas, asi que `tables()` los
+    // deja fuera y esto los lista aparte.
+    fun indexFiles(): List<String> =
+        root().listFiles().orEmpty()
+            .filter { it.isFile && it.extension == "idx" }
             .map { it.nameWithoutExtension }
             .sorted()
 
