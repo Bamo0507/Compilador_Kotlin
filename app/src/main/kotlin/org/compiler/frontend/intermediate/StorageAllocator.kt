@@ -230,7 +230,7 @@ class StorageAllocator {
         parameters.forEach { record.place(it) }
 
         val returnSize = sizeOf(returnTypeOf(functionScope))
-        if (returnSize > 0) record.place("valor devuelto", returnSize)
+        if (returnSize > 0) record.place(RETURN_VALUE_SLOT, returnSize)
 
         record.placeLinks()
         locals.forEach { record.place(it) }
@@ -339,9 +339,9 @@ class StorageAllocator {
         // maquina solo se reserva la direccion de retorno; que registros salvar lo
         // decide la fase de assembler.
         fun placeLinks() {
-            place("enlace de control", POINTER_SIZE)
-            place("enlace de acceso", POINTER_SIZE)
-            place("dirección de retorno", POINTER_SIZE)
+            place(CONTROL_LINK_SLOT, POINTER_SIZE)
+            place(ACCESS_LINK_SLOT, POINTER_SIZE)
+            place(RETURN_ADDRESS_SLOT, POINTER_SIZE)
         }
 
         // Un bloque no tiene registro propio: sus variables entran al de la funcion.
@@ -393,6 +393,13 @@ class StorageAllocator {
 
         // El nombre de la casilla 0 de todo objeto.
         const val VIRTUAL_TABLE_SLOT = "tabla de métodos"
+
+        // Las casillas fijas de un registro de activacion. El backend las busca por nombre
+        // para guardar fp y lr al entrar a una funcion.
+        const val RETURN_VALUE_SLOT = "valor devuelto"
+        const val CONTROL_LINK_SLOT = "enlace de control"
+        const val ACCESS_LINK_SLOT = "enlace de acceso"
+        const val RETURN_ADDRESS_SLOT = "dirección de retorno"
 
         // ARM de 32 bits: una direccion mide 4 bytes y la pila se alinea a 8.
         const val POINTER_SIZE = 4

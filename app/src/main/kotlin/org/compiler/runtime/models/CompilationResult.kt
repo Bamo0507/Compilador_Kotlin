@@ -1,5 +1,6 @@
 package org.compiler.runtime.models
 
+import org.compiler.backend.models.AssemblyProgram
 import org.compiler.diagnostics.CompilerError
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.models.Program
@@ -34,7 +35,11 @@ data class CompilationResult(
 
     // Zonas, desplazamientos y registros de activacion: la tabla de simbolos extendida.
     // null en los mismos casos que el TAC.
-    val storageLayout: StorageLayout? = null
+    val storageLayout: StorageLayout? = null,
+
+    // Etapa H: el ensamblador ARM. null si no hay TAC, o si el TAC usa algo que el
+    // backend todavia no traduce.
+    val assembly: AssemblyProgram? = null
 ) {
     val hasErrors: Boolean get() = errors.isNotEmpty()
 

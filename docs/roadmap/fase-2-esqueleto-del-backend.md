@@ -18,7 +18,7 @@ sistema y libc).
 
 ## Ticket 2.1: El modelo del programa ARM
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: ninguno
 
 **Archivos:**
@@ -82,7 +82,7 @@ se razonan, los registros y las condiciones, son `enum` (principio 5).
 
 ## Ticket 2.2: Secciones, nombres y el `main`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.1
 
 **Archivos:**
@@ -113,7 +113,7 @@ reserva su registro y su epílogo devuelve 0 en r0, que es el código de salida.
 |---|---|---|
 | `$main` | `main` | La entrada que busca libc |
 | `factorial`, `Perro.hablar`, `externa.sumar` | `cps_factorial`, `cps_Perro.hablar`, `cps_externa.sumar` | El prefijo evita chocar con un símbolo de libc: una función de Compiscript llamada `printf` o `exit` rompería el enlace |
-| `L3` dentro de `factorial` | `.Lfactorial_3` | `.L` hace la etiqueta local al archivo, y el nombre de la función la vuelve única |
+| `L7` dentro de `factorial` | `.Lfactorial_7` | `.L` hace la etiqueta local al archivo. El número ya es único en el programa; el nombre de la función es para leer el `.s` |
 | Literal de string número 2 | `.Lstr_2` | |
 
 ### Por qué
@@ -126,13 +126,13 @@ ceros sin ocupar espacio en el ejecutable.
 
 - El `.s` de un programa vacío ensambla y corre en el contenedor, y termina con código 0.
 - Un programa con clases tiene sus tablas en `.data`, una línea por método.
-- Dos funciones con una etiqueta `L1` cada una ensamblan sin choque.
+- Las etiquetas con punto y con `$` (`cps_externa.sumar`, `cps_Perro.$init`) ensamblan.
 
 ---
 
 ## Ticket 2.3: El runtime base y `print`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.2
 
 **Archivos:**
@@ -180,7 +180,7 @@ del programa. Escrito como ensamblador real, se puede leer, ensamblar y probar s
 
 ## Ticket 2.4: El backend en el pipeline
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.2
 
 **Archivos:**

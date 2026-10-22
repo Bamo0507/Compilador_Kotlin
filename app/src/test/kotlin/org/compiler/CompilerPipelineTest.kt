@@ -146,4 +146,32 @@ class CompilerPipelineTest {
         assertTrue(result.hasErrors)
         assertNull(result.ast)
     }
+
+    // ── La etapa H: el ensamblador ─────────────────────────────────────────
+
+    @Test
+    fun `un programa que el backend traduce completo tiene ensamblador`() {
+        val result = CompilerPipeline.compile("print(\"hola\"); print(42);")
+
+        assertNotNull(result.tac)
+        assertNotNull(result.assembly)
+    }
+
+    // Mientras el backend este incompleto, el TAC se sigue mostrando.
+    @Test
+    fun `un programa con una instruccion sin traducir conserva su TAC`() {
+        val result = CompilerPipeline.compile("let x: integer = 1;")
+
+        assertNotNull(result.tac)
+        assertNull(result.assembly)
+    }
+
+    @Test
+    fun `un programa con errores no tiene TAC ni ensamblador`() {
+        val result = CompilerPipeline.compile("let x: integer = \"texto\";")
+
+        assertTrue(result.hasErrors)
+        assertNull(result.tac)
+        assertNull(result.assembly)
+    }
 }

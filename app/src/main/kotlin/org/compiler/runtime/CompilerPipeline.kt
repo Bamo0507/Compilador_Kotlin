@@ -1,10 +1,15 @@
 package org.compiler.runtime
 
+import org.compiler.backend.ArmGenerator
+import org.compiler.backend.UntranslatedInstruction
+import org.compiler.backend.models.AssemblyProgram
 import org.compiler.diagnostics.Diagnostics
 import org.compiler.frontend.ast.AstBuilder
 import org.compiler.frontend.ast.models.Program
 import org.compiler.frontend.intermediate.StorageAllocator
+import org.compiler.frontend.intermediate.StorageLayout
 import org.compiler.frontend.intermediate.TacGenerator
+import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.semantic.DeclarationCollector
 import org.compiler.frontend.semantic.FlowAnalyzer
 import org.compiler.frontend.semantic.LivenessReportBuilder
@@ -61,6 +66,13 @@ object CompilerPipeline {
             if (!diagnostics.hasErrors) StorageAllocator().allocate(collector.globalScope) else null
         val tac = storageLayout?.let { TacGenerator(it).generate(ast) }
 
+        // Etapa H: el ensamblador ARM, a partir del TAC y de la memoria ya asignada.
+        val assembly = if (tac != null && storageLayout != null) {
+            generateAssembly(tac, storageLayout)
+        } else {
+            null
+        }
+
         return CompilationResult(
             source = source,
             parseTreeView = parseTreeView,
@@ -70,7 +82,17 @@ object CompilerPipeline {
             errors = diagnostics.all(),
             execution = execution,
             tac = tac,
-            storageLayout = storageLayout
+            storageLayout = storageLayout,
+            assembly = assembly
         )
     }
+
+    // Mientras el backend no traduzca todas las instrucciones, un programa que usa una
+    // que falta se queda sin ensamblador, pero conserva su TAC para mostrarlo.
+    private fun generateAssembly(tac: TacProgram, storageLayout: StorageLayout): AssemblyProgram? =
+        try {
+            ArmGenerator(tac, storageLayout).generate()
+        } catch (untranslated: UntranslatedInstruction) {
+            null
+        }
 }
