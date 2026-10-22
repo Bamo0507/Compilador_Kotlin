@@ -219,9 +219,11 @@ class ArmGeneratorTest {
 
     @Test
     fun `una instruccion que todavia no se traduce falla con su texto`() {
-        val error = assertFailsWith<UntranslatedInstruction> { assemblyOf("let x: integer = 1;") }
+        val error = assertFailsWith<UntranslatedInstruction> {
+            assemblyOf("function f() { } f();")
+        }
 
-        assertEquals("Todavía no se traduce: x = 1", error.message)
+        assertEquals("Todavía no se traduce: call f, 0", error.message)
     }
 
     // ── print ──────────────────────────────────────────────────────────────

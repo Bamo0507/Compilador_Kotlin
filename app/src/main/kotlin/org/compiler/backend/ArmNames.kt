@@ -33,6 +33,7 @@ object ArmNames {
     const val PRINT_FLOAT = "${PROGRAM_PREFIX}imprimir_flotante"
     const val PRINT_STRING = "${PROGRAM_PREFIX}imprimir_string"
     const val PRINT_BOOLEAN = "${PROGRAM_PREFIX}imprimir_booleano"
+    const val COMPARE_STRINGS = "${PROGRAM_PREFIX}comparar_strings"
 
     // `factorial` -> `cps_factorial`; el main implicito -> `main`.
     fun function(function: FunctionLabel): String =

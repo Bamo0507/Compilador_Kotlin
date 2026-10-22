@@ -101,4 +101,10 @@ tasks.named<Test>("test") {
     val updateGolden = System.getProperty("updateGolden") ?: "false"
     systemProperty("updateGolden", updateGolden)
     inputs.property("updateGolden", updateGolden)
+
+    // `./gradlew test -DrunArm=true` corre ademas cada programa de la bateria en el
+    // contenedor ARM y compara su salida con la del interprete. Tarda, y necesita Docker.
+    val runArm = System.getProperty("runArm") ?: "false"
+    systemProperty("runArm", runArm)
+    inputs.property("runArm", runArm)
 }

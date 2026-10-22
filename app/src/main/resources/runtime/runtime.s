@@ -65,6 +65,18 @@ cps_imprimir_booleano:
     pop {r4, pc}
 
 @ ────────────────────────────────────────────────────────────────────────
+@  cps_comparar_strings
+@  Recibe: r0 y r1, las direcciones de dos textos.
+@  Devuelve en r0 un numero negativo si el primero va antes en orden
+@  alfabetico, cero si son iguales y positivo si va despues. El codigo
+@  generado lo compara con 0 usando la misma relacion del TAC.
+@ ────────────────────────────────────────────────────────────────────────
+cps_comparar_strings:
+    push {r4, lr}
+    bl strcmp
+    pop {r4, pc}
+
+@ ────────────────────────────────────────────────────────────────────────
 @  cps_imprimir_flotante
 @  Recibe: d0, un flotante de doble precision.
 @  Imprime el numero con seis decimales, sin los ceros sobrantes y dejando

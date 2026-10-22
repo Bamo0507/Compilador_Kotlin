@@ -25,7 +25,6 @@ que el intérprete.
 
 - `backend/ArmGenerator.kt` (MODIFICAR: `LabelDefinition`, `Goto`, `IfGoto`,
   `IfFalseGoto`, `IfRelationalGoto`)
-- `resources/runtime/runtime.s` (MODIFICAR: `cps_comparar_strings`)
 - Tests: `ArmGeneratorFlowTest` (NUEVO)
 
 ### Qué es esto, en simple
@@ -51,8 +50,9 @@ Las relaciones de enteros, booleanos y referencias usan `eq`, `ne`, `lt`, `le`, 
 `ge`. Las de flotantes usan `eq`, `ne`, `mi`, `ls`, `gt` y `ge`. `null` es la dirección
 0.
 
-`cps_comparar_strings` llama a `strcmp` y devuelve en r0 un número negativo, cero o
-positivo, que se compara con 0 usando la misma relación del TAC.
+`cps_comparar_strings`, que ya existe desde el ticket 3.4, llama a `strcmp` y devuelve
+en r0 un número negativo, cero o positivo, que se compara con 0 usando la misma relación
+del TAC.
 
 ### Por qué
 

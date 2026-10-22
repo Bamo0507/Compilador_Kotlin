@@ -17,9 +17,19 @@ aritmética y acceso a memoria).
 
 ---
 
+**Cómo quedó:** además de lo que planea cada ticket, la fase agregó `ArmEmitter`, donde
+escriben sus líneas el generador, getReg y el acceso a memoria; `QuadrupleOperands`, que
+dice qué lee y qué escribe cada instrucción; y `Frame.temporaryOffset` y
+`Frame.accessLinkOffset`. El acceso a memoria vive en `MemoryAccess.kt`, y las dos
+libretas en `RegisterDescriptor.kt` y `AddressDescriptor.kt`. Los seis programas de la
+batería que no usan saltos, llamadas ni memoria dinámica imprimen en ARM lo mismo que en
+el intérprete.
+
+---
+
 ## Ticket 3.1: Bloques básicos e información de próximo uso
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.2
 
 **Archivos:**
@@ -78,7 +88,7 @@ correcto; cuesta, como mucho, guardar un temporal que no hacía falta.
 
 ## Ticket 3.2: Los descriptores y getReg
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.1
 
 **Archivos:**
@@ -155,7 +165,7 @@ mano, así que no hay forma de pisar un valor por accidente.
 
 ## Ticket 3.3: Dónde vive cada variable
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.2
 
 **Archivos:**
@@ -194,13 +204,16 @@ lo usa getReg, así que calcular una dirección nunca le roba un registro a un v
 
 ## Ticket 3.4: Aritmética de enteros y booleanos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.3
 
 **Archivos:**
 
 - `backend/ArmGenerator.kt` (MODIFICAR: `Arithmetic`, `Unary`, `Relational`, `Copy`)
-- Tests: `ArmGeneratorExprTest` (NUEVO)
+- `resources/runtime/runtime.s` (MODIFICAR: `cps_comparar_strings`, adelantada de la
+  Fase 4: una comparación de textos como valor también es una comparación)
+- Tests: `ArmGeneratorExprTest` (NUEVO), `ArmExecutionTest` (NUEVO: la batería completa
+  en el contenedor con `-DrunArm=true`, adelantada de la Fase 9)
 
 ### Qué se hace
 
@@ -237,7 +250,7 @@ conservar.
 
 ## Ticket 3.5: Flotantes
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.4
 
 **Archivos:**

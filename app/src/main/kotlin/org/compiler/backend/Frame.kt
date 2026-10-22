@@ -29,8 +29,14 @@ class Frame(private val record: ActivationRecordLayout) {
     // Donde se guarda el fp de quien llama.
     val controlLinkOffset: Int get() = fpOffsetOf(StorageAllocator.CONTROL_LINK_SLOT)
 
+    // Donde se guarda la direccion del registro de la funcion que contiene a esta.
+    val accessLinkOffset: Int get() = fpOffsetOf(StorageAllocator.ACCESS_LINK_SLOT)
+
     // Donde se guarda lr, la direccion a la que se vuelve.
     val returnAddressOffset: Int get() = fpOffsetOf(StorageAllocator.RETURN_ADDRESS_SLOT)
+
+    // La casilla del temporal tN, al final del registro: `t2` -> [fp, #-40].
+    fun temporaryOffset(index: Int): Int = fpOffsetOf("t$index")
 
     // El desplazamiento desde fp de una casilla del registro: siempre negativo.
     fun fpOffsetOf(offset: Int, size: Int): Int = -(offset + size)

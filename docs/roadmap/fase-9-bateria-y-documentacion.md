@@ -51,7 +51,9 @@ cualquier cambio en la traducción.
 
 ### Qué se hace
 
-Con `./gradlew test -DrunArm=true`, para cada programa válido:
+`ArmExecutionTest` ya existe desde la Fase 3 y salta los programas que el backend todavía
+no traduce. En este ticket ya no se salta ninguno. Con `./gradlew test -DrunArm=true`,
+para cada programa válido:
 
 1. Se compila, se escribe su `.s` y se corre con `scripts/arm.sh`.
 2. Se compara la salida, línea por línea, con la del intérprete.
