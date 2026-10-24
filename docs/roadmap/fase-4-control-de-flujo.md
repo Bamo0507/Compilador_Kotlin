@@ -18,7 +18,7 @@ que el intérprete.
 
 ## Ticket 4.1: Etiquetas y saltos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.4
 
 **Archivos:**
@@ -71,7 +71,7 @@ se viene; en el salto sí, y ahí las libretas todavía dicen qué falta guardar
 
 ## Ticket 4.2: El documento, flujo de control
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 4.1
 
 **Archivos:**

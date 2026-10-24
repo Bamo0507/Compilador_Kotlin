@@ -1,6 +1,7 @@
 // Los bloques basicos y la informacion de proximo uso del generador simple.
 package org.compiler
 
+import org.compiler.backend.BlockLiveness
 import org.compiler.backend.NextUseAnalysis
 import org.compiler.backend.Usage
 import org.compiler.backend.basicBlocksOf
@@ -19,6 +20,7 @@ import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Print
 import org.compiler.frontend.intermediate.models.Quadruple
 import org.compiler.frontend.intermediate.models.RelationalOperator
+import org.compiler.frontend.intermediate.models.Return
 import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.semantic.symbols.DeclarationKind
 import org.compiler.frontend.semantic.symbols.IntegerType
@@ -115,8 +117,8 @@ class BasicBlocksTest {
     )
 
     private fun analysisOfBookExample(): NextUseAnalysis {
-        val block = basicBlocksOf(bookExample).single()
-        return NextUseAnalysis(block, NextUseAnalysis.liveAtExitOf(bookExample, bookExample.size))
+        val blocks = basicBlocksOf(bookExample)
+        return NextUseAnalysis(blocks.single(), BlockLiveness(blocks).liveAtExitOf(0))
     }
 
     @Test
@@ -162,21 +164,88 @@ class BasicBlocksTest {
         assertEquals(Usage(live = true, nextUse = 1), analysis.usageAfter(0, t1))
     }
 
+    // ── La vivacidad entre bloques ─────────────────────────────────────────
+
     // El resultado de un ternario se escribe en una rama y se lee despues de la etiqueta:
     // sigue vivo al salir del bloque de la rama.
     @Test
     fun `un temporal que se lee en otro bloque sigue vivo al salir`() {
-        val body = listOf(
-            Copy(t1, Constant(1L), integer),
-            Goto(Label(1)),
-            LabelDefinition(Label(1)),
-            Print(t1, integer)
+        val blocks = basicBlocksOf(
+            listOf(
+                Copy(t1, Constant(1L), integer),
+                Goto(Label(1)),
+                LabelDefinition(Label(1)),
+                Print(t1, integer)
+            )
+        )
+        val liveness = BlockLiveness(blocks)
+
+        assertTrue(liveness.liveAtExitOf(0)(t1))
+        assertTrue(liveness.liveAtExitOf(0)(a), "una variable del programa siempre")
+        assertFalse(liveness.liveAtExitOf(1)(t1), "nadie lo lee despues del ultimo bloque")
+    }
+
+    /**
+     * El caso que obliga a mirar el grafo y no el archivo.
+     *
+     * Es el ternario tal como lo escribe el TacGenerator: la rama verdadera va primero y
+     * termina en `goto`, y lo que esta escrito DESPUES de ese goto es la rama falsa, que
+     * vuelve a escribir el mismo temporal. Leido en orden de archivo, t1 parece muerto al
+     * salir de la rama verdadera, no se guarda, y esa rama termina imprimiendo basura.
+     */
+    @Test
+    fun `un goto que salta sobre otra escritura del mismo temporal`() {
+        val blocks = basicBlocksOf(
+            listOf(
+                IfRelationalGoto(a, RelationalOperator.LESS, b, integer, Label(1)),
+                Copy(t1, Constant(1L), integer),
+                Goto(Label(2)),
+                LabelDefinition(Label(1)),
+                Copy(t1, Constant(0L), integer),
+                LabelDefinition(Label(2)),
+                Print(t1, integer)
+            )
+        )
+        val liveness = BlockLiveness(blocks)
+
+        // Bloque 1: la rama verdadera, la que termina en `goto L2`.
+        assertTrue(liveness.liveAtExitOf(1)(t1), "el camino real va a L2, donde se lee")
+        // Bloque 2: la rama falsa, que cae en L2.
+        assertTrue(liveness.liveAtExitOf(2)(t1))
+    }
+
+    // Un ciclo salta hacia atras, asi que la vivacidad tiene que dar varias vueltas: lo
+    // que el cuerpo lee en la proxima iteracion sigue vivo al terminar esta.
+    @Test
+    fun `un temporal que vive de una vuelta del ciclo a la siguiente`() {
+        val blocks = basicBlocksOf(
+            listOf(
+                Copy(t1, Constant(0L), integer),
+                LabelDefinition(Label(1)),
+                Print(t1, integer),
+                Arithmetic(t1, t1, ArithmeticOperator.ADD, t2, integer),
+                Goto(Label(1))
+            )
+        )
+        val liveness = BlockLiveness(blocks)
+
+        // El bloque 0 es `t1 = 0`; el 1 es el cuerpo del ciclo, de L1 hasta el goto.
+        assertTrue(liveness.liveAtExitOf(0)(t1), "lo lee la primera vuelta")
+        assertTrue(liveness.liveAtExitOf(1)(t1), "y lo vuelve a leer la siguiente")
+    }
+
+    // Despues de un return el registro de activacion se muere, y con el sus temporales.
+    @Test
+    fun `un temporal no sobrevive a un return`() {
+        val blocks = basicBlocksOf(
+            listOf(
+                Copy(t1, Constant(1L), integer),
+                Return(null, null),
+                LabelDefinition(Label(1)),
+                Print(t1, integer)
+            )
         )
 
-        val liveAtExit = NextUseAnalysis.liveAtExitOf(body, end = 2)
-
-        assertTrue(liveAtExit(t1))
-        assertTrue(liveAtExit(a))
-        assertFalse(NextUseAnalysis.liveAtExitOf(body, end = 4)(t1))
+        assertFalse(BlockLiveness(blocks).liveAtExitOf(0)(t1))
     }
 }

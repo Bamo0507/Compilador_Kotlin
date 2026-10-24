@@ -1,9 +1,6 @@
 package org.compiler.backend
 
 import org.compiler.frontend.intermediate.models.Address
-import org.compiler.frontend.intermediate.models.Name
-import org.compiler.frontend.intermediate.models.Quadruple
-import org.compiler.frontend.intermediate.models.Temporary
 
 /**
  * Lo que se sabe de una variable justo despues de una instruccion: si su valor actual se
@@ -20,7 +17,8 @@ data class Usage(val live: Boolean, val nextUse: Int?)
  *   3. y y z pasan a "vivos, proximo uso aqui"
  * El orden importa cuando x es tambien y o z, como en `t1 = t1 * t2`.
  *
- * liveAtExit dice que variables siguen vivas al salir del bloque.
+ * liveAtExit dice que variables siguen vivas al salir del bloque; lo resuelve
+ * BlockLiveness sobre el grafo de flujo de la funcion.
  */
 class NextUseAnalysis(
     block: BasicBlock,
@@ -48,33 +46,4 @@ class NextUseAnalysis(
 
     fun usageAfter(index: Int, variable: Address): Usage =
         usageAfter[index][variable] ?: Usage(live = liveAtExit(variable), nextUse = null)
-
-    companion object {
-        /**
-         * Que variables siguen vivas al salir del bloque que termina en `end` (la
-         * posicion despues de su ultima instruccion dentro del cuerpo).
-         *
-         * Una variable del programa siempre: otro bloque o el que llama pueden leerla. Un
-         * temporal solo si lo proximo que le pasa despues del bloque es una lectura. El
-         * libro supone que un temporal nunca cruza bloques, pero en este TAC si: el
-         * resultado de un ternario se escribe en dos ramas y se lee despues de la
-         * etiqueta. Como un temporal nunca vive de una sentencia a otra, y los ciclos solo
-         * saltan hacia atras al inicio de una sentencia, basta mirar hacia adelante.
-         */
-        fun liveAtExitOf(body: List<Quadruple>, end: Int): (Address) -> Boolean = { variable ->
-            when (variable) {
-                is Name -> true
-                is Temporary -> nextIsRead(body, end, variable)
-                else -> false
-            }
-        }
-
-        private fun nextIsRead(body: List<Quadruple>, from: Int, temporary: Temporary): Boolean {
-            for (index in from until body.size) {
-                if (temporary in usesOf(body[index])) return true
-                if (definitionOf(body[index]) == temporary) return false
-            }
-            return false
-        }
-    }
 }

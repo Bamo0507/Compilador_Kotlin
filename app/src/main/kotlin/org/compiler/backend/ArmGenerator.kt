@@ -17,6 +17,12 @@ import org.compiler.frontend.intermediate.models.Copy
 import org.compiler.frontend.intermediate.models.FunctionBegin
 import org.compiler.frontend.intermediate.models.FunctionEnd
 import org.compiler.frontend.intermediate.models.FunctionLabel
+import org.compiler.frontend.intermediate.models.Goto
+import org.compiler.frontend.intermediate.models.IfFalseGoto
+import org.compiler.frontend.intermediate.models.IfGoto
+import org.compiler.frontend.intermediate.models.IfRelationalGoto
+import org.compiler.frontend.intermediate.models.Label
+import org.compiler.frontend.intermediate.models.LabelDefinition
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Print
 import org.compiler.frontend.intermediate.models.Quadruple
@@ -215,15 +221,20 @@ class ArmGenerator(
         emitter.comment(TacPrinter.line(begin).trim())
         emitPrologue(begin.function)
 
-        basicBlocksOf(body).forEach { block ->
-            val blockEnd = block.start + block.instructions.size
-            val liveAtExit = NextUseAnalysis.liveAtExitOf(body, blockEnd)
+        // La vivacidad se resuelve sobre el grafo de la funcion entera antes de empezar:
+        // lo que hay que guardar al final de un bloque depende de por donde puede seguir
+        // el flujo, y eso no se ve mirando una instruccion a la vez.
+        val blocks = basicBlocksOf(body)
+        val liveness = BlockLiveness(blocks)
+
+        blocks.forEachIndexed { number, block ->
+            val liveAtExit = liveness.liveAtExitOf(number)
             registers.startBlock(NextUseAnalysis(block, liveAtExit), liveAtExit)
 
             block.instructions.forEachIndexed { position, quadruple ->
                 emitter.comment(TacPrinter.line(quadruple).trim())
                 registers.startInstruction(position, usesOf(quadruple), definitionOf(quadruple))
-                translate(quadruple)
+                translate(quadruple, begin.function)
             }
             if (!endsBlock(block.instructions.last())) registers.flush()
         }
@@ -232,13 +243,20 @@ class ArmGenerator(
         emitEpilogue(begin.function)
     }
 
-    private fun translate(quadruple: Quadruple) {
+    // La funcion llega hasta aqui porque las etiquetas del TAC llevan su nombre: el L3
+    // de una funcion y el L3 de otra son etiquetas distintas en el mismo archivo.
+    private fun translate(quadruple: Quadruple, function: FunctionLabel) {
         when (quadruple) {
             is Arithmetic -> emitArithmetic(quadruple)
             is Relational -> emitRelational(quadruple)
             is Unary -> emitUnary(quadruple)
             is Copy -> emitCopy(quadruple)
             is Print -> emitPrint(quadruple)
+            is LabelDefinition -> emitter.label(ArmNames.label(function, quadruple.label))
+            is Goto -> emitGoto(quadruple, function)
+            is IfGoto -> emitTruthJump(quadruple.condition, Condition.NOT_EQUAL, quadruple.label, function)
+            is IfFalseGoto -> emitTruthJump(quadruple.condition, Condition.EQUAL, quadruple.label, function)
+            is IfRelationalGoto -> emitRelationalJump(quadruple, function)
             else -> throw UntranslatedInstruction(quadruple)
         }
     }
@@ -354,30 +372,33 @@ class ArmGenerator(
     // escrituras cuenta. mov sin s no toca las banderas, asi que el orden es seguro aunque
     // Rx sea el registro de un operando.
     private fun emitRelational(relational: Relational) {
-        val condition = Condition.of(relational.operator, relational.kind)
-        when (relational.kind) {
+        val operands = emitComparison(relational.left, relational.right, relational.kind)
+        writeBoolean(Condition.of(relational.operator, relational.kind), operands)
+    }
+
+    private fun emitComparison(left: Address, right: Address, kind: OperandKind): List<Register> =
+        when (kind) {
             OperandKind.FLOAT -> {
-                memory.loadFloatOperand(relational.left, FloatRegister.D1)
-                memory.loadFloatOperand(relational.right, FloatRegister.D2)
+                memory.loadFloatOperand(left, FloatRegister.D1)
+                memory.loadFloatOperand(right, FloatRegister.D2)
                 emitFloatCompare()
-                writeBoolean(condition, emptyList())
+                emptyList()
             }
             OperandKind.STRING -> {
-                val left = registerOf(relational.left, scratch = Register.R2)
-                val right = registerOf(relational.right, scratch = Register.R3)
-                moveArguments(left, right)
+                val first = registerOf(left, scratch = Register.R2)
+                val second = registerOf(right, scratch = Register.R3)
+                moveArguments(first, second)
                 emitter.instruction("bl", ArmNames.COMPARE_STRINGS)
                 emitter.instruction("cmp", Register.R0.text, immediate(0))
-                writeBoolean(condition, listOf(left, right))
+                listOf(first, second)
             }
             else -> {
-                val left = registerOf(relational.left, scratch = Register.R2)
-                val right = secondOperandOf(relational.right)
-                emitter.instruction("cmp", left.text, right.text)
-                writeBoolean(condition, listOfNotNull(left, right.register))
+                val first = registerOf(left, scratch = Register.R2)
+                val second = secondOperandOf(right)
+                emitter.instruction("cmp", first.text, second.text)
+                listOfNotNull(first, second.register)
             }
         }
-    }
 
     // Los dos operandos de una rutina, en r0 y r1. Vienen de registros de getReg o de
     // r2 y r3, asi que copiarlos en este orden no pisa ninguno.
@@ -443,6 +464,42 @@ class ArmGenerator(
         val result = registers.registerForResult(emptyList())
         loadConstant(result, copy.source)
         registers.recordResult(result)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Control de flujo
+    // ══════════════════════════════════════════════════════════════════════
+
+    //     goto L3      ->   el vaciado del bloque   b .Lfactorial_3
+    private fun emitGoto(goto: Goto, function: FunctionLabel) {
+        registers.flush()
+        emitter.instruction("b", ArmNames.label(function, goto.label))
+    }
+
+    // Un booleano del TAC es 1 o 0, asi que "es verdadero" es "no es cero". Es la misma
+    // comparacion para los dos, y solo cambia el sufijo del salto.
+    private fun emitTruthJump(
+        condition: Address,
+        whenToJump: Condition,
+        label: Label,
+        function: FunctionLabel
+    ) {
+        val value = registerOf(condition, scratch = Register.R2)
+        emitter.instruction("cmp", value.text, immediate(0))
+        branch(whenToJump, label, function)
+    }
+
+    // El TAC ya trae la relacion que hace falta: la decision 34 convirtio cada condicion
+    // en un salto, invirtiendola cuando el salto se da si la condicion NO se cumple. Aqui
+    // no se vuelve a invertir nada.
+    private fun emitRelationalJump(goto: IfRelationalGoto, function: FunctionLabel) {
+        emitComparison(goto.left, goto.right, goto.kind)
+        branch(Condition.of(goto.operator, goto.kind), goto.label, function)
+    }
+
+    private fun branch(condition: Condition, label: Label, function: FunctionLabel) {
+        registers.flush()
+        emitter.instruction("b${condition.suffix}", ArmNames.label(function, label))
     }
 
     // ══════════════════════════════════════════════════════════════════════

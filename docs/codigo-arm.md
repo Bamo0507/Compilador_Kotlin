@@ -204,3 +204,271 @@ equilibra el esfuerzo con lo que se aprende en el curso. Escribir a mano la conv
 de un flotante a texto no aporta nada a la generación de código, mientras que la
 asignación de registros, la secuencia de llamadas y el manejo de la memoria dinámica,
 que son el centro de esta etapa, se resuelven completos en el ensamblador generado.
+
+## 3. Los bloques básicos y la asignación de registros
+
+### 3.1 Qué es un bloque básico
+
+El código de tres direcciones es una lista plana de instrucciones por la que el flujo no
+siempre avanza de una a la siguiente: una etiqueta puede recibir un salto desde cualquier
+parte, y un salto puede llevarse el control a otro lado. Un bloque básico es un tramo de
+esa lista en el que eso no pasa, es decir, un tramo en el que se entra solo por la primera
+instrucción y se sale solo por la última.
+
+Un bloque nuevo empieza en cada líder, y los líderes son tres: la primera instrucción de
+la función, cada etiqueta, porque alguien puede saltar ahí desde otro lado, y la
+instrucción que sigue a un salto, a una llamada, a un retorno, a un lanzamiento de
+excepción o a la apertura de un bloque protegido, porque después de ellas el flujo puede
+no llegar en orden o los registros dejan de ser confiables.
+
+La razón por la que esta división importa es que adentro de un bloque el generador puede
+confiar en lo que recuerda. Si sabe que la variable `x` quedó en el registro r4, y la
+siguiente instrucción también pertenece al bloque, entonces es seguro que `x` sigue en r4
+cuando esa instrucción se ejecute, porque no hay forma de llegar a ella sin haber pasado
+por la anterior. En la primera instrucción de un bloque esa garantía no existe, ya que
+pueden llegar varios caminos distintos y cada uno traería los registros ocupados de otra
+forma. Es por esto que el generador empieza cada bloque con las libretas en blanco, es
+decir, suponiendo que todo está únicamente en memoria.
+
+### 3.2 Las dos libretas
+
+El generador lleva dos registros de lo que sabe, que el Dragon Book llama descriptores.
+Son dos vistas de la misma información, y se mantienen al mismo tiempo porque cada una
+responde una pregunta distinta de forma inmediata.
+
+| Libreta | Qué guarda | Qué pregunta responde |
+|---|---|---|
+| Descriptor de registro | Para cada registro, qué variables tienen ahí su valor actual | Si puedo pisar este registro, y qué perdería si lo hago |
+| Descriptor de dirección | Para cada variable, en qué lugares está su valor actual: su casilla de memoria, uno o más registros, o ambos | Si ya la tengo en un registro, y si puedo pisar ese registro sin guardarla antes |
+
+Una variable puede estar en varios lugares a la vez, y esa es justamente la situación
+cómoda: si el valor de `x` está en r4 y además en su casilla de memoria, entonces r4 se
+puede reutilizar sin generar ninguna instrucción, porque nada se pierde. Al revés, una
+variable cuyo valor existe únicamente en un registro obliga a guardarla antes de pisarlo.
+
+### 3.3 getReg
+
+Cada vez que una instrucción necesita un operando en un registro, el generador llama a la
+función que el libro llama `getReg`. Funciona como un `getOrPut`: si la variable ya está
+en un registro, lo devuelve sin generar nada; si no, consigue uno, genera la carga y lo
+anota. Lo que tiene de interesante es cómo consigue ese registro, porque las opciones
+están ordenadas de la más barata a la más cara.
+
+| Orden | Qué registro se elige | Qué cuesta |
+|---|---|---|
+| 1 | El que ya tiene el valor de la variable | Ninguna instrucción |
+| 2 | Uno que esté vacío | Una carga |
+| 3 | Uno cuyas variables estén todas también en memoria o ya no se usen | Una carga |
+| 4 | El que obligue a guardar menos variables | Un guardado por cada variable que solo vivía ahí, y después la carga |
+
+Para el registro donde se va a escribir el resultado hay un paso extra al principio: si
+existe un registro que contiene únicamente a la variable que está por escribirse, ese se
+usa, porque su valor anterior deja de servir en el momento en que se calcule el nuevo.
+Después se intenta con el registro de alguno de los operandos, siempre que ese operando no
+se vuelva a leer en el bloque y su valor esté a salvo en otro lado, y recién entonces se
+cae en los pasos de arriba.
+
+La decisión de cuál registro vaciar cuando ya no quedan libres se apoya en la información
+de próximo uso, que el generador calcula para cada bloque recorriéndolo de atrás hacia
+adelante. Para cada instrucción se anota, de cada variable que aparece, si su valor se va
+a volver a necesitar y en qué instrucción del bloque se vuelve a leer. Entre dos registros
+igual de seguros conviene vaciar el que tenga las variables que se leen más tarde, o las
+que no se vuelven a leer dentro del bloque.
+
+### 3.4 El ejemplo del libro, instrucción por instrucción
+
+El Dragon Book trabaja este bloque de cinco instrucciones suponiendo una máquina de tres
+registros. El generador de este compilador acepta que se le diga con cuántos registros
+trabajar, de modo que el ejemplo se puede reproducir tal cual y comparar con el libro.
+
+| Código de tres direcciones | ARM generado |
+|---|---|
+| `t = a - b` | `ldr r4, [fp, #-4]` y `ldr r5, [fp, #-8]` y `sub r5, r4, r5` |
+| `u = a - c` | `ldr r6, [fp, #-12]` y `sub r4, r4, r6` |
+| `v = t + u` | `add r5, r5, r4` |
+| `a = d` | `ldr r6, [fp, #-16]` |
+| `d = v + u` | `add r5, r5, r4` |
+| Final del bloque | `str r5, [fp, #-16]` y `str r6, [fp, #-4]` |
+
+Son diez instrucciones, las mismas que llega a contar el libro. La tabla siguiente
+muestra cómo quedan las dos libretas después de cada paso, que es donde se ve por qué se
+eligió cada registro. La columna de los registros está completa, mientras que la de las
+direcciones lista solo lo que cambió en ese paso.
+
+| Instrucción | Descriptor de registro | Descriptor de dirección |
+|---|---|---|
+| `t = a - b` | r4 tiene `a`, r5 tiene `t`, r6 está vacío | `a` en memoria y en r4, `b` solo en memoria, `t` solo en r5 |
+| `u = a - c` | r4 tiene `u`, r5 tiene `t`, r6 tiene `c` | `u` solo en r4, `c` en memoria y en r6 |
+| `v = t + u` | r4 tiene `u`, r5 tiene `v`, r6 tiene `c` | `v` solo en r5, `t` ya no está en ningún lado |
+| `a = d` | r4 tiene `u`, r5 tiene `v`, r6 tiene `d` y `a` | `a` solo en r6, `d` en memoria y en r6 |
+| `d = v + u` | r4 tiene `u`, r5 tiene `d`, r6 tiene `a` | `d` solo en r5, `v` ya no está en ningún lado |
+
+Hay tres momentos que vale la pena señalar. El primero es que `t = a - b` escribe su
+resultado en el registro de `b`, porque el valor de `b` está a salvo en su casilla de
+memoria y no se vuelve a leer en el bloque. El segundo es que `a = d` no genera ninguna
+instrucción de copia: `d` se carga en un registro y ahí mismo se anota que `a` también
+vale eso, de modo que la copia cuesta una anotación y no una instrucción. El tercero es
+que al final del bloque solo se guardan `a` y `d`, que son las únicas variables cuyo valor
+quedó únicamente en un registro; los temporales `t`, `u` y `v` ya no le sirven a nadie.
+
+### 3.5 Qué se guarda al final del bloque
+
+Como el bloque siguiente va a empezar con las libretas en blanco, todo lo que haga falta
+después tiene que estar en memoria antes de salir. Ese vaciado genera un guardado por cada
+variable viva cuyo valor exista únicamente en un registro, y es lo último que hace el
+bloque.
+
+Decidir cuáles están vivas no es un detalle menor. Las variables del programa se guardan
+siempre, porque otra función, o la misma función después de volver de una llamada, pueden
+leerlas, y el generador de una sola función no puede saberlo. Los temporales son distintos:
+se puede saber con precisión si alguien los vuelve a leer, y guardar los que no hace falta
+es trabajo perdido en una instrucción que se ejecuta en cada vuelta de un ciclo.
+
+Para saberlo, el generador resuelve la vivacidad sobre el grafo de flujo de la función
+completa antes de empezar a traducirla, con el análisis hacia atrás de siempre: lo que
+está vivo al salir de un bloque es la unión de lo que está vivo al entrar a cada uno de
+sus sucesores, y lo que está vivo al entrar a un bloque es lo que ese bloque lee antes de
+escribirlo, más lo que necesitaba el final y el bloque no sobrescribe. Se repite hasta que
+ninguno de los dos conjuntos cambia, lo que siempre ocurre porque los conjuntos solo
+crecen y son finitos.
+
+En mi caso, considero que hacer este análisis sobre el grafo y no sobre el orden del
+archivo es la parte menos evidente de toda la fase. La tentación es mirar hacia adelante
+en la lista de instrucciones, que es mucho más simple, y funciona en casi todos los casos.
+Falla justamente en el operador ternario: la rama verdadera termina en un salto
+incondicional, y lo que está escrito a continuación de ese salto es la rama falsa, que
+vuelve a escribir el mismo temporal. Leído en orden de archivo, el temporal parece muerto
+al salir de la rama verdadera y no se guarda; leído sobre el grafo está vivo, porque el
+camino real va a la etiqueta de abajo, donde se lee. Sin el grafo, el ternario imprime
+basura por una de sus dos ramas, y el error no aparece en ninguna prueba que no tome
+precisamente esa rama.
+
+## 4. Las comparaciones y los saltos
+
+### 4.1 Las banderas
+
+Esta es la diferencia más visible entre las dos arquitecturas. MIPS compara y salta en una
+sola instrucción: `blt $t0, $t1, L1` mira los dos registros y salta si el primero es menor.
+ARM no tiene nada parecido, porque separa las dos mitades del trabajo. La instrucción `cmp`
+resta los dos operandos, tira el resultado y deja en el registro de estado cuatro banderas
+que describen cómo salió esa resta. Después, una instrucción de salto con un sufijo de
+condición las lee y decide si salta o no.
+
+| | MIPS | ARM |
+|---|---|---|
+| Comparar y saltar si es menor | `blt $t0, $t1, L1` | `cmp r4, r5` y después `blt .L1` |
+| Comparar y saltar si es igual | `beq $t0, $t1, L1` | `cmp r4, r5` y después `beq .L1` |
+| Dejar 1 o 0 según una comparación | `slt $t0, $t1, $t2` | `cmp r5, r6` y después `mov r4, #0` y `movlt r4, #1` |
+
+Conviene notar que `blt` de MIPS tampoco es una instrucción real del procesador, sino una
+pseudoinstrucción que el ensamblador expande en un `slt` seguido de un `bne`. Es decir,
+MIPS también necesita dos instrucciones; lo que cambia es que ARM no las esconde, y que su
+resultado intermedio no ocupa un registro, sino el registro de estado.
+
+Esa última diferencia es la que hace cómoda la traducción. Como el resultado de la
+comparación no vive en un registro, no compite con los valores que reparte `getReg`, y
+como ninguna instrucción de carga ni de guardado toca las banderas, entre el `cmp` y el
+salto se puede meter trabajo que no tenga que ver con la comparación.
+
+Comparar flotantes necesita un paso más, porque la unidad de punto flotante tiene su
+propio registro de estado. La instrucción `vcmp.f64` compara y deja el resultado ahí, y
+`vmrs APSR_nzcv, fpscr` lo copia al registro de estado principal, que es el que leen los
+sufijos. Comparar textos no es una comparación del procesador en absoluto: se llama a una
+rutina del runtime que a su vez llama a `strcmp`, y lo que se compara después contra cero
+es el número negativo, cero o positivo que esa rutina devuelve en r0.
+
+### 4.2 La tabla de sufijos
+
+| Relación del código intermedio | Enteros, booleanos y referencias | Flotantes |
+|---|---|---|
+| Igual | `eq` | `eq` |
+| Distinto | `ne` | `ne` |
+| Menor | `lt` | `mi` |
+| Menor o igual | `le` | `ls` |
+| Mayor | `gt` | `gt` |
+| Mayor o igual | `ge` | `ge` |
+
+Las dos columnas coinciden salvo en menor y en menor o igual, y el motivo es el valor no
+numérico que define el estándar de punto flotante, conocido como NaN. Cuando alguno de los
+dos operandos es NaN, la comparación no queda ordenada, y las banderas toman una
+combinación que hace que `lt` y `le` se cumplan, lo cual es incorrecto, porque un número
+no es menor que algo que no es un número. Los sufijos `mi` y `ls` miran banderas distintas
+y no se cumplen en ese caso, por lo que son los que corresponden.
+
+Las referencias usan la columna de los enteros porque una referencia es una dirección, y
+la ausencia de objeto, que en Compiscript se escribe `null`, es la dirección cero. Así,
+preguntar si una referencia es nula es compararla contra cero con `cmp`, exactamente igual
+que un entero.
+
+### 4.3 Una condición del lenguaje, de principio a fin
+
+El código intermedio ya traía casi todo resuelto. Al generarlo se decidió que una
+condición no produce un valor que después se consulta, sino que se convierte directamente
+en un salto, y que ese salto lleva la relación invertida, porque lo que interesa es saltar
+cuando la condición no se cumple y seguir de corrido cuando sí. El back-end no vuelve a
+invertir nada: toma la relación tal como viene y le busca su sufijo.
+
+| Código intermedio | ARM generado |
+|---|---|
+| `L3:` | `.Lmain_3:` |
+| `goto L3` | el vaciado del bloque y después `b .Lmain_3` |
+| `if i >= 5 goto L4` | `ldr ip, =cps_estatico` y `ldr r4, [ip, #4]` y `cmp r4, #5` y el vaciado y `bge .Lmain_4` |
+| `if t goto L3` | `cmp r4, #0` y el vaciado y `bne .Lmain_3` |
+| `ifFalse t goto L1` | `cmp r4, #0` y el vaciado y `beq .Lmain_1` |
+| `if p != null goto L1` | `cmp r4, #0` y el vaciado y `bne .Lmain_1` |
+| `if x <f y goto L1` | `vcmp.f64 d1, d2` y `vmrs APSR_nzcv, fpscr` y el vaciado y `bmi .Lf_1` |
+| `if s ==s t goto L1` | `bl cps_comparar_strings` y `cmp r0, #0` y el vaciado y `beq .Lf_1` |
+
+Las primeras cinco filas están tomadas del ensamblador de los programas `flujo_condiciones`
+y `tipos_logicos` de la batería de pruebas. Las tres últimas salen de las pruebas del
+generador, porque ningún programa de la batería llega todavía a ellas: la comparación
+contra `null` aparece al usar objetos o listas, y las de flotantes y de textos aparecen
+dentro de condiciones que además necesitan llamadas a funciones, y las dos cosas son de
+fases posteriores.
+
+Un booleano del código intermedio vale 1 o 0, de modo que preguntar si es verdadero es
+preguntar si no es cero. Esa es la razón por la que `if` e `ifFalse` generan exactamente
+la misma comparación y se distinguen solo en el sufijo del salto.
+
+Las etiquetas del archivo llevan el nombre de la función de la que salieron, de forma que
+la etiqueta `L3` de una función y la `L3` de otra no se pisan, y quien lee el ensamblador
+puede saber de dónde viene cada salto. Además empiezan con punto y L, que es la marca con
+la que el ensamblador de GNU reconoce una etiqueta local, es decir, una que no aparece en
+la tabla de símbolos del ejecutable.
+
+### 4.4 Dónde se vacían los registros
+
+El vaciado del bloque aparece en la tabla anterior en un lugar que a primera vista
+sorprende: entre la comparación y el salto, y no antes de la comparación ni en la etiqueta
+de destino.
+
+Que pueda ir ahí es consecuencia de lo que se dijo arriba. Las instrucciones de carga y de
+guardado de ARM no modifican las banderas, así que lo que dejó el `cmp` sigue intacto
+cuando se llega al salto, por más guardados que haya en el medio.
+
+Que tenga que ir ahí es un asunto distinto. La alternativa natural sería vaciar al llegar
+a la etiqueta de destino, pero en una etiqueta no se sabe de dónde se viene: pueden llegar
+varios caminos, cada uno con los registros ocupados de otra forma, y el generador no
+tendría nada confiable que guardar. En el salto, en cambio, el camino es uno solo y las
+libretas todavía dicen exactamente qué quedó pendiente. El salto es el último lugar donde
+esa información existe.
+
+La primera condición del programa `flujo_condiciones` de la batería muestra el caso
+completo. La variable `x` acaba de recibir el valor 20, que existe únicamente en r4, y se
+vuelve a leer más adelante, después de las dos ramas.
+
+| Código intermedio | ARM generado |
+|---|---|
+| `x = 20` | `mov r4, #20` |
+| `if x <= 10 goto L1` | `cmp r4, #10` y después `ldr ip, =cps_estatico` y `str r4, [ip]` y después `ble .Lmain_1` |
+
+El guardado de `x` queda en medio de la comparación y el salto, y el cálculo de su
+dirección también, porque `x` es una variable global y hay que llegar a ella sumando su
+desplazamiento a la etiqueta de la zona estática. Ninguna de las dos instrucciones toca
+las banderas. Los dos caminos que salen de ahí, el que salta y el que sigue de corrido,
+encuentran a `x` en su casilla, que es exactamente lo que el bloque siguiente va a suponer
+cuando empiece con las libretas en blanco.
+
+En mi caso, considero que esta es la parte de la fase donde más se nota que el back-end
+razona sobre un grafo y no sobre una lista. Todo lo demás de esta etapa se puede explicar
+leyendo el código intermedio de arriba hacia abajo; el vaciado, no.
