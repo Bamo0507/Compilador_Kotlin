@@ -472,3 +472,217 @@ cuando empiece con las libretas en blanco.
 En mi caso, considero que esta es la parte de la fase donde más se nota que el back-end
 razona sobre un grafo y no sobre una lista. Todo lo demás de esta etapa se puede explicar
 leyendo el código intermedio de arriba hacia abajo; el vaciado, no.
+
+## 5. El registro de activación y la secuencia de llamadas
+
+### 5.1 El espejo entre el registro y la pila
+
+La etapa anterior ya calculó, para cada función, qué campo va en qué desplazamiento
+dentro de su registro de activación y cuánto mide la hoja completa. Esos desplazamientos
+crecen desde cero: el primer parámetro está en el 0, el siguiente justo después, y los
+temporales al final. La pila de ARM, en cambio, crece hacia abajo, de modo que el dato
+que se agrega más tarde queda en una dirección menor.
+
+Las dos cosas se reconcilian con un espejo. El registro `fp` apunta al **tope** del
+registro de activación, que es su dirección más alta, y una casilla con desplazamiento
+`d` y tamaño `s` vive en `fp − d − s`. Así, el campo que la etapa anterior puso en el
+desplazamiento 0 queda pegado a `fp`, y el que puso al final queda pegado al fondo. No
+hubo que cambiar un solo número de los que calculó el analizador.
+
+Con el registro de `factorial`, que mide 40 bytes:
+
+| Casilla | Desplazamiento | Tamaño | Dirección |
+|---|---|---|---|
+| `n` | 0 | 4 | `[fp, #-4]` |
+| valor devuelto | 4 | 4 | `[fp, #-8]` |
+| enlace de control | 8 | 4 | `[fp, #-12]` |
+| enlace de acceso | 12 | 4 | `[fp, #-16]` |
+| dirección de retorno | 16 | 4 | `[fp, #-20]` |
+| `t1` | 24 | 8 | `[fp, #-32]` |
+| `t2` | 32 | 8 | `[fp, #-40]` |
+
+Conviene notar que la casilla del valor devuelto existe en el registro pero el código
+generado no la usa. El resultado viaja en `r0`, o en `d0` si es un flotante, por la misma
+razón por la que viaja ahí en cualquier otra arquitectura: cuando quien llama lee el
+resultado, el registro de activación de la función que lo produjo ya se liberó, así que
+leerlo de ahí sería leer memoria que ya no es de nadie.
+
+### 5.2 La parte fija y quién reserva qué
+
+El trabajo de armar un registro de activación se reparte entre los dos lados de la
+llamada. Quien llama reserva la **parte fija**, que es lo que va desde la casilla 0 hasta
+el final de la dirección de retorno, y escribe ahí lo que solo él sabe: los argumentos y
+el enlace de acceso. La función llamada termina de armar el registro, guarda los dos
+valores que solo ella conoce, y reserva lo que le falta para sus locales y sus
+temporales.
+
+En `factorial` la parte fija llega hasta 20, y se redondea a 24. El redondeo a 8 no es un
+detalle. El tamaño del registro completo ya era múltiplo de 8 desde la etapa anterior,
+pero eso solo no alcanza: si la parte fija no lo fuera, quien llama dejaría `sp` en un
+múltiplo de 4, y el `sp` de la función llamada, que se calcula restando el tamaño del
+registro, heredaría ese desfase durante toda su ejecución. El estándar de llamadas de ARM
+exige que `sp` esté alineado a 8 en cada llamada, y la biblioteca de C cuenta con ello.
+
+Lo único que cambia el redondeo es cuántos bytes reserva quien llama antes del `bl`; la
+función reserva el resto, y la suma es la misma. Ninguna casilla se mueve, porque todas se
+cuentan desde `fp`, que sigue siendo el tope del registro.
+
+| Quién | Qué reserva | Qué escribe |
+|---|---|---|
+| Quien llama | La parte fija, 24 bytes en `factorial` | Los argumentos y el enlace de acceso |
+| La función llamada | El resto, 16 bytes más | El enlace de control y la dirección de retorno |
+
+`main` es la excepción, porque lo llama la biblioteca de C, que no sabe nada de esta
+convención y no le reservó nada. Por eso su prólogo empieza reservando su propia parte
+fija, y su epílogo la libera antes de volver.
+
+### 5.3 El prólogo y el epílogo
+
+| Momento | ARM | Qué hace |
+|---|---|---|
+| Prólogo | `add ip, sp, #24` | El tope del registro, que la llamada dejó reservado |
+| | `str fp, [ip, #-12]` | Enlace de control: el `fp` de quien llama |
+| | `str lr, [ip, #-20]` | Dirección de retorno |
+| | `mov fp, ip` | Este es el registro actual |
+| | `sub sp, fp, #40` | Reserva locales y temporales |
+| Epílogo | `ldr lr, [fp, #-20]` | Recupera a dónde volver |
+| | `sub sp, fp, #24` | Deja la pila como la dejó quien llama |
+| | `ldr fp, [fp, #-12]` | Recupera el registro de quien llama |
+| | `bx lr` | Vuelve |
+
+El orden de las cuatro instrucciones del prólogo no es libre. El tope del registro nuevo
+se calcula en `ip` y no directamente en `fp`, porque hasta la última instrucción hace
+falta el `fp` de quien llama: es justamente lo que hay que guardar en el enlace de
+control. En el epílogo pasa lo simétrico: `lr` y `fp` se leen mientras `fp` todavía
+apunta a este registro, y por eso se recuperan antes de mover nada.
+
+El epílogo se escribe **una sola vez por función**, detrás de una etiqueta de salida que
+lleva el nombre de la función y termina en `_fin`. Cada `return` deja su valor en `r0` y
+salta ahí. Una función sin valor de retorno simplemente cae en esa etiqueta cuando se le
+acaba el cuerpo.
+
+| Código intermedio | ARM |
+|---|---|
+| `return 1` | `mov r0, #1` y `b .Lfactorial_fin` |
+| `return t1` | `mov r0, r4` y `b .Lfactorial_fin` |
+| `end_func factorial` | `.Lfactorial_fin:` y el epílogo |
+
+### 5.4 Los argumentos y el resultado
+
+Los argumentos no viajan en registros, sino en la pila, dentro del registro de activación
+que se está armando. La razón es que ese registro **ya tiene una casilla para cada
+parámetro**, calculada por la etapa anterior. Pasarlos en `r0` a `r3` obligaría a la
+función llamada a copiarlos a esas casillas en su prólogo, y además habría que tratar
+aparte el quinto parámetro en adelante, los flotantes, que no caben en un registro
+entero, y los booleanos, que miden un byte. Las rutinas del runtime sí reciben sus
+argumentos en `r0` a `r3`, porque así lo exige la biblioteca de C.
+
+Como el registro nuevo todavía no tiene `fp`, las casillas se cuentan desde `sp`: el tope
+del registro va a quedar en `sp` más la parte fija, de modo que la casilla de
+desplazamiento `d` y tamaño `s` cae en `sp + F − d − s`.
+
+| Código intermedio | ARM |
+|---|---|
+| (primer `param` de la llamada) | `sub sp, sp, #24` |
+| `param t2` | `str r5, [sp, #20]`, que es la casilla de `n`: 24 − 0 − 4 |
+| `param true` | `strb r2, [sp, #23]`, porque la casilla de un booleano mide un byte |
+| `param 1.5` | `vldr d0, [ip]` y `vstr d0, [sp, #16]` |
+| `t2 = call factorial, 1` | `bl cps_factorial`, `add sp, sp, #24` y `mov r4, r0` |
+
+Las tres filas del medio están tomadas de tres funciones distintas, y por eso sus
+desplazamientos no se parecen: cada uno se cuenta dentro de la parte fija de la función a
+la que se está llamando.
+
+La instrucción la decide el tamaño de la casilla y no el tipo que dice el código
+intermedio. Escribir cuatro bytes en la casilla de un booleano pisaría la casilla de al
+lado, que es la del parámetro anterior.
+
+Hay una instrucción más que no aparece en la tabla y que va justo antes del `bl`: el
+vaciado de registros. Una función de Compiscript usa los mismos registros que reparte
+`getReg` y no los devuelve intactos, de modo que todo lo que quede en uno se pierde en la
+llamada. El generador se asegura de que al llegar al `bl` no quede nada: los valores
+vivos ya están en sus casillas. Las rutinas del runtime, en cambio, sí conservan esos
+registros, y por eso un `print` no obliga a vaciar nada.
+
+En mi caso, considero que esta es la decisión que más simplifica el back-end a cambio de
+un poco de velocidad. La alternativa que manda el estándar es que la función llamada
+guarde al entrar los registros que vaya a usar y los restaure al salir, lo que ahorraría
+los guardados de quien llama; pero obligaría a saber de antemano cuáles usa, y a tener
+dos convenios distintos, uno para las funciones propias y otro para las rutinas del
+runtime. Como una llamada ya cierra un bloque básico, y al final de un bloque el
+generador vacía de todos modos, la regla «en un `bl` no sobrevive ningún registro» no
+cuesta casi nada y se explica en una línea.
+
+### 5.5 El enlace de acceso
+
+Compiscript permite declarar funciones adentro de otras, y una función anidada puede leer
+las variables de la que la contiene. Esas variables viven en el registro de activación de
+la función exterior, que está en algún lugar de la pila, y el enlace de acceso es la
+dirección de ese registro.
+
+Quien llama es el que sabe cuál es, porque es quien está dentro de la función exterior, o
+dentro de una que la tiene más arriba. El código intermedio escribe esa distancia como
+`^h` en la llamada: cuántos enlaces hay que subir desde el registro actual para encontrar
+el registro de la función que contiene a la llamada.
+
+| Código intermedio | ARM |
+|---|---|
+| `t1 = call externa.hermana, 0, ^0` | `str fp, [sp, #4]`: el registro actual es el que hace falta |
+| `t1 = call externa.media, 0, ^1` | `ldr ip, [fp, #-12]` y `str ip, [sp, #4]`: sube un enlace |
+
+Leer una variable de un nivel exterior usa el mismo mecanismo en la dirección contraria.
+`base^2` significa subir dos enlaces desde el registro actual y buscar la casilla ahí:
+`ldr ip, [fp, #-12]`, `ldr ip, [ip, #-12]` y finalmente `ldr r4, [ip, #-20]`.
+
+### 5.6 factorial(3), paso a paso
+
+El programa calcula `factorial(3)` con tres llamadas anidadas. Si se llama `S` a la
+dirección que tenía `sp` cuando la biblioteca de C entró a `main`, la pila queda así, con
+las direcciones más altas arriba:
+
+| Registro de activación | Tope, es decir `fp` | Fondo, es decir `sp` | `n` |
+|---|---|---|---|
+| `main`, 24 bytes | `S` | `S − 24` | — |
+| `factorial(3)`, 40 bytes | `S − 24` | `S − 64` | 3 |
+| `factorial(2)`, 40 bytes | `S − 64` | `S − 104` | 2 |
+| `factorial(1)`, 40 bytes | `S − 104` | `S − 144` | 1 |
+
+La regularidad que se ve en la tabla es la que explica toda la mecánica: **el tope de cada
+registro nuevo es exactamente el fondo del registro de quien llama**. Cada llamada empuja
+la pila 40 bytes más abajo, repartidos entre los 24 que reserva quien llama y los 16 que
+reserva la función; cada retorno los devuelve en el orden inverso.
+
+La llamada de `main` se arma así:
+
+| Código intermedio | ARM |
+|---|---|
+| `param 5` | `sub sp, sp, #24` y `mov r2, #5` y `str r2, [sp, #20]` |
+| `t1 = call factorial, 1` | `bl cps_factorial` y `add sp, sp, #24` y `mov r4, r0` |
+
+Y la llamada recursiva, que es la misma secuencia con una diferencia importante:
+
+| Código intermedio | ARM |
+|---|---|
+| `param t2` | `sub sp, sp, #24` y `str r5, [sp, #20]` |
+| `t2 = call factorial, 1` | `str r4, [fp, #-32]` y `str r5, [fp, #-40]` y `bl cps_factorial` y `add sp, sp, #24` y `mov r4, r0` y `str r4, [fp, #-40]` |
+
+Los dos guardados que aparecen antes del `bl` son el vaciado: `t1`, que guarda el valor
+de `n` para multiplicarlo después, y `t2`, estaban solo en registros, y la llamada los
+habría perdido. El guardado que aparece después del `bl` es el resultado, que pasa de
+`r0` a su casilla porque la llamada cierra el bloque básico y el bloque siguiente va a
+buscarlo en memoria.
+
+Cuando `factorial(1)` llega a su caso base, deja `1` en `r0` y salta a `.Lfactorial_fin`.
+El epílogo recupera `lr` y `fp` de las casillas de **su** registro, devuelve `sp` a
+`S − 128`, que es donde lo había dejado `factorial(2)` después de reservar la parte fija,
+y vuelve. `factorial(2)` libera esos 24 bytes con `add sp, sp, #24`, toma el `1` de `r0`,
+lo multiplica por su `n` y repite la operación un nivel más arriba. Las tres llamadas
+usan el mismo código y las mismas casillas; lo único que las distingue es dónde está
+`fp`.
+
+En mi caso, considero que la recursión es la prueba más honesta de que el espejo entre el
+registro de activación y la pila está bien hecho. Un programa sin recursión puede
+funcionar aunque los desplazamientos estén mal, porque cada función tiene su lugar fijo;
+en cambio, `factorial(12)` crea doce registros con la misma forma, uno encima de otro, y
+cada retorno tiene que encontrar exactamente el suyo. Si un solo desplazamiento estuviera
+corrido, el programa devolvería un número cualquiera.

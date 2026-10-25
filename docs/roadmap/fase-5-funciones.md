@@ -18,7 +18,7 @@ Dragon Book 7.2 y 7.3.
 
 ## Ticket 5.1: Prólogo y epílogo
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 3.3
 
 **Archivos:**
@@ -82,7 +82,7 @@ a 8 en toda la función, que es lo que pide libc en cada llamada.
 
 ## Ticket 5.2: `param`, `call` y el enlace de acceso
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.1
 
 **Archivos:**
@@ -129,7 +129,7 @@ y corta.
 
 ## Ticket 5.3: El documento, funciones
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.2
 
 **Archivos:**

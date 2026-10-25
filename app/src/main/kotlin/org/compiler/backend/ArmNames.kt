@@ -46,6 +46,13 @@ object ArmNames {
         return "$LOCAL_PREFIX${owner}_${label.index}"
     }
 
+    // La salida de una funcion: `.Lfactorial_fin`. Todo `return` salta aqui, para que el
+    // epilogo se escriba una sola vez por funcion.
+    fun functionExit(function: FunctionLabel): String {
+        val owner = if (isMain(function)) ENTRY_POINT else function.name
+        return "${LOCAL_PREFIX}${owner}_fin"
+    }
+
     // La tabla de metodos de una clase, en .data: `cps_vtable_Perro`.
     fun virtualTable(className: String): String = "${PROGRAM_PREFIX}vtable_$className"
 

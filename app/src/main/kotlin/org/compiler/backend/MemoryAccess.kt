@@ -97,7 +97,7 @@ class MemoryAccess(
                 Slot(Register.IP, storage.offset)
             }
             is StorageLocation.Frame -> {
-                val base = if (name.hops == 0) Register.FP else followAccessLinks(name.hops)
+                val base = accessLink(name.hops)
                 Slot(base, -(storage.offset + size))
             }
             is StorageLocation.Field, null -> error("'${name.symbol.name}' no es una variable")
@@ -106,8 +106,8 @@ class MemoryAccess(
 
     // `cuenta^2`: cada salto lee el enlace de acceso del registro donde se esta, que
     // apunta al registro de la funcion que lo contiene. Al final, ip apunta al registro
-    // donde vive la variable.
-    private fun followAccessLinks(hops: Int): Register {
+    // donde vive la variable. Con cero saltos es el registro actual, o sea fp.
+    fun accessLink(hops: Int): Register {
         var function = checkNotNull(currentFunction)
         var base = Register.FP
         repeat(hops) {

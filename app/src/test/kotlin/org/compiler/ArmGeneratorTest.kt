@@ -78,6 +78,10 @@ class ArmGeneratorTest {
     // factorial(n): n en 0, valor devuelto en 4, enlaces en 8 y 12, direccion de
     // retorno en 16, y sus dos temporales despues. La casilla d de tamaño s vive en
     // fp - d - s.
+    //
+    // La parte fija llega hasta el final de la direccion de retorno, o sea 20, y se
+    // redondea a 24: si no, quien llama dejaria sp en un multiplo de 4 durante toda la
+    // funcion. Las casillas no se mueven, porque se cuentan desde fp.
     @Test
     fun `el registro de factorial visto desde fp`() {
         val result = CompilerPipeline.compile(
@@ -90,7 +94,7 @@ class ArmGeneratorTest {
         val frame = Frame(record)
 
         assertEquals(40, frame.size)
-        assertEquals(20, frame.fixedPartSize)
+        assertEquals(24, frame.fixedPartSize)
         assertEquals(-12, frame.controlLinkOffset)
         assertEquals(-20, frame.returnAddressOffset)
         assertEquals(-4, frame.fpOffsetOf(offset = 0, size = 4))
@@ -177,8 +181,8 @@ class ArmGeneratorTest {
             listOf(
                 ".global main",
                 "main:",
-                "sub sp, sp, #12",
-                "add ip, sp, #12",
+                "sub sp, sp, #16",
+                "add ip, sp, #16",
                 "str fp, [ip, #-4]  @ enlace de control",
                 "str lr, [ip, #-12]  @ direccion de retorno",
                 "mov fp, ip",
@@ -186,16 +190,20 @@ class ArmGeneratorTest {
             ),
             translationOf(lines, "begin_func \$main, 16")
         )
+
+        // El epilogo se escribe una sola vez, detras de la etiqueta de salida a la que
+        // salta cada return.
         assertEquals(
             listOf(
+                ".Lmain_fin:",
                 "mov r0, #0",
                 "ldr lr, [fp, #-12]",
-                "sub sp, fp, #12",
+                "sub sp, fp, #16",
                 "ldr fp, [fp, #-4]",
-                "add sp, sp, #12",
+                "add sp, sp, #16",
                 "bx lr"
             ),
-            translationOf(lines, "end_func \$main").takeWhile { !it.startsWith(".") }
+            translationOf(lines, "end_func \$main").takeWhile { !it.startsWith(".section") }
         )
     }
 
@@ -207,7 +215,7 @@ class ArmGeneratorTest {
         assertEquals(
             listOf(
                 "cps_f:",
-                "add ip, sp, #12",
+                "add ip, sp, #16",
                 "str fp, [ip, #-4]  @ enlace de control",
                 "str lr, [ip, #-12]  @ direccion de retorno",
                 "mov fp, ip",
@@ -220,10 +228,10 @@ class ArmGeneratorTest {
     @Test
     fun `una instruccion que todavia no se traduce falla con su texto`() {
         val error = assertFailsWith<UntranslatedInstruction> {
-            assemblyOf("function f() { } f();")
+            assemblyOf("let xs: integer[] = [1];")
         }
 
-        assertEquals("Todavía no se traduce: call f, 0", error.message)
+        assertEquals("Todavía no se traduce: t1 = alloc 12", error.message)
     }
 
     // ── print ──────────────────────────────────────────────────────────────

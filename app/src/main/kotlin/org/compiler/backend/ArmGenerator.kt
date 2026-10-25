@@ -12,6 +12,7 @@ import org.compiler.frontend.intermediate.TacPrinter
 import org.compiler.frontend.intermediate.models.Address
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
+import org.compiler.frontend.intermediate.models.Call
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
 import org.compiler.frontend.intermediate.models.FunctionBegin
@@ -21,12 +22,15 @@ import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
 import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
+import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
 import org.compiler.frontend.intermediate.models.OperandKind
+import org.compiler.frontend.intermediate.models.Param
 import org.compiler.frontend.intermediate.models.Print
 import org.compiler.frontend.intermediate.models.Quadruple
 import org.compiler.frontend.intermediate.models.Relational
+import org.compiler.frontend.intermediate.models.Return
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.intermediate.models.TacUnaryOperator
 import org.compiler.frontend.intermediate.models.Unary
@@ -67,6 +71,7 @@ class ArmGenerator(
 
     private val memory = MemoryAccess(emitter, storageLayout, framesByFunction)
     private val registers = RegisterAllocator(memory, valueRegisters)
+    private val calls = CallingSequence(emitter, framesByFunction)
 
     fun generate(): AssemblyProgram {
         emitConfiguration()
@@ -219,7 +224,8 @@ class ArmGenerator(
     // un registro y se va a necesitar despues.
     private fun emitFunction(begin: FunctionBegin, body: List<Quadruple>) {
         emitter.comment(TacPrinter.line(begin).trim())
-        emitPrologue(begin.function)
+        memory.currentFunction = begin.function
+        calls.prologue(begin.function)
 
         // La vivacidad se resuelve sobre el grafo de la funcion entera antes de empezar:
         // lo que hay que guardar al final de un bloque depende de por donde puede seguir
@@ -234,18 +240,27 @@ class ArmGenerator(
             block.instructions.forEachIndexed { position, quadruple ->
                 emitter.comment(TacPrinter.line(quadruple).trim())
                 registers.startInstruction(position, usesOf(quadruple), definitionOf(quadruple))
-                translate(quadruple, begin.function)
+                val following = block.instructions.subList(position + 1, block.instructions.size)
+                translate(quadruple, begin.function, following)
             }
             if (!endsBlock(block.instructions.last())) registers.flush()
         }
 
         emitter.comment("end_func ${begin.function.name}")
-        emitEpilogue(begin.function)
+        emitter.label(ArmNames.functionExit(begin.function))
+        calls.epilogue(begin.function)
+        memory.currentFunction = null
     }
 
     // La funcion llega hasta aqui porque las etiquetas del TAC llevan su nombre: el L3
     // de una funcion y el L3 de otra son etiquetas distintas en el mismo archivo.
-    private fun translate(quadruple: Quadruple, function: FunctionLabel) {
+    // `following` son las instrucciones que quedan del bloque: el primer `param` las
+    // mira para saber a quien se esta llamando.
+    private fun translate(
+        quadruple: Quadruple,
+        function: FunctionLabel,
+        following: List<Quadruple>
+    ) {
         when (quadruple) {
             is Arithmetic -> emitArithmetic(quadruple)
             is Relational -> emitRelational(quadruple)
@@ -257,64 +272,11 @@ class ArmGenerator(
             is IfGoto -> emitTruthJump(quadruple.condition, Condition.NOT_EQUAL, quadruple.label, function)
             is IfFalseGoto -> emitTruthJump(quadruple.condition, Condition.EQUAL, quadruple.label, function)
             is IfRelationalGoto -> emitRelationalJump(quadruple, function)
+            is Param -> emitParam(quadruple, following)
+            is Call -> emitCall(quadruple)
+            is Return -> emitReturn(quadruple, function)
             else -> throw UntranslatedInstruction(quadruple)
         }
-    }
-
-    //     .global main
-    // main:
-    //     sub sp, sp, #12          solo main: nadie le reservo la parte fija
-    //     add ip, sp, #12          el tope del registro, que dejo reservado quien llamo
-    //     str fp, [ip, #-4]        enlace de control: el fp de quien llamo
-    //     str lr, [ip, #-12]       direccion de retorno
-    //     mov fp, ip               este es el registro actual
-    //     sub sp, fp, #24          reserva locales y temporales
-    private fun emitPrologue(function: FunctionLabel) {
-        val frame = frameOf(function)
-        memory.currentFunction = function
-
-        val name = ArmNames.function(function)
-        if (isMain(function)) emitter.directive("global", name)
-        emitter.label(name)
-
-        if (isMain(function)) {
-            emitter.arithmeticWithConstant("sub", Register.SP, Register.SP, frame.fixedPartSize)
-        }
-        emitter.arithmeticWithConstant("add", Register.IP, Register.SP, frame.fixedPartSize)
-        emitter.instruction(
-            "str", Register.FP.text, memory(Register.IP, frame.controlLinkOffset),
-            comment = "enlace de control"
-        )
-        emitter.instruction(
-            "str", Register.LR.text, memory(Register.IP, frame.returnAddressOffset),
-            comment = "direccion de retorno"
-        )
-        emitter.instruction("mov", Register.FP.text, Register.IP.text)
-        emitter.arithmeticWithConstant("sub", Register.SP, Register.FP, frame.size)
-    }
-
-    //     mov r0, #0               solo main: el codigo de salida
-    //     ldr lr, [fp, #-12]       a donde se vuelve
-    //     sub sp, fp, #12          la pila como la dejo quien llamo
-    //     ldr fp, [fp, #-4]        el registro de quien llamo
-    //     add sp, sp, #12          solo main: libera su parte fija
-    //     bx lr                    vuelve
-    private fun emitEpilogue(function: FunctionLabel) {
-        val frame = frameOf(function)
-
-        if (isMain(function)) emitter.instruction("mov", Register.R0.text, immediate(0))
-        emitter.instruction(
-            "ldr", Register.LR.text, memory(Register.FP, frame.returnAddressOffset)
-        )
-        emitter.arithmeticWithConstant("sub", Register.SP, Register.FP, frame.fixedPartSize)
-        emitter.instruction(
-            "ldr", Register.FP.text, memory(Register.FP, frame.controlLinkOffset)
-        )
-        if (isMain(function)) {
-            emitter.arithmeticWithConstant("add", Register.SP, Register.SP, frame.fixedPartSize)
-        }
-        emitter.instruction("bx", Register.LR.text)
-        memory.currentFunction = null
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -503,6 +465,104 @@ class ArmGenerator(
     }
 
     // ══════════════════════════════════════════════════════════════════════
+    //  Llamadas
+    // ══════════════════════════════════════════════════════════════════════
+
+    // La llamada que se esta armando: el registro nuevo ya reservado, y por que
+    // parametro va. Vive entre el primer `param` y su `call`, que en el TAC son
+    // consecutivos porque los argumentos se evaluan antes (decision 55).
+    private class PendingCall(val frame: Frame) {
+        var nextParameter = 0
+    }
+
+    private var pendingCall: PendingCall? = null
+
+    //     param t2   ->   str Rt2, [sp, #16]
+    //
+    // La casilla es la del parametro dentro del registro NUEVO, que todavia no tiene fp:
+    // se cuenta desde sp, que es donde empieza la parte fija recien reservada.
+    private fun emitParam(param: Param, following: List<Quadruple>) {
+        val pending = pendingCall ?: openCall(calleeOf(following))
+        val index = pending.nextParameter++
+        val slot = calls.parameterSlot(pending.frame, index)
+
+        if (param.kind == OperandKind.FLOAT) {
+            memory.loadFloatOperand(param.value, FloatRegister.D0)
+            emitter.instruction("vstr", FloatRegister.D0.text, slot)
+            return
+        }
+        val value = registerOf(param.value, scratch = Register.R2)
+        val mnemonic = if (pending.frame.parameterSize(index) == 1) "strb" else "str"
+        emitter.instruction(mnemonic, value.text, slot)
+    }
+
+    //     t2 = call factorial, 1   ->   bl cps_factorial   add sp, sp, #20   mov Rt2, r0
+    private fun emitCall(call: Call) {
+        // Una funcion sin argumentos no tuvo ningun param que reservara su registro.
+        val pending = pendingCall ?: openCall(call.function)
+        pendingCall = null
+
+        // ^h dice cuantos enlaces sube quien llama para llegar al registro de la funcion
+        // que contiene a la llamada. Con ^0 es su propio fp.
+        call.accessHops?.let { calls.storeAccessLink(pending.frame, memory.accessLink(it)) }
+
+        // Lo ultimo antes del salto. Una funcion de Compiscript usa los mismos registros
+        // que reparte getReg y no los devuelve intactos, asi que lo que quede en uno se
+        // pierde: al llegar al bl no puede quedar nada. Las rutinas del runtime si los
+        // conservan, y por eso print no vacia.
+        registers.flush()
+        calls.call(call.function)
+        calls.closeFrame(pending.frame)
+
+        val result = call.result
+        if (result != null) {
+            if (call.resultKind == OperandKind.FLOAT) {
+                memory.storeFloat(FloatRegister.D0, result)
+            } else {
+                val register = registers.registerForResult(emptyList())
+                emitter.instruction("mov", register.text, Register.R0.text)
+                registers.recordResult(register)
+            }
+        }
+
+        // Una llamada cierra el bloque, asi que el siguiente va a buscar el resultado en
+        // memoria: hay que dejarlo ahi antes de salir.
+        registers.flush()
+    }
+
+    //     return t1   ->   mov r0, Rt1   vaciado   b .Lfactorial_fin
+    //
+    // El valor vuelve en r0, o en d0 si es flotante. La casilla "valor devuelto" del
+    // registro de activacion no se usa: ese registro ya se libero cuando quien llama lee
+    // el resultado. El vaciado va antes del salto por lo mismo que en la fase 4, y
+    // ademas porque una global que solo vivia en un registro se perderia al volver.
+    private fun emitReturn(instruction: Return, function: FunctionLabel) {
+        val value = instruction.value
+        when {
+            value == null -> Unit
+            instruction.kind == OperandKind.FLOAT ->
+                memory.loadFloatOperand(value, FloatRegister.D0)
+            isVariable(value) ->
+                emitter.instruction("mov", Register.R0.text, registers.registerFor(value).text)
+            else -> loadConstant(Register.R0, value)
+        }
+        registers.flush()
+        emitter.instruction("b", ArmNames.functionExit(function))
+    }
+
+    // `sub sp, sp, #20`: la parte fija del registro nuevo.
+    private fun openCall(callee: FunctionLabel): PendingCall =
+        PendingCall(calls.openFrame(callee)).also { pendingCall = it }
+
+    // A quien se esta llamando. Entre el primer param y su call el TAC no tiene otra
+    // cosa, asi que la busqueda es lineal y corta.
+    private fun calleeOf(following: List<Quadruple>): FunctionLabel {
+        val call = following.firstOrNull { it is Call || it is IndirectCall }
+            ?: error("Un param sin su call")
+        return (call as? Call)?.function ?: throw UntranslatedInstruction(call)
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
     //  Flotantes
     // ══════════════════════════════════════════════════════════════════════
 
@@ -629,11 +689,6 @@ class ArmGenerator(
         emitter.instruction("vldr", register.text, memory(Register.IP))
     }
 
-    private fun frameOf(function: FunctionLabel): Frame =
-        checkNotNull(framesByFunction[function]) { "'${function.name}' sin registro" }
-
-    private fun isMain(function: FunctionLabel): Boolean =
-        ArmNames.function(function) == ArmNames.ENTRY_POINT
 }
 
 // Las rutinas de apoyo, escritas a mano. Van al final de cada programa.

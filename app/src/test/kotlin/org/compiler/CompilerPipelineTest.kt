@@ -160,7 +160,7 @@ class CompilerPipelineTest {
     // Mientras el backend este incompleto, el TAC se sigue mostrando.
     @Test
     fun `un programa con una instruccion sin traducir conserva su TAC`() {
-        val result = CompilerPipeline.compile("function f() { } f();")
+        val result = CompilerPipeline.compile("let xs: integer[] = [1];")
 
         assertNotNull(result.tac)
         assertNull(result.assembly)
