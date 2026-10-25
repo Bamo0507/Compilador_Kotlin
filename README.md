@@ -110,7 +110,7 @@ Al arrancar se carga un programa de demostración que ejercita clases, herencia,
 selector que está sobre el editor permite cargar cualquiera de los 61 programas de
 la batería de pruebas, o empezar en blanco.
 
-### Las tres vistas del IDE
+### Las vistas del IDE
 
 Se cambia entre ellas desde el menú **Vista**.
 
@@ -124,36 +124,54 @@ Se cambia entre ellas desde el menú **Vista**.
   visual del trabajo del analizador.
 - **Tabla de símbolos**, el árbol de ámbitos navegable con los símbolos de cada
   entorno, y el reporte de vivacidad.
+- **Código intermedio**, el código de tres direcciones del programa, como texto o
+  como tabla de cuádruplos.
+- **Código ARM**, el ensamblador que genera el compilador. Cada instrucción del código
+  intermedio aparece como comentario antes de su traducción, de modo que se pueden
+  leer las dos juntas. El runtime, que es igual para todos los programas, se oculta
+  por defecto y se muestra con el filtro de arriba.
 
 ### Ejecutar el código ARM
 
-El compilador genera ensamblador ARM de 32 bits, que no corre directo en una Mac. Para
-eso se usa un contenedor Linux ARM con `gcc`, emulado con QEMU.
+El compilador genera ensamblador ARM de 32 bits que se enlaza con la biblioteca de C.
+En una Raspberry Pi corre directo; en una Mac o en una PC se usa un contenedor Linux
+ARM con `gcc`, emulado con QEMU.
 
-Una sola vez, construir la imagen:
+**1. Generar el `.s`.** En el IDE, compilar el programa y elegir **Archivo, Exportar
+código ARM...**. El archivo se guarda junto al `.cps`, con el mismo nombre y la
+extensión `.s`, e incluye el runtime: es un programa completo.
+
+**2. Preparar el contenedor, una sola vez.** Hace falta Docker; en macOS, Colima o
+Docker Desktop.
 
 ```bash
 docker build -t compiscript-arm scripts
 ```
 
-Con Colima, registrar antes el emulador de ARM. Hay que repetirlo cada vez que Colima
-reinicia:
+**3. Registrar el emulador de ARM.** Con Colima hay que repetirlo cada vez que Colima
+reinicia; Docker Desktop ya lo trae.
 
 ```bash
 docker run --privileged --rm tonistiigi/binfmt --install arm
 ```
 
-Después, cada programa se ensambla y se corre con una línea, que devuelve el código de
-salida del programa:
+**4. Correr el programa.** El script lo ensambla con `gcc`, lo ejecuta y devuelve su
+código de salida: 0 si terminó bien, 1 si terminó por un error sin `catch` o por falta
+de memoria.
 
 ```bash
-scripts/arm.sh scripts/hola.s
-# int=42 double=3.500000
+scripts/arm.sh ruta/a/factorial.s
+# 120
 ```
 
 El `.s` tiene que estar en una carpeta dentro de `$HOME`, porque Colima solo comparte
-esas carpetas con el contenedor. En una Raspberry Pi real no hace falta nada de esto:
-basta `gcc -o programa programa.s && ./programa`.
+esas carpetas con el contenedor.
+
+**En una Raspberry Pi** no hace falta nada de lo anterior, basta con:
+
+```bash
+gcc -o factorial factorial.s && ./factorial
+```
 
 ---
 

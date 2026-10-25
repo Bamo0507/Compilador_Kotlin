@@ -19,7 +19,8 @@ enum class AppView {
     WORKSPACE,
     TREES,
     SYMBOLS,
-    INTERMEDIATE_CODE
+    INTERMEDIATE_CODE,
+    ASSEMBLY
 }
 
 @Composable
@@ -66,4 +67,5 @@ fun AppView.displayName(): String = when (this) {
     AppView.TREES -> "Árboles"
     AppView.SYMBOLS -> "Tabla de símbolos"
     AppView.INTERMEDIATE_CODE -> "Código intermedio"
+    AppView.ASSEMBLY -> "Código ARM"
 }

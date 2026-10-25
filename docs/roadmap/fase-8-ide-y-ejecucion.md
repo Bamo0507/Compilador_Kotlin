@@ -9,11 +9,16 @@ cuando el generador traduce todo.
 **Al terminar:** una pantalla "Código ARM" en el IDE, una opción del menú para guardar
 el `.s`, y la explicación de cómo correrlo en el README.
 
+**Cómo quedó:** la pantalla no tiene la columna opcional con el TAC de la función
+seleccionada. El `.s` ya trae cada instrucción del TAC como comentario antes de su
+traducción, así que la comparación se lee en una sola columna. En su lugar hay un
+filtro para mostrar u ocultar el runtime, que es igual en todos los programas.
+
 ---
 
 ## Ticket 8.1: La pantalla del código ARM
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 2.4
 
 **Archivos:**
@@ -37,7 +42,7 @@ instrucción con su traducción.
 
 ## Ticket 8.2: Exportar el `.s`
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 8.1
 
 **Archivos:**
@@ -59,7 +64,7 @@ nombre y la extensión `.s`.
 
 ## Ticket 8.3: Cómo ejecutar, en el README
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 0.2, 8.2
 
 **Archivos:**

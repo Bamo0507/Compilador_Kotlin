@@ -77,6 +77,7 @@ class AppStateTest {
         assertNotNull(result)
         assertTrue(result.errors.isEmpty(), "errores: ${result.errors.map { it.message }}")
         assertNotNull(result.tac)
+        assertNotNull(result.assembly, "La pantalla del código ARM quedaría vacía")
 
         val execution = result.execution
         assertNotNull(execution)
@@ -98,6 +99,7 @@ class AppStateTest {
         assertNotNull(result)
         assertTrue(result.semanticErrors.isNotEmpty())
         assertNull(result.tac)
+        assertNull(result.assembly)
 
         // Un error del PROGRAMA no es un error de la aplicacion: el banner sigue
         // vacio y el mensaje va a la lista.

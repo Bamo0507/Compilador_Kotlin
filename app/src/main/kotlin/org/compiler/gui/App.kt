@@ -18,6 +18,7 @@ import androidx.compose.ui.unit.dp
 import org.compiler.gui.components.AppView
 import org.compiler.gui.components.FileMenu
 import org.compiler.gui.components.ViewMenu
+import org.compiler.gui.screens.AssemblyScreen
 import org.compiler.gui.screens.SymbolTableScreen
 import org.compiler.gui.screens.IntermediateCodeScreen
 import org.compiler.gui.screens.TreesScreen
@@ -62,6 +63,11 @@ fun App() {
                     )
 
                     AppView.INTERMEDIATE_CODE -> IntermediateCodeScreen(
+                        state = appState,
+                        modifier = Modifier.fillMaxSize()
+                    )
+
+                    AppView.ASSEMBLY -> AssemblyScreen(
                         state = appState,
                         modifier = Modifier.fillMaxSize()
                     )

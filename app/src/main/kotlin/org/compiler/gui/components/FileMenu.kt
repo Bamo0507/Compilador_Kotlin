@@ -10,6 +10,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import org.compiler.backend.ArmPrinter
+import org.compiler.backend.models.AssemblyProgram
 import org.compiler.frontend.intermediate.TacPrinter
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.gui.state.AppState
@@ -62,6 +64,14 @@ fun FileMenu(
             onClick = {
                 expanded = false
                 exportIntermediateCode(state)
+            }
+        )
+        DropdownMenuItem(
+            text = { Text("Exportar código ARM...") },
+            enabled = state.result?.assembly != null,
+            onClick = {
+                expanded = false
+                exportAssembly(state)
             }
         )
     }
@@ -130,6 +140,26 @@ internal fun saveIntermediateCode(file: File, tac: TacProgram): File {
     return target
 }
 
+private fun exportAssembly(state: AppState) {
+    val assembly = state.result?.assembly ?: return
+    runCatching {
+        val file = chooseFile("Exportar código ARM", FileDialog.SAVE, ASSEMBLY_EXTENSION)
+            ?: return
+        saveAssembly(file, assembly)
+        state.errorMessage = null
+    }.onFailure {
+        state.errorMessage = "No se pudo exportar el código ARM: ${it.message}"
+    }
+}
+
+// programa.cps se exporta como programa.s, con el runtime al final: es un programa
+// completo que gcc ensambla y enlaza tal cual, con scripts/arm.sh o en una Raspberry Pi.
+internal fun saveAssembly(file: File, assembly: AssemblyProgram): File {
+    val target = File(file.parentFile, "${file.nameWithoutExtension}$ASSEMBLY_EXTENSION")
+    target.writeText(ArmPrinter.print(assembly))
+    return target
+}
+
 // El dialogo de AWT no agrega la extension: un nombre sin punto se guarda sin ella.
 private fun withCompiscriptExtension(file: File): File =
     if (file.name.contains('.')) file else File(file.parentFile, "${file.name}$EXTENSION")
@@ -146,3 +176,4 @@ private fun chooseFile(title: String, mode: Int, extension: String = EXTENSION):
 
 private const val EXTENSION = ".cps"
 private const val TAC_EXTENSION = ".tac"
+private const val ASSEMBLY_EXTENSION = ".s"
