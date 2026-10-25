@@ -8,12 +8,15 @@ import org.compiler.backend.ArmPrinter
 import org.compiler.backend.Frame
 import org.compiler.backend.UntranslatedInstruction
 import org.compiler.backend.models.AssemblyProgram
+import org.compiler.frontend.intermediate.models.Arithmetic
+import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.FunctionLabel
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Print
 import org.compiler.frontend.intermediate.models.Quadruple
+import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.intermediate.models.VirtualTableDefinition
 import org.compiler.runtime.CompilerPipeline
 import org.junit.jupiter.api.Assumptions.assumeTrue
@@ -228,13 +231,18 @@ class ArmGeneratorTest {
         )
     }
 
+    // El residuo entre flotantes no existe en el lenguaje, porque el verificador lo
+    // rechaza. Escrito a mano en el TAC, el generador no lo traduce y lo dice.
     @Test
-    fun `una instruccion que todavia no se traduce falla con su texto`() {
-        val error = assertFailsWith<UntranslatedInstruction> {
-            assemblyOf("try { print(1); } catch (e) { print(e); }")
-        }
+    fun `una instruccion que no se traduce falla con su texto`() {
+        val modulo = Arithmetic(
+            Temporary(1), Constant(5.5), ArithmeticOperator.MODULO, Constant(2.0),
+            OperandKind.FLOAT
+        )
 
-        assertEquals("Todavía no se traduce: try L1, e", error.message)
+        val error = assertFailsWith<UntranslatedInstruction> { linesOf(0, modulo) }
+
+        assertTrue(error.message.orEmpty().startsWith("Todavía no se traduce: t1 = 5.5 %"))
     }
 
     // ── print ──────────────────────────────────────────────────────────────

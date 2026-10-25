@@ -38,6 +38,9 @@ object ArmNames {
     const val LIST_APPEND = "${PROGRAM_PREFIX}lista_agregar"
     const val CONCATENATE = "${PROGRAM_PREFIX}concatenar"
     const val THROW = "${PROGRAM_PREFIX}lanzar"
+    const val TRY_ENTER = "${PROGRAM_PREFIX}try_entrar"
+    const val TRY_EXIT = "${PROGRAM_PREFIX}try_salir"
+    const val EXCEPTION = "${PROGRAM_PREFIX}excepcion"
 
     // `factorial` -> `cps_factorial`; el main implicito -> `main`.
     fun function(function: FunctionLabel): String =

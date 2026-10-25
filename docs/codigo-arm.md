@@ -866,3 +866,102 @@ Como las demás rutinas del runtime, cps_reservar, cps_lista_agregar y cps_conca
 conservan los registros r4 a r11 y dejan la pila alineada a 8 cuando llaman a la
 biblioteca de C. Por eso ninguna de ellas obliga a vaciar los registros de getReg: los
 valores que estaban en un registro antes de la llamada siguen ahí después.
+
+## 7. Las excepciones
+
+### 7.1 La pila de manejadores
+
+Un throw puede ocurrir varias llamadas más abajo del try que lo atrapa. Cuando eso pasa,
+el programa tiene que volver de golpe a la función que abrió el try, descartar los
+registros de activación de todas las funciones de en medio y seguir en el catch. Es la
+idea de setjmp y longjmp de C: guardar dónde estaba la pila para poder regresar a ese
+punto después.
+
+Cada try deja una nota en una pila global que vive en el montículo. La nota dice "si algo
+falla, vuelve a este registro de activación, con la pila así, y salta a esta etiqueta".
+La variable global cps_manejadores apunta a la nota de arriba, y cada nota apunta a la
+anterior.
+
+| Desplazamiento en la nota | Campo |
+|---|---|
+| 0 | La nota anterior, o 0 si es la última |
+| 4 | El sp de la función que abrió el try |
+| 8 | Su fp |
+| 12 | La dirección de la etiqueta del catch |
+
+Tres rutinas del runtime manejan esa pila:
+
+| Rutina | Recibe | Qué hace |
+|---|---|---|
+| cps_try_entrar | r0: la dirección del catch | Apila una nota con el sp y el fp de quien llama |
+| cps_try_salir | Nada | Desapila la nota de arriba y la libera |
+| cps_lanzar | r0: el mensaje | Sin notas, imprime el error y termina con código 1. Con una nota, la desapila, deja el mensaje en cps_excepcion, restaura sp y fp y salta al catch |
+
+Restaurar sp y fp es todo lo que hace falta para descartar las funciones de en medio. fp
+vuelve a apuntar al registro de activación de la función del try, de modo que sus
+variables están otra vez donde el código espera encontrarlas, y sp vuelve a quedar debajo
+de ese registro, como si las llamadas de por medio nunca hubieran ocurrido. Ninguna de
+esas funciones ejecuta su epílogo.
+
+### 7.2 La traducción
+
+Este es el fragmento real de la función dividir, que retorna desde el try y desde el
+catch:
+
+| Código intermedio | ARM | Qué hace |
+|---|---|---|
+| try L1, error | ldr r0, =.Ldividir_1 y bl cps_try_entrar | Apila la nota con la dirección del catch |
+| throw "División entre cero (línea 8)" | ldr r0, =.Lstr_1 y bl cps_lanzar | Salta al catch y no vuelve |
+| endtry | str r4, [fp, #-40] y bl cps_try_salir | Guarda t1, que el return va a leer, y desapila la nota |
+| return t1 | ldr r4, [fp, #-40] y mov r0, r4 y b .Ldividir_fin | Retorna normalmente |
+| L1: | .Ldividir_1: y ldr r0, =cps_excepcion y ldr r0, [r0] y str r0, [fp, #-28] | Guarda el mensaje en error |
+| return -1 | mvn r0, #0 y b .Ldividir_fin | Retorna desde el catch |
+
+La etiqueta del catch es la única etiqueta que hace algo además de marcar un lugar:
+lee el mensaje que dejó cps_lanzar y lo guarda en la variable del catch. Como una
+etiqueta empieza un bloque básico, la variable queda en memoria, que es donde la va a
+buscar el resto del catch.
+
+El código intermedio ya resolvió el caso del return dentro de un try: antes de cada
+return emite un endtry por cada try abierto, así que la pila de notas nunca guarda un
+registro de activación que ya no existe.
+
+### 7.3 El vaciado antes del try y del throw
+
+Un throw puede llegar desde cualquier punto del bloque protegido, incluso desde una
+función llamada, y el catch no sabe desde dónde vino. Lo único que puede suponer es que
+las variables están en memoria. Por eso el generador vacía los registros antes de cada
+try y antes de cada throw: cualquier valor que solo estuviera en un registro se perdería
+al restaurar sp y fp. Las llamadas ya vaciaban antes del bl, así que un error lanzado en
+otra función encuentra todo en su lugar.
+
+En mi caso, considero que esta pila de notas es la solución más honesta con la máquina.
+Una alternativa sería que cada función revisara, después de cada llamada, si volvió con
+un error pendiente y lo propagara hacia arriba. Funcionaría, pero agregaría una
+comparación y un salto después de cada llamada del programa, aunque nunca falle nada. Con
+la pila de notas el costo solo lo paga el código que usa try, y el throw cruza cualquier
+cantidad de funciones con tres instrucciones: restaurar sp, restaurar fp y saltar.
+
+### 7.4 Un error sin catch
+
+Si no hay ninguna nota, cps_lanzar no tiene a dónde saltar. Primero vacía lo que printf
+tenía pendiente de imprimir, después escribe "Error: " y el mensaje en la salida de
+errores, y termina el programa con código 1. Es el mismo comportamiento que el
+intérprete, que muestra todo lo que el programa alcanzó a imprimir y después el error.
+
+### 7.5 El texto del mensaje
+
+Hay una diferencia conocida con el intérprete, y está en el texto que recibe la variable
+del catch, no en el flujo. El código intermedio lanza cada error con un texto fijo que
+incluye la línea, como "División entre cero (línea 8)", y ese es el texto que llega al
+catch en ARM. El intérprete, en cambio, guarda la línea aparte y entrega solo
+"División entre cero"; para un índice fuera de rango incluso arma el texto al ejecutar,
+con el índice y el tamaño de la lista.
+
+Qué catch atrapa el error, qué se imprime antes y después, y con qué código termina el
+programa es idéntico en los dos. Solo cambia lo que se ve si el programa imprime la
+variable del catch. En mi caso, considero que es una diferencia razonable de dejar: el
+código intermedio ya estaba cerrado, y reproducir en ensamblador los textos que el
+intérprete arma al ejecutar agregaría formato de números en el runtime solo para un
+mensaje de error.
+

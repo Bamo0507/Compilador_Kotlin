@@ -247,17 +247,97 @@ cps_concatenar:
     pop {r4, r5, r6, r7, r8, pc}
 
 @ ════════════════════════════════════════════════════════════════════════
-@  Los errores
+@  Los errores: la pila de manejadores
 @ ════════════════════════════════════════════════════════════════════════
+@
+@ Cada try deja una nota en una pila: "si algo falla, vuelve a este registro
+@ de activacion, con la pila asi, y salta a esta etiqueta". throw toma la
+@ nota de arriba y hace exactamente eso. Restaurar sp y fp descarta de golpe
+@ los registros de activacion de todas las funciones que estaban de por
+@ medio. Es la idea de setjmp y longjmp de C.
+@
+@ Cada nota mide 16 bytes y vive en el monticulo:
+@    [nota, #0]    la nota anterior, o 0 si es la ultima
+@    [nota, #4]    el sp de la funcion que abrio el try
+@    [nota, #8]    su fp
+@    [nota, #12]   la direccion de la etiqueta del catch
+
+    .bss
+    .balign 4
+cps_manejadores:                    @ la nota de arriba, o 0 si no hay ningun try
+    .space 4
+cps_excepcion:                      @ el mensaje del ultimo error lanzado
+    .space 4
+
+    .text
+
+@ ────────────────────────────────────────────────────────────────────────
+@  cps_try_entrar
+@  Recibe: r0, la direccion de la etiqueta del catch.
+@  Apila una nota con el sp y el fp de quien llama. Como se entra con bl, sin
+@  tocar la pila, el sp de quien llama es el que habia antes del push.
+@ ────────────────────────────────────────────────────────────────────────
+cps_try_entrar:
+    push {r4, r5, r6, lr}
+    mov r4, r0                      @ r4: la etiqueta del catch
+    add r5, sp, #16                 @ r5: el sp de quien llama, antes del push
+    mov r6, fp                      @ r6: su fp
+
+    mov r0, #16
+    bl cps_reservar                 @ r0: la nota nueva
+
+    ldr r1, =cps_manejadores
+    ldr r2, [r1]
+    str r2, [r0, #0]                @ la nota anterior
+    str r5, [r0, #4]
+    str r6, [r0, #8]
+    str r4, [r0, #12]
+    str r0, [r1]                    @ la nueva queda arriba
+    pop {r4, r5, r6, pc}
+
+@ ────────────────────────────────────────────────────────────────────────
+@  cps_try_salir
+@  El bloque protegido termino sin errores: desapila su nota y la libera.
+@ ────────────────────────────────────────────────────────────────────────
+cps_try_salir:
+    push {r4, lr}
+    ldr r1, =cps_manejadores
+    ldr r0, [r1]                    @ la nota de arriba
+    ldr r2, [r0, #0]
+    str r2, [r1]                    @ la anterior queda arriba
+    bl free
+    pop {r4, pc}
 
 @ ────────────────────────────────────────────────────────────────────────
 @  cps_lanzar
-@  Recibe: r0, el mensaje del error.
-@  Imprime "Error: " y el mensaje en la salida de errores, y termina con
-@  codigo 1, igual que un error en ejecucion sin catch en el interprete.
+@  Recibe: r0, el mensaje del error. No vuelve.
+@
+@  Sin notas, nadie atrapa el error: imprime "Error: " y el mensaje en la
+@  salida de errores y termina con codigo 1, igual que un error sin catch en
+@  el interprete. Con una nota, la desapila, deja el mensaje en
+@  cps_excepcion, restaura el sp y el fp que guardo el try y salta al catch.
+@  El catch lee el mensaje de cps_excepcion y lo guarda en su variable.
 @ ────────────────────────────────────────────────────────────────────────
 cps_lanzar:
-    b cps_terminar_con_error
+    ldr r1, =cps_manejadores
+    ldr r2, [r1]                    @ r2: la nota de arriba
+    cmp r2, #0
+    beq cps_terminar_con_error
+
+    ldr r3, =cps_excepcion
+    str r0, [r3]                    @ el mensaje, para el catch
+
+    ldr r3, [r2, #0]
+    str r3, [r1]                    @ la anterior queda arriba
+    ldr r4, [r2, #4]                @ r4: el sp del try
+    ldr r5, [r2, #8]                @ r5: su fp
+    ldr r6, [r2, #12]               @ r6: la etiqueta del catch
+    mov r0, r2
+    bl free                         @ sp sigue alineado: se entro con bl
+
+    mov sp, r4                      @ los registros de en medio se descartan
+    mov fp, r5
+    bx r6
 
 @ ────────────────────────────────────────────────────────────────────────
 @  cps_terminar_con_error

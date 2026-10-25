@@ -84,8 +84,9 @@ Docker.
 
 Se completa el documento con el runtime (cada rutina, qué recibe y qué devuelve), las
 excepciones, y una sección de supuestos y limitaciones: sin liberación de memoria, sin
-chequeo de desbordamiento de pila, el formato de los flotantes, y los registros que
-quedan sin usar.
+chequeo de desbordamiento de pila, el formato de los flotantes, los registros que
+quedan sin usar, y el texto del mensaje que recibe la variable del catch, que en ARM
+incluye la línea y en el intérprete no.
 
 ### Aceptación
 

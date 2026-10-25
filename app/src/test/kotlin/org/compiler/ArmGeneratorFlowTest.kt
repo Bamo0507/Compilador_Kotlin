@@ -14,6 +14,7 @@ import org.compiler.frontend.intermediate.models.Quadruple
 import org.compiler.frontend.intermediate.models.RelationalOperator
 import org.compiler.runtime.CompilerPipeline
 import org.compiler.samples.SamplePrograms
+import org.junit.jupiter.api.Assumptions.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -274,5 +275,122 @@ class ArmGeneratorFlowTest {
 
             assertNotNull(result.assembly, "$name se quedo sin ensamblador")
         }
+    }
+
+    // ── Excepciones ────────────────────────────────────────────────────────
+
+    private val protectedProgram = """
+        function f(a: integer) {
+          let x: integer = a + 1;
+          try { print(x); } catch (e) { print(e); }
+        }
+    """.trimIndent()
+
+    // try apila una nota con la direccion de su catch. Antes se vacia: x solo estaba en
+    // un registro, y el catch la buscaria en memoria.
+    @Test
+    fun `try vacia los registros y apila la direccion de su catch`() {
+        val code = translationOf(protectedProgram, "try L1, e")
+
+        assertTrue(code.first().startsWith("str "), code.joinToString("\n"))
+        assertEquals(listOf("ldr r0, =.Lf_1", "bl cps_try_entrar"), code.takeLast(2))
+    }
+
+    @Test
+    fun `endtry desapila la nota`() {
+        assertEquals(listOf("bl cps_try_salir"), translationOf(protectedProgram, "endtry"))
+    }
+
+    // La etiqueta del catch guarda en e el mensaje que dejo cps_lanzar.
+    @Test
+    fun `el catch guarda el mensaje del error en su variable`() {
+        val code = translationOf(protectedProgram, "L1:")
+
+        assertEquals(
+            listOf(".Lf_1:", "ldr r0, =cps_excepcion", "ldr r0, [r0]"), code.take(3)
+        )
+        assertTrue(code.last().startsWith("str r0, [fp, #-"), code.joinToString("\n"))
+    }
+
+    // ── Excepciones en el contenedor ───────────────────────────────────────
+
+    private fun runInContainer(name: String, source: String): ArmContainer.Execution {
+        assumeTrue(ArmContainer.isAvailable, "Sin Docker o sin la imagen compiscript-arm")
+        val result = CompilerPipeline.compile(source)
+        val assembly = assertNotNull(result.assembly, "El backend no tradujo:\n$source")
+        return ArmContainer.run(name, ArmPrinter.print(assembly))
+    }
+
+    /**
+     * El error nace dos llamadas abajo del try. cps_lanzar restaura el sp y el fp de main,
+     * y con eso descarta de golpe los registros de intermedia y de dividir. Si la pila
+     * quedara mal, la recursion y los print de despues fallarian. Tambien se prueban un
+     * try dentro de una funcion, que atrapa su propio error y retorna desde el catch, y
+     * un error que no atrapa el try de adentro sino el de afuera. El catch no imprime
+     * su variable: el texto del mensaje es distinto en el interprete.
+     */
+    @Test
+    fun `un error lanzado varias llamadas abajo llega a su catch`() {
+        val source = """
+            function dividir(a: integer, b: integer): integer { return a / b; }
+            function intermedia(a: integer, b: integer): integer {
+              let r: integer = dividir(a, b);
+              return r + 1;
+            }
+            function factorial(n: integer): integer {
+              if (n <= 1) { return 1; }
+              return n * factorial(n - 1);
+            }
+            function protegida(x: integer): integer {
+              try { return 10 / x; } catch (e) { return -1; }
+            }
+
+            var total: integer = 7;
+            try {
+              print(intermedia(10, 0));
+              print(99);
+            } catch (error) {
+              print("atrapado");
+              total = total + 1;
+            }
+            print(total);
+            print(factorial(5));
+            try { print(intermedia(10, 2)); } catch (error) { print("no llega"); }
+            try {
+              print(protegida(0));
+              print(protegida(5));
+              print(intermedia(1, 0));
+            } catch (e) {
+              print("afuera");
+            }
+            print(factorial(6));
+        """.trimIndent()
+        val expected = CompilerPipeline.compile(source).execution?.output
+
+        val execution = runInContainer("excepciones", source)
+
+        assertEquals(0, execution.exitCode, execution.output)
+        assertEquals(expected, execution.output.lines().dropLast(1))
+    }
+
+    // Sin try, el error termina el programa con codigo 1, despues de lo que ya se
+    // imprimio, igual que en el interprete.
+    @Test
+    fun `un error sin catch termina con codigo 1`() {
+        val source = """
+            function dividir(a: integer, b: integer): integer { return a / b; }
+            print(1);
+            print(dividir(10, 0));
+            print(2);
+        """.trimIndent()
+        val interpreted = CompilerPipeline.compile(source).execution
+        assertNotNull(interpreted?.runtimeError)
+
+        val execution = runInContainer("sin_catch", source)
+
+        assertEquals(1, execution.exitCode, execution.output)
+        val lines = execution.output.lines().dropLast(1)
+        assertEquals(interpreted?.output, lines.dropLast(1))
+        assertTrue(lines.last().startsWith("Error: División entre cero"), lines.last())
     }
 }

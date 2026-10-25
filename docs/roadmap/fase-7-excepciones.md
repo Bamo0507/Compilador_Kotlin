@@ -18,7 +18,7 @@ errores, que vienen de objetos y listas (Fase 6).
 
 ## Ticket 7.1: La pila de manejadores
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.1
 
 **Archivos:**

@@ -2,6 +2,7 @@ package org.compiler
 
 import org.compiler.frontend.ast.models.TreeNodeView
 import org.compiler.runtime.CompilerPipeline
+import org.compiler.samples.SamplePrograms
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -157,13 +158,14 @@ class CompilerPipelineTest {
         assertNotNull(result.assembly)
     }
 
-    // Mientras el backend este incompleto, el TAC se sigue mostrando.
+    // El backend traduce todo lo que el lenguaje permite: ningun programa valido de la
+    // bateria se queda sin ensamblador.
     @Test
-    fun `un programa con una instruccion sin traducir conserva su TAC`() {
-        val result = CompilerPipeline.compile("try { print(1); } catch (e) { print(e); }")
-
-        assertNotNull(result.tac)
-        assertNull(result.assembly)
+    fun `todo programa valido de la bateria tiene ensamblador`() {
+        SamplePrograms.all.filter { it.id.startsWith("validos/") }.forEach { sample ->
+            val result = CompilerPipeline.compile(sample.source, execute = false)
+            assertNotNull(result.assembly, sample.id)
+        }
     }
 
     @Test

@@ -40,6 +40,8 @@ import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.intermediate.models.TacUnaryOperator
 import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.intermediate.models.Throw
+import org.compiler.frontend.intermediate.models.TryBegin
+import org.compiler.frontend.intermediate.models.TryEnd
 import org.compiler.frontend.intermediate.models.Unary
 import org.compiler.frontend.intermediate.models.VirtualTableAddress
 import org.compiler.frontend.intermediate.models.VirtualTableDefinition
@@ -239,6 +241,8 @@ class ArmGenerator(
         // el flujo, y eso no se ve mirando una instruccion a la vez.
         val blocks = basicBlocksOf(body)
         val liveness = BlockLiveness(blocks)
+        catchVariables = body.filterIsInstance<TryBegin>()
+            .associate { it.handler to it.exceptionVariable }
 
         blocks.forEachIndexed { number, block ->
             val liveAtExit = liveness.liveAtExitOf(number)
@@ -274,7 +278,7 @@ class ArmGenerator(
             is Unary -> emitUnary(quadruple)
             is Copy -> emitCopy(quadruple)
             is Print -> emitPrint(quadruple)
-            is LabelDefinition -> emitter.label(ArmNames.label(function, quadruple.label))
+            is LabelDefinition -> emitLabel(quadruple.label, function)
             is Goto -> emitGoto(quadruple, function)
             is IfGoto ->
                 emitTruthJump(quadruple.condition, Condition.NOT_EQUAL, quadruple.label, function)
@@ -291,6 +295,8 @@ class ArmGenerator(
             is ListPush -> emitListPush(quadruple)
             is Concat -> emitConcat(quadruple)
             is Throw -> emitThrow(quadruple)
+            is TryBegin -> emitTryBegin(quadruple, function)
+            TryEnd -> emitTryEnd()
             else -> throw UntranslatedInstruction(quadruple)
         }
     }
@@ -447,6 +453,23 @@ class ArmGenerator(
     // ══════════════════════════════════════════════════════════════════════
     //  Control de flujo
     // ══════════════════════════════════════════════════════════════════════
+
+    // La etiqueta del catch de cada try de la funcion, con la variable que recibe el
+    // mensaje del error.
+    private var catchVariables: Map<Label, Address> = emptyMap()
+
+    //     L3:   ->   .Lfactorial_3:
+    //
+    // Si es la etiqueta de un catch, ademas guarda en su variable el mensaje que dejo
+    // cps_lanzar. Una etiqueta empieza un bloque, asi que la variable queda en memoria,
+    // que es donde la va a buscar el resto del catch.
+    private fun emitLabel(label: Label, function: FunctionLabel) {
+        emitter.label(ArmNames.label(function, label))
+        val exceptionVariable = catchVariables[label] ?: return
+        emitter.instruction("ldr", Register.R0.text, literal(ArmNames.EXCEPTION))
+        emitter.instruction("ldr", Register.R0.text, memory(Register.R0))
+        memory.store(Register.R0, exceptionVariable)
+    }
 
     //     goto L3      ->   el vaciado del bloque   b .Lfactorial_3
     private fun emitGoto(goto: Goto, function: FunctionLabel) {
@@ -720,14 +743,36 @@ class ArmGenerator(
     //  Errores
     // ══════════════════════════════════════════════════════════════════════
 
-    //     throw "mensaje"   ->   ldr r0, =.Lstr_3   bl cps_lanzar
+    //     throw "mensaje"   ->   ldr r0, =.Lstr_3   vaciado   bl cps_lanzar
     //
-    // Por ahora no hay try que lo atrape: cps_lanzar imprime el mensaje y termina con
-    // codigo 1. Igual se vacia antes, porque throw cierra el bloque.
+    // cps_lanzar no vuelve: salta al catch del try mas reciente, o termina el programa
+    // si no hay ninguno. El catch lee de memoria, asi que antes se vacia.
     private fun emitThrow(instruction: Throw) {
         loadArgument(Register.R0, instruction.message)
         registers.flush()
         emitter.instruction("bl", ArmNames.THROW)
+    }
+
+    //     try L1, e   ->   vaciado   ldr r0, =.Ldividir_1   bl cps_try_entrar
+    //
+    // La rutina apila una nota con el sp y el fp de este registro y la direccion del
+    // catch. El vaciado va antes porque un throw puede llegar desde cualquier punto del
+    // bloque protegido, incluso desde otra funcion, y el catch va a buscar las variables
+    // en memoria.
+    private fun emitTryBegin(begin: TryBegin, function: FunctionLabel) {
+        registers.flush()
+        val handler = ArmNames.label(function, begin.handler)
+        emitter.instruction("ldr", Register.R0.text, literal(handler))
+        emitter.instruction("bl", ArmNames.TRY_ENTER)
+    }
+
+    //     endtry   ->   vaciado   bl cps_try_salir
+    //
+    // El bloque protegido termino sin errores: se desapila su nota. endtry cierra el
+    // bloque, asi que el vaciado le toca a el.
+    private fun emitTryEnd() {
+        registers.flush()
+        emitter.instruction("bl", ArmNames.TRY_EXIT)
     }
 
     // ══════════════════════════════════════════════════════════════════════
