@@ -26,7 +26,7 @@ class Frame(private val record: ActivationRecordLayout) {
      * La parte fija: de la casilla 0 hasta el final de la direccion de retorno. La
      * reserva quien llama; el resto, la funcion misma.
      *
-     * Redondeada hacia arriba a 8, como el registro completo (decision 42). Sin eso, una
+     * Redondeada hacia arriba a 8, como el registro completo. Sin eso, una
      * funcion con parte fija de 36 dejaria sp en un multiplo de 4 durante toda su
      * ejecucion, y libc exige que sp este alineado a 8 en cada llamada. Los
      * desplazamientos de las casillas no cambian: se cuentan desde fp, que sigue siendo

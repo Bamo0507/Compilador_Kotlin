@@ -10,9 +10,11 @@ import org.compiler.backend.models.memory
 import org.compiler.frontend.intermediate.StorageLayout
 import org.compiler.frontend.intermediate.TacPrinter
 import org.compiler.frontend.intermediate.models.Address
+import org.compiler.frontend.intermediate.models.Allocate
 import org.compiler.frontend.intermediate.models.Arithmetic
 import org.compiler.frontend.intermediate.models.ArithmeticOperator
 import org.compiler.frontend.intermediate.models.Call
+import org.compiler.frontend.intermediate.models.Concat
 import org.compiler.frontend.intermediate.models.Constant
 import org.compiler.frontend.intermediate.models.Copy
 import org.compiler.frontend.intermediate.models.FunctionBegin
@@ -22,9 +24,12 @@ import org.compiler.frontend.intermediate.models.Goto
 import org.compiler.frontend.intermediate.models.IfFalseGoto
 import org.compiler.frontend.intermediate.models.IfGoto
 import org.compiler.frontend.intermediate.models.IfRelationalGoto
+import org.compiler.frontend.intermediate.models.IndexedLoad
+import org.compiler.frontend.intermediate.models.IndexedStore
 import org.compiler.frontend.intermediate.models.IndirectCall
 import org.compiler.frontend.intermediate.models.Label
 import org.compiler.frontend.intermediate.models.LabelDefinition
+import org.compiler.frontend.intermediate.models.ListPush
 import org.compiler.frontend.intermediate.models.OperandKind
 import org.compiler.frontend.intermediate.models.Param
 import org.compiler.frontend.intermediate.models.Print
@@ -33,6 +38,8 @@ import org.compiler.frontend.intermediate.models.Relational
 import org.compiler.frontend.intermediate.models.Return
 import org.compiler.frontend.intermediate.models.TacProgram
 import org.compiler.frontend.intermediate.models.TacUnaryOperator
+import org.compiler.frontend.intermediate.models.Temporary
+import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.Unary
 import org.compiler.frontend.intermediate.models.VirtualTableAddress
 import org.compiler.frontend.intermediate.models.VirtualTableDefinition
@@ -269,12 +276,21 @@ class ArmGenerator(
             is Print -> emitPrint(quadruple)
             is LabelDefinition -> emitter.label(ArmNames.label(function, quadruple.label))
             is Goto -> emitGoto(quadruple, function)
-            is IfGoto -> emitTruthJump(quadruple.condition, Condition.NOT_EQUAL, quadruple.label, function)
-            is IfFalseGoto -> emitTruthJump(quadruple.condition, Condition.EQUAL, quadruple.label, function)
+            is IfGoto ->
+                emitTruthJump(quadruple.condition, Condition.NOT_EQUAL, quadruple.label, function)
+            is IfFalseGoto ->
+                emitTruthJump(quadruple.condition, Condition.EQUAL, quadruple.label, function)
             is IfRelationalGoto -> emitRelationalJump(quadruple, function)
             is Param -> emitParam(quadruple, following)
             is Call -> emitCall(quadruple)
+            is IndirectCall -> emitIndirectCall(quadruple)
             is Return -> emitReturn(quadruple, function)
+            is Allocate -> emitAllocate(quadruple)
+            is IndexedLoad -> emitIndexedLoad(quadruple)
+            is IndexedStore -> emitIndexedStore(quadruple)
+            is ListPush -> emitListPush(quadruple)
+            is Concat -> emitConcat(quadruple)
+            is Throw -> emitThrow(quadruple)
             else -> throw UntranslatedInstruction(quadruple)
         }
     }
@@ -386,13 +402,13 @@ class ArmGenerator(
                 val operand = registerOf(unary.operand, scratch = Register.R2)
                 emitter.instruction("vmov", "s0", operand.text)
                 emitter.instruction("vcvt.f64.s32", FloatRegister.D0.text, "s0")
-                memory.storeFloat(FloatRegister.D0, unary.result)
+                storeFloatResult(unary.result)
             }
             TacUnaryOperator.NEGATE -> {
                 if (unary.kind == OperandKind.FLOAT) {
                     memory.loadFloatOperand(unary.operand, FloatRegister.D1)
                     emitter.instruction("vneg.f64", FloatRegister.D0.text, FloatRegister.D1.text)
-                    memory.storeFloat(FloatRegister.D0, unary.result)
+                    storeFloatResult(unary.result)
                     return
                 }
                 emitIntegerUnary("rsb", unary.operand)
@@ -416,7 +432,7 @@ class ArmGenerator(
     private fun emitCopy(copy: Copy) {
         if (copy.kind == OperandKind.FLOAT) {
             memory.loadFloatOperand(copy.source, FloatRegister.D0)
-            memory.storeFloat(FloatRegister.D0, copy.result)
+            storeFloatResult(copy.result)
             return
         }
         if (isVariable(copy.source)) {
@@ -451,9 +467,9 @@ class ArmGenerator(
         branch(whenToJump, label, function)
     }
 
-    // El TAC ya trae la relacion que hace falta: la decision 34 convirtio cada condicion
-    // en un salto, invirtiendola cuando el salto se da si la condicion NO se cumple. Aqui
-    // no se vuelve a invertir nada.
+    // El TAC ya trae la relacion que hace falta: el generador de TAC convirtio cada
+    // condicion en un salto, invirtiendola cuando el salto se da si la condicion NO se
+    // cumple. Aqui no se vuelve a invertir nada.
     private fun emitRelationalJump(goto: IfRelationalGoto, function: FunctionLabel) {
         emitComparison(goto.left, goto.right, goto.kind)
         branch(Condition.of(goto.operator, goto.kind), goto.label, function)
@@ -470,7 +486,7 @@ class ArmGenerator(
 
     // La llamada que se esta armando: el registro nuevo ya reservado, y por que
     // parametro va. Vive entre el primer `param` y su `call`, que en el TAC son
-    // consecutivos porque los argumentos se evaluan antes (decision 55).
+    // consecutivos porque los argumentos se evaluan antes.
     private class PendingCall(val frame: Frame) {
         var nextParameter = 0
     }
@@ -496,7 +512,7 @@ class ArmGenerator(
         emitter.instruction(mnemonic, value.text, slot)
     }
 
-    //     t2 = call factorial, 1   ->   bl cps_factorial   add sp, sp, #20   mov Rt2, r0
+    //     t2 = call factorial, 1   ->   bl cps_factorial   add sp, sp, #24   mov Rt2, r0
     private fun emitCall(call: Call) {
         // Una funcion sin argumentos no tuvo ningun param que reservara su registro.
         val pending = pendingCall ?: openCall(call.function)
@@ -509,20 +525,38 @@ class ArmGenerator(
         // Lo ultimo antes del salto. Una funcion de Compiscript usa los mismos registros
         // que reparte getReg y no los devuelve intactos, asi que lo que quede en uno se
         // pierde: al llegar al bl no puede quedar nada. Las rutinas del runtime si los
-        // conservan, y por eso print no vacia.
-        registers.flush()
+        // conservan, y por eso print no vacia. Si el resultado es un temporal, su valor de
+        // ahora no se guarda: la llamada lo va a sobrescribir, y la funcion llamada no
+        // puede leerlo. Una variable del programa si se guarda, porque la funcion podria.
+        registers.flush(overwritten = call.result as? Temporary)
         calls.call(call.function)
-        calls.closeFrame(pending.frame)
+        finishCall(pending, call.result, call.resultKind)
+    }
 
-        val result = call.result
+    //     t1 = call t1, 1   ->   la misma secuencia, con blx Rt1 en vez de bl
+    //
+    // La direccion del metodo sale de la tabla del objeto en ejecucion, asi que el salto
+    // es a un registro. La parte fija se arma con el registro del metodo que resolvio el
+    // verificador: todas las versiones de un metodo tienen la misma firma, y sus
+    // registros de activacion empiezan igual.
+    private fun emitIndirectCall(call: IndirectCall) {
+        val pending = pendingCall ?: openCall(call.method)
+        pendingCall = null
+
+        // El registro sigue teniendo la direccion despues del vaciado, que solo guarda.
+        val target = registers.registerFor(call.target)
+        registers.flush(overwritten = call.result as? Temporary)
+        calls.callAddress(target)
+        finishCall(pending, call.result, call.resultKind)
+    }
+
+    // Lo que sigue al salto en las dos llamadas: liberar la parte fija y tomar el
+    // resultado, que vuelve en r0 o en d0.
+    private fun finishCall(pending: PendingCall, result: Address?, resultKind: OperandKind?) {
+        calls.closeFrame(pending.frame)
         if (result != null) {
-            if (call.resultKind == OperandKind.FLOAT) {
-                memory.storeFloat(FloatRegister.D0, result)
-            } else {
-                val register = registers.registerForResult(emptyList())
-                emitter.instruction("mov", register.text, Register.R0.text)
-                registers.recordResult(register)
-            }
+            if (resultKind == OperandKind.FLOAT) storeFloatResult(result)
+            else takeResult(emptyList())
         }
 
         // Una llamada cierra el bloque, asi que el siguiente va a buscar el resultado en
@@ -534,7 +568,7 @@ class ArmGenerator(
     //
     // El valor vuelve en r0, o en d0 si es flotante. La casilla "valor devuelto" del
     // registro de activacion no se usa: ese registro ya se libero cuando quien llama lee
-    // el resultado. El vaciado va antes del salto por lo mismo que en la fase 4, y
+    // el resultado. El vaciado va antes del salto por lo mismo que en los saltos, y
     // ademas porque una global que solo vivia en un registro se perderia al volver.
     private fun emitReturn(instruction: Return, function: FunctionLabel) {
         val value = instruction.value
@@ -550,16 +584,150 @@ class ArmGenerator(
         emitter.instruction("b", ArmNames.functionExit(function))
     }
 
-    // `sub sp, sp, #20`: la parte fija del registro nuevo.
+    // `sub sp, sp, #24`: la parte fija del registro nuevo.
     private fun openCall(callee: FunctionLabel): PendingCall =
         PendingCall(calls.openFrame(callee)).also { pendingCall = it }
 
     // A quien se esta llamando. Entre el primer param y su call el TAC no tiene otra
     // cosa, asi que la busqueda es lineal y corta.
-    private fun calleeOf(following: List<Quadruple>): FunctionLabel {
-        val call = following.firstOrNull { it is Call || it is IndirectCall }
-            ?: error("Un param sin su call")
-        return (call as? Call)?.function ?: throw UntranslatedInstruction(call)
+    private fun calleeOf(following: List<Quadruple>): FunctionLabel =
+        when (val call = following.firstOrNull { it is Call || it is IndirectCall }) {
+            is Call -> call.function
+            is IndirectCall -> call.method
+            else -> error("Un param sin su call")
+        }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  El monticulo: objetos, listas y strings
+    // ══════════════════════════════════════════════════════════════════════
+
+    //     t1 = alloc 12   ->   mov r0, #12   bl cps_reservar   mov Rt1, r0
+    //
+    // cps_reservar devuelve el bloque en ceros, o termina el programa si no hay memoria.
+    // Conserva r4 a r11, como las rutinas de print, asi que no hace falta vaciar.
+    private fun emitAllocate(allocate: Allocate) {
+        val size = loadArgument(Register.R0, allocate.size)
+        emitter.instruction("bl", ArmNames.ALLOCATE)
+        takeResult(listOfNotNull(size))
+    }
+
+    //     t1 = perro[4]            ->   ldr Rt1, [Rperro, #4]
+    //     t1 = lista[t2]           ->   ldr Rt1, [Rlista, Rt2]
+    //     t1 = obj[8] (flotante)   ->   vldr d0, [Robj, #8]   vstr d0, [t1]
+    private fun emitIndexedLoad(load: IndexedLoad) {
+        val address = heapAddressOf(load.base, load.offset, load.kind)
+        if (load.kind == OperandKind.FLOAT) {
+            emitter.instruction("vldr", FloatRegister.D0.text, address.text)
+            storeFloatResult(load.result)
+            return
+        }
+        val result = registers.registerForResult(address.registers)
+        emitter.instruction(loadMnemonicOf(load.kind), result.text, address.text)
+        registers.recordResult(result)
+    }
+
+    //     perro[4] = t1            ->   str Rt1, [Rperro, #4]
+    //     t1[0] = vtable.Perro     ->   ldr r1, =cps_vtable_Perro   str r1, [Rt1]
+    //     t2[0] = 1.5              ->   vldr d0, [.Lfloat_1]   vstr d0, [Rt2]
+    //
+    // El flotante se carga antes que la direccion, porque cargarlo puede usar ip, y la
+    // direccion de un flotante con desplazamiento variable tambien.
+    private fun emitIndexedStore(store: IndexedStore) {
+        if (store.kind == OperandKind.FLOAT) {
+            memory.loadFloatOperand(store.value, FloatRegister.D0)
+            val address = heapAddressOf(store.base, store.offset, store.kind)
+            emitter.instruction("vstr", FloatRegister.D0.text, address.text)
+            return
+        }
+        val address = heapAddressOf(store.base, store.offset, store.kind)
+        val value = registerOf(store.value, scratch = Register.R1)
+        emitter.instruction(storeMnemonicOf(store.kind), value.text, address.text)
+    }
+
+    //     push_i lista, x   ->   mov r0, Rlista   mov r1, #4   bl cps_lista_agregar
+    //                            str Rx, [r0]
+    //
+    // La rutina no escribe el valor: devuelve en r0 la casilla nueva, y el valor se guarda
+    // ahi como en cualquier otra casilla del monticulo. Asi una sola rutina sirve para
+    // todos los tipos.
+    private fun emitListPush(push: ListPush) {
+        loadArgument(Register.R0, push.list)
+        emitter.loadInteger(Register.R1, elementSizeOf(push.kind).toLong())
+        emitter.instruction("bl", ArmNames.LIST_APPEND)
+
+        val slot = memory(Register.R0)
+        if (push.kind == OperandKind.FLOAT) {
+            memory.loadFloatOperand(push.value, FloatRegister.D0)
+            emitter.instruction("vstr", FloatRegister.D0.text, slot)
+            return
+        }
+        val value = registerOf(push.value, scratch = Register.R1)
+        emitter.instruction(storeMnemonicOf(push.kind), value.text, slot)
+    }
+
+    //     x = a concat b   ->   mov r0, Ra   mov r1, Rb   bl cps_concatenar   mov Rx, r0
+    private fun emitConcat(concat: Concat) {
+        val left = loadArgument(Register.R0, concat.left)
+        val right = loadArgument(Register.R1, concat.right)
+        emitter.instruction("bl", ArmNames.CONCATENATE)
+        takeResult(listOfNotNull(left, right))
+    }
+
+    // Una direccion del monticulo, ya escrita como la pide la instruccion, y los
+    // registros de getReg que usa.
+    private data class HeapAddress(val text: String, val registers: List<Register>)
+
+    //     [Rb, #8]   un desplazamiento constante que cabe en la instruccion
+    //     [Rb, Ro]   uno variable
+    //     [ip]       un flotante con desplazamiento variable: vldr y vstr no aceptan un
+    //                registro como desplazamiento, asi que primero se suma en ip
+    private fun heapAddressOf(base: Address, offset: Address, kind: OperandKind): HeapAddress {
+        val baseRegister = registerOf(base, scratch = Register.R2)
+        val isFloat = kind == OperandKind.FLOAT
+
+        val constant = (offset as? Constant)?.let { integerValueOf(it) }
+        if (constant != null && fitsOffset(constant, isFloat)) {
+            return HeapAddress(memory(baseRegister, constant.toInt()), listOf(baseRegister))
+        }
+
+        val offsetRegister = registerOf(offset, scratch = Register.R3)
+        val used = listOf(baseRegister, offsetRegister)
+        if (!isFloat) return HeapAddress(memory(baseRegister, offsetRegister), used)
+        emitter.instruction("add", Register.IP.text, baseRegister.text, offsetRegister.text)
+        return HeapAddress(memory(Register.IP), used)
+    }
+
+    // ldr y str alcanzan 4095 bytes desde la base; vldr y vstr, 1020 y en multiplos de 4.
+    private fun fitsOffset(offset: Long, isFloat: Boolean): Boolean =
+        if (isFloat) offset in -1020L..1020L && offset % 4 == 0L else offset in -4095L..4095L
+
+    // Un booleano mide un byte en un objeto o en una lista: se mueve con ldrb y strb.
+    private fun loadMnemonicOf(kind: OperandKind): String =
+        if (kind == OperandKind.BOOLEAN) "ldrb" else "ldr"
+
+    private fun storeMnemonicOf(kind: OperandKind): String =
+        if (kind == OperandKind.BOOLEAN) "strb" else "str"
+
+    // Cuanto mide un elemento de una lista: lo mismo que su casilla en un registro de
+    // activacion.
+    private fun elementSizeOf(kind: OperandKind): Int = when (kind) {
+        OperandKind.FLOAT -> 8
+        OperandKind.BOOLEAN -> 1
+        OperandKind.INTEGER, OperandKind.STRING, OperandKind.REFERENCE -> 4
+    }
+
+    // ══════════════════════════════════════════════════════════════════════
+    //  Errores
+    // ══════════════════════════════════════════════════════════════════════
+
+    //     throw "mensaje"   ->   ldr r0, =.Lstr_3   bl cps_lanzar
+    //
+    // Por ahora no hay try que lo atrape: cps_lanzar imprime el mensaje y termina con
+    // codigo 1. Igual se vacia antes, porque throw cierra el bloque.
+    private fun emitThrow(instruction: Throw) {
+        loadArgument(Register.R0, instruction.message)
+        registers.flush()
+        emitter.instruction("bl", ArmNames.THROW)
     }
 
     // ══════════════════════════════════════════════════════════════════════
@@ -583,7 +751,7 @@ class ArmGenerator(
         emitter.instruction(
             mnemonic, FloatRegister.D0.text, FloatRegister.D1.text, FloatRegister.D2.text
         )
-        memory.storeFloat(FloatRegister.D0, arithmetic.result)
+        storeFloatResult(arithmetic.result)
     }
 
     // vcmp compara en la unidad de punto flotante, y vmrs copia el resultado a las
@@ -612,14 +780,10 @@ class ArmGenerator(
             OperandKind.FLOAT -> ArmNames.PRINT_FLOAT
             OperandKind.REFERENCE -> error("print de una referencia: el TypeChecker lo rechaza")
         }
-        when {
-            print.kind == OperandKind.FLOAT ->
-                memory.loadFloatOperand(print.value, FloatRegister.D0)
-            isVariable(print.value) -> {
-                val value = registers.registerFor(print.value)
-                emitter.instruction("mov", Register.R0.text, value.text)
-            }
-            else -> loadConstant(Register.R0, print.value)
+        if (print.kind == OperandKind.FLOAT) {
+            memory.loadFloatOperand(print.value, FloatRegister.D0)
+        } else {
+            loadArgument(Register.R0, print.value)
         }
         emitter.instruction("bl", routine)
     }
@@ -634,6 +798,34 @@ class ArmGenerator(
         if (isVariable(operand)) return registers.registerFor(operand)
         loadConstant(scratch, operand)
         return scratch
+    }
+
+    // Un operando en el registro de argumento de una rutina, r0 o r1. Devuelve el registro
+    // de getReg de donde salio, si era una variable, para que el resultado pueda usarlo.
+    // getReg nunca usa r0 a r3, asi que cargar el segundo argumento no pisa el primero.
+    private fun loadArgument(argument: Register, operand: Address): Register? {
+        if (!isVariable(operand)) {
+            loadConstant(argument, operand)
+            return null
+        }
+        val register = registers.registerFor(operand)
+        emitter.instruction("mov", argument.text, register.text)
+        return register
+    }
+
+    // El resultado de una rutina o de una llamada llega en r0, y pasa al registro que le
+    // da getReg.
+    private fun takeResult(operandRegisters: List<Register>) {
+        val result = registers.registerForResult(operandRegisters)
+        emitter.instruction("mov", result.text, Register.R0.text)
+        registers.recordResult(result)
+    }
+
+    // Un flotante no pasa por getReg: se guarda directo en su casilla, y la libreta tiene
+    // que saberlo.
+    private fun storeFloatResult(result: Address) {
+        memory.storeFloat(FloatRegister.D0, result)
+        registers.recordResultInMemory()
     }
 
     // El segundo operando de add, sub o cmp: una constante que cabe va dentro de la

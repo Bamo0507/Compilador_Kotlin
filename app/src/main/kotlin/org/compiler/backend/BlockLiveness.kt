@@ -13,7 +13,17 @@ import org.compiler.frontend.intermediate.models.Temporary
 import org.compiler.frontend.intermediate.models.Throw
 import org.compiler.frontend.intermediate.models.TryBegin
 
-
+/**
+ * Que temporales siguen vivos al salir de cada bloque basico de una funcion.
+ *
+ * El libro supone que un temporal nunca cruza bloques, pero en este TAC si: el resultado
+ * de un ternario se escribe en dos ramas y se lee despues de la etiqueta, y el de una
+ * llamada se escribe en un bloque y se lee en el siguiente. Se resuelve con la ecuacion
+ * de vivacidad sobre el grafo de bloques:
+ *   salida(B) = union de entrada(S) para cada sucesor S
+ *   entrada(B) = leidos(B) + (salida(B) - escritos(B))
+ * repetida hasta que nada cambie. Las variables del programa siempre se consideran vivas.
+ */
 class BlockLiveness(private val blocks: List<BasicBlock>) {
 
     // Por numero de bloque: los temporales que algun camino de salida vuelve a leer.

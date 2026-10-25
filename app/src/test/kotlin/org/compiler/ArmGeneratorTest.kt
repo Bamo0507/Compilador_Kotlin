@@ -172,7 +172,8 @@ class ArmGeneratorTest {
 
     // ── El prologo y el epilogo ────────────────────────────────────────────
 
-    // main reserva su parte fija, porque libc no se la reservo, y devuelve 0.
+    // main guarda los registros de getReg, que libc espera intactos, reserva su parte
+    // fija, porque libc no se la reservo, y devuelve 0.
     @Test
     fun `main guarda los enlaces al entrar y devuelve 0 al salir`() {
         val lines = linesOf("")
@@ -181,6 +182,7 @@ class ArmGeneratorTest {
             listOf(
                 ".global main",
                 "main:",
+                "push {r4, r5, r6, r7, r8, r10}",
                 "sub sp, sp, #16",
                 "add ip, sp, #16",
                 "str fp, [ip, #-4]  @ enlace de control",
@@ -201,6 +203,7 @@ class ArmGeneratorTest {
                 "sub sp, fp, #16",
                 "ldr fp, [fp, #-4]",
                 "add sp, sp, #16",
+                "pop {r4, r5, r6, r7, r8, r10}",
                 "bx lr"
             ),
             translationOf(lines, "end_func \$main").takeWhile { !it.startsWith(".section") }
@@ -228,10 +231,10 @@ class ArmGeneratorTest {
     @Test
     fun `una instruccion que todavia no se traduce falla con su texto`() {
         val error = assertFailsWith<UntranslatedInstruction> {
-            assemblyOf("let xs: integer[] = [1];")
+            assemblyOf("try { print(1); } catch (e) { print(e); }")
         }
 
-        assertEquals("Todavía no se traduce: t1 = alloc 12", error.message)
+        assertEquals("Todavía no se traduce: try L1, e", error.message)
     }
 
     // ── print ──────────────────────────────────────────────────────────────

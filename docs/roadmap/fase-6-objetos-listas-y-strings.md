@@ -14,11 +14,21 @@ de `push`, corren en el contenedor e imprimen lo mismo que el intérprete.
 **Teoría que la sostiene:** puntos 7 y 11 (acceso a memoria y memoria dinámica);
 Dragon Book 7.4 y 6.4.
 
+**Cómo quedó:** los programas de clases y listas traen chequeos de null y de índice que
+terminan en `throw`, así que la fase adelantó una versión básica de `cps_lanzar`: imprime
+el mensaje en la salida de errores y termina con código 1. La Fase 7 le agrega la pila de
+manejadores. Los dos errores, el de `throw` y el de falta de memoria, pasan por
+`cps_terminar_con_error`, que primero vacía la salida pendiente de `printf`. Además, un
+resultado flotante escrito directo en memoria ahora se anota en la libreta de direcciones
+(`recordResultInMemory`), para que el vaciado no lo pise con el valor viejo de un registro.
+29 de los 31 programas válidos imprimen en ARM lo mismo que el intérprete; los dos que
+faltan usan `try`.
+
 ---
 
 ## Ticket 6.1: `alloc` y el administrador de memoria
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 5.2
 
 **Archivos:**
@@ -59,7 +69,7 @@ programa que un `catch` pueda arreglar, y el manejador mismo podría necesitar m
 
 ## Ticket 6.2: Campos y llamadas a métodos
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.1
 
 **Archivos:**
@@ -93,7 +103,7 @@ Para la llamada indirecta, la parte fija sale del método que resolvió el verif
 
 ## Ticket 6.3: Listas que crecen
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.2, 1.4
 
 **Archivos:**
@@ -150,7 +160,7 @@ cada `push` cuesta lo mismo sin importar el tamaño de la lista.
 
 ## Ticket 6.4: Strings
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.1
 
 **Archivos:**
@@ -177,7 +187,7 @@ modifican.
 
 ## Ticket 6.5: El documento, memoria dinámica
 
-- **Estado**: pendiente
+- **Estado**: completado
 - **Depende de**: 6.3, 6.4
 
 **Archivos:**

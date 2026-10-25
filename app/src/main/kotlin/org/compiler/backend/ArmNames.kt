@@ -34,6 +34,10 @@ object ArmNames {
     const val PRINT_STRING = "${PROGRAM_PREFIX}imprimir_string"
     const val PRINT_BOOLEAN = "${PROGRAM_PREFIX}imprimir_booleano"
     const val COMPARE_STRINGS = "${PROGRAM_PREFIX}comparar_strings"
+    const val ALLOCATE = "${PROGRAM_PREFIX}reservar"
+    const val LIST_APPEND = "${PROGRAM_PREFIX}lista_agregar"
+    const val CONCATENATE = "${PROGRAM_PREFIX}concatenar"
+    const val THROW = "${PROGRAM_PREFIX}lanzar"
 
     // `factorial` -> `cps_factorial`; el main implicito -> `main`.
     fun function(function: FunctionLabel): String =

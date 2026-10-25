@@ -252,15 +252,15 @@ class CallingSequenceTest {
      * Lo ultimo antes del `bl` es el vaciado.
      *
      * Una funcion de Compiscript usa los mismos registros que reparte getReg y no los
-     * devuelve intactos, asi que lo que quede en uno se pierde en la llamada. Aqui `t1` y
-     * `t2` estaban solo en registros y se guardan antes de saltar.
+     * devuelve intactos, asi que lo que quede en uno se pierde en la llamada. Aqui `t1`
+     * estaba solo en un registro y se guarda antes de saltar. `t2` tambien, pero no se
+     * guarda: la llamada lo sobrescribe con su resultado.
      */
     @Test
     fun `una llamada vacia los registros antes del bl`() {
         assertEquals(
             listOf(
                 "str r4, [fp, #-32]",
-                "str r5, [fp, #-40]",
                 "bl cps_factorial",
                 "add sp, sp, #24",
                 "mov r4, r0",

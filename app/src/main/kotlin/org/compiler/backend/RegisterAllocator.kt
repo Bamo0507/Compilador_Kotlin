@@ -106,6 +106,15 @@ class RegisterAllocator(
         addressDescriptor.setOnlyIn(target, register)
     }
 
+    // x se escribio directo en su casilla, como pasa con los flotantes, que no usan
+    // getReg. Si un registro tenia el valor de antes de x, ya no le sirve a nadie: sin
+    // esto, el vaciado del final del bloque lo guardaria encima del valor nuevo.
+    fun recordResultInMemory() {
+        val target = checkNotNull(result)
+        registerDescriptor.removeEverywhere(target)
+        addressDescriptor.setOnlyInMemory(target)
+    }
+
     // `x = y` no genera instruccion: x se anota en el registro de y, y su valor queda
     // solo ahi.
     fun recordCopy(sourceRegister: Register) {
@@ -119,10 +128,13 @@ class RegisterAllocator(
 
     // Un str por cada variable viva cuyo valor solo esta en un registro. Despues las
     // libretas quedan en blanco: lo que venga despues encuentra todo en memoria.
-    fun flush() {
+    // `overwritten` es la variable que la instruccion que cierra el bloque va a escribir:
+    // su valor de ahora ya no le sirve a nadie, aunque la variable siga viva.
+    fun flush(overwritten: Address? = null) {
         registerDescriptor.registers.forEach { register ->
             registerDescriptor.variablesIn(register).forEach { variable ->
-                if (!addressDescriptor.isInMemory(variable) && liveAtExit(variable)) {
+                val needed = liveAtExit(variable) && variable != overwritten
+                if (!addressDescriptor.isInMemory(variable) && needed) {
                     memory.store(register, variable)
                     addressDescriptor.add(variable, Location.Memory)
                 }

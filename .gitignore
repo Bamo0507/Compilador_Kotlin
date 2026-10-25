@@ -22,3 +22,6 @@ extras/*.png
 
 # Metadata de macOS
 .DS_Store
+
+# Respaldos locales
+_to_delete/

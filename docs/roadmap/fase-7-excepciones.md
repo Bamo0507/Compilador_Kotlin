@@ -24,7 +24,8 @@ errores, que vienen de objetos y listas (Fase 6).
 **Archivos:**
 
 - `resources/runtime/runtime.s` (MODIFICAR: `cps_try_entrar`, `cps_try_salir`,
-  `cps_lanzar`, las globales `cps_manejadores` y `cps_excepcion`)
+  `cps_lanzar`, las globales `cps_manejadores` y `cps_excepcion`). `cps_lanzar` ya
+  existe desde la Fase 6 en su versión sin manejadores, que termina el programa.
 - `backend/ArmGenerator.kt` (MODIFICAR: `TryBegin`, `TryEnd`, `Throw`, y la etiqueta
   del manejador)
 - Tests: `ArmGeneratorFlowTest` (AMPLIAR)

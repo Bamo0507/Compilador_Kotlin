@@ -40,6 +40,12 @@ class AddressDescriptor {
         locations[variable] = mutableSetOf(Location.InRegister(register))
     }
 
+    // La variable se escribio directo en memoria: los registros que la tenian quedaron
+    // con un valor viejo.
+    fun setOnlyInMemory(variable: Address) {
+        locations[variable] = mutableSetOf(Location.Memory)
+    }
+
     fun add(variable: Address, location: Location) {
         mutableLocationsOf(variable).add(location)
     }

@@ -3,6 +3,7 @@ package org.compiler.backend
 import org.compiler.backend.models.Register
 import org.compiler.backend.models.immediate
 import org.compiler.backend.models.memory
+import org.compiler.backend.models.registerList
 import org.compiler.frontend.intermediate.models.FunctionLabel
 
 class CallingSequence(
@@ -12,7 +13,7 @@ class CallingSequence(
 
     // ── La funcion llamada ─────────────────────────────────────────────────
 
-    //     add ip, sp, #20          el tope del registro, que la llamada dejo reservado
+    //     add ip, sp, #24          el tope del registro, que la llamada dejo reservado
     //     str fp, [ip, #-12]       enlace de control: el fp de quien llama
     //     str lr, [ip, #-20]       direccion de retorno
     //     mov fp, ip               este es el registro actual
@@ -26,8 +27,11 @@ class CallingSequence(
         if (isMain(function)) emitter.directive("global", name)
         emitter.label(name)
 
-        // main lo llama libc, que no reservo nada: se reserva su propia parte fija.
+        // main lo llama libc, que no reservo nada: se reserva su propia parte fija. Antes
+        // guarda los registros de getReg, porque libc espera encontrarlos intactos al
+        // volver. Son seis, asi que sp sigue alineado a 8.
         if (isMain(function)) {
+            emitter.instruction("push", preservedByMain)
             emitter.arithmeticWithConstant("sub", Register.SP, Register.SP, frame.fixedPartSize)
         }
         emitter.arithmeticWithConstant("add", Register.IP, Register.SP, frame.fixedPartSize)
@@ -45,7 +49,7 @@ class CallingSequence(
 
     //     mov r0, #0               solo main: el codigo de salida
     //     ldr lr, [fp, #-20]       a donde se vuelve
-    //     sub sp, fp, #20          la pila como la dejo quien llama
+    //     sub sp, fp, #24          la pila como la dejo quien llama
     //     ldr fp, [fp, #-12]       el registro de quien llama
     //     bx lr                    vuelve
     //
@@ -64,13 +68,14 @@ class CallingSequence(
         )
         if (isMain(function)) {
             emitter.arithmeticWithConstant("add", Register.SP, Register.SP, frame.fixedPartSize)
+            emitter.instruction("pop", preservedByMain)
         }
         emitter.instruction("bx", Register.LR.text)
     }
 
     // ── Quien llama ────────────────────────────────────────────────────────
 
-    // `sub sp, sp, #20`: la parte fija del registro nuevo, donde van los argumentos y el
+    // `sub sp, sp, #24`: la parte fija del registro nuevo, donde van los argumentos y el
     // enlace de acceso. Lo que la funcion necesita de ahi en adelante lo reserva ella.
     fun openFrame(callee: FunctionLabel): Frame {
         val frame = frameOf(callee)
@@ -94,10 +99,18 @@ class CallingSequence(
         emitter.instruction("bl", ArmNames.function(callee))
     }
 
-    // `add sp, sp, #20`: el registro nuevo ya murio.
+    // `blx r4`: llama a la direccion que esta en el registro, que salio de la tabla de
+    // metodos del objeto.
+    fun callAddress(target: Register) {
+        emitter.instruction("blx", target.text)
+    }
+
+    // `add sp, sp, #24`: el registro nuevo ya murio.
     fun closeFrame(frame: Frame) {
         emitter.arithmeticWithConstant("add", Register.SP, Register.SP, frame.fixedPartSize)
     }
+
+    private val preservedByMain = registerList(*Register.VALUE_REGISTERS.toTypedArray())
 
     private fun frameOf(function: FunctionLabel): Frame =
         checkNotNull(frames[function]) { "'${function.name}' sin registro" }

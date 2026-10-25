@@ -222,8 +222,8 @@ excepción o a la apertura de un bloque protegido, porque después de ellas el f
 no llegar en orden o los registros dejan de ser confiables.
 
 La razón por la que esta división importa es que adentro de un bloque el generador puede
-confiar en lo que recuerda. Si sabe que la variable `x` quedó en el registro r4, y la
-siguiente instrucción también pertenece al bloque, entonces es seguro que `x` sigue en r4
+confiar en lo que recuerda. Si sabe que la variable x quedó en el registro r4, y la
+siguiente instrucción también pertenece al bloque, entonces es seguro que x sigue en r4
 cuando esa instrucción se ejecute, porque no hay forma de llegar a ella sin haber pasado
 por la anterior. En la primera instrucción de un bloque esa garantía no existe, ya que
 pueden llegar varios caminos distintos y cada uno traería los registros ocupados de otra
@@ -242,14 +242,14 @@ responde una pregunta distinta de forma inmediata.
 | Descriptor de dirección | Para cada variable, en qué lugares está su valor actual: su casilla de memoria, uno o más registros, o ambos | Si ya la tengo en un registro, y si puedo pisar ese registro sin guardarla antes |
 
 Una variable puede estar en varios lugares a la vez, y esa es justamente la situación
-cómoda: si el valor de `x` está en r4 y además en su casilla de memoria, entonces r4 se
+cómoda: si el valor de x está en r4 y además en su casilla de memoria, entonces r4 se
 puede reutilizar sin generar ninguna instrucción, porque nada se pierde. Al revés, una
 variable cuyo valor existe únicamente en un registro obliga a guardarla antes de pisarlo.
 
 ### 3.3 getReg
 
 Cada vez que una instrucción necesita un operando en un registro, el generador llama a la
-función que el libro llama `getReg`. Funciona como un `getOrPut`: si la variable ya está
+función que el libro llama getReg. Funciona como un getOrPut: si la variable ya está
 en un registro, lo devuelve sin generar nada; si no, consigue uno, genera la carga y lo
 anota. Lo que tiene de interesante es cómo consigue ese registro, porque las opciones
 están ordenadas de la más barata a la más cara.
@@ -283,12 +283,12 @@ trabajar, de modo que el ejemplo se puede reproducir tal cual y comparar con el 
 
 | Código de tres direcciones | ARM generado |
 |---|---|
-| `t = a - b` | `ldr r4, [fp, #-4]` y `ldr r5, [fp, #-8]` y `sub r5, r4, r5` |
-| `u = a - c` | `ldr r6, [fp, #-12]` y `sub r4, r4, r6` |
-| `v = t + u` | `add r5, r5, r4` |
-| `a = d` | `ldr r6, [fp, #-16]` |
-| `d = v + u` | `add r5, r5, r4` |
-| Final del bloque | `str r5, [fp, #-16]` y `str r6, [fp, #-4]` |
+| t = a - b | ldr r4, [fp, #-4] y ldr r5, [fp, #-8] y sub r5, r4, r5 |
+| u = a - c | ldr r6, [fp, #-12] y sub r4, r4, r6 |
+| v = t + u | add r5, r5, r4 |
+| a = d | ldr r6, [fp, #-16] |
+| d = v + u | add r5, r5, r4 |
+| Final del bloque | str r5, [fp, #-16] y str r6, [fp, #-4] |
 
 Son diez instrucciones, las mismas que llega a contar el libro. La tabla siguiente
 muestra cómo quedan las dos libretas después de cada paso, que es donde se ve por qué se
@@ -297,19 +297,19 @@ direcciones lista solo lo que cambió en ese paso.
 
 | Instrucción | Descriptor de registro | Descriptor de dirección |
 |---|---|---|
-| `t = a - b` | r4 tiene `a`, r5 tiene `t`, r6 está vacío | `a` en memoria y en r4, `b` solo en memoria, `t` solo en r5 |
-| `u = a - c` | r4 tiene `u`, r5 tiene `t`, r6 tiene `c` | `u` solo en r4, `c` en memoria y en r6 |
-| `v = t + u` | r4 tiene `u`, r5 tiene `v`, r6 tiene `c` | `v` solo en r5, `t` ya no está en ningún lado |
-| `a = d` | r4 tiene `u`, r5 tiene `v`, r6 tiene `d` y `a` | `a` solo en r6, `d` en memoria y en r6 |
-| `d = v + u` | r4 tiene `u`, r5 tiene `d`, r6 tiene `a` | `d` solo en r5, `v` ya no está en ningún lado |
+| t = a - b | r4 tiene a, r5 tiene t, r6 está vacío | a en memoria y en r4, b solo en memoria, t solo en r5 |
+| u = a - c | r4 tiene u, r5 tiene t, r6 tiene c | u solo en r4, c en memoria y en r6 |
+| v = t + u | r4 tiene u, r5 tiene v, r6 tiene c | v solo en r5, t ya no está en ningún lado |
+| a = d | r4 tiene u, r5 tiene v, r6 tiene d y a | a solo en r6, d en memoria y en r6 |
+| d = v + u | r4 tiene u, r5 tiene d, r6 tiene a | d solo en r5, v ya no está en ningún lado |
 
-Hay tres momentos que vale la pena señalar. El primero es que `t = a - b` escribe su
-resultado en el registro de `b`, porque el valor de `b` está a salvo en su casilla de
-memoria y no se vuelve a leer en el bloque. El segundo es que `a = d` no genera ninguna
-instrucción de copia: `d` se carga en un registro y ahí mismo se anota que `a` también
+Hay tres momentos que vale la pena señalar. El primero es que t = a - b escribe su
+resultado en el registro de b, porque el valor de b está a salvo en su casilla de
+memoria y no se vuelve a leer en el bloque. El segundo es que a = d no genera ninguna
+instrucción de copia: d se carga en un registro y ahí mismo se anota que a también
 vale eso, de modo que la copia cuesta una anotación y no una instrucción. El tercero es
-que al final del bloque solo se guardan `a` y `d`, que son las únicas variables cuyo valor
-quedó únicamente en un registro; los temporales `t`, `u` y `v` ya no le sirven a nadie.
+que al final del bloque solo se guardan a y d, que son las únicas variables cuyo valor
+quedó únicamente en un registro; los temporales t, u y v ya no le sirven a nadie.
 
 ### 3.5 Qué se guarda al final del bloque
 
@@ -348,56 +348,56 @@ precisamente esa rama.
 ### 4.1 Las banderas
 
 Esta es la diferencia más visible entre las dos arquitecturas. MIPS compara y salta en una
-sola instrucción: `blt $t0, $t1, L1` mira los dos registros y salta si el primero es menor.
-ARM no tiene nada parecido, porque separa las dos mitades del trabajo. La instrucción `cmp`
+sola instrucción: blt $t0, $t1, L1 mira los dos registros y salta si el primero es menor.
+ARM no tiene nada parecido, porque separa las dos mitades del trabajo. La instrucción cmp
 resta los dos operandos, tira el resultado y deja en el registro de estado cuatro banderas
 que describen cómo salió esa resta. Después, una instrucción de salto con un sufijo de
 condición las lee y decide si salta o no.
 
 | | MIPS | ARM |
 |---|---|---|
-| Comparar y saltar si es menor | `blt $t0, $t1, L1` | `cmp r4, r5` y después `blt .L1` |
-| Comparar y saltar si es igual | `beq $t0, $t1, L1` | `cmp r4, r5` y después `beq .L1` |
-| Dejar 1 o 0 según una comparación | `slt $t0, $t1, $t2` | `cmp r5, r6` y después `mov r4, #0` y `movlt r4, #1` |
+| Comparar y saltar si es menor | blt $t0, $t1, L1 | cmp r4, r5 y después blt .L1 |
+| Comparar y saltar si es igual | beq $t0, $t1, L1 | cmp r4, r5 y después beq .L1 |
+| Dejar 1 o 0 según una comparación | slt $t0, $t1, $t2 | cmp r5, r6 y después mov r4, #0 y movlt r4, #1 |
 
-Conviene notar que `blt` de MIPS tampoco es una instrucción real del procesador, sino una
-pseudoinstrucción que el ensamblador expande en un `slt` seguido de un `bne`. Es decir,
+Conviene notar que blt de MIPS tampoco es una instrucción real del procesador, sino una
+pseudoinstrucción que el ensamblador expande en un slt seguido de un bne. Es decir,
 MIPS también necesita dos instrucciones; lo que cambia es que ARM no las esconde, y que su
 resultado intermedio no ocupa un registro, sino el registro de estado.
 
 Esa última diferencia es la que hace cómoda la traducción. Como el resultado de la
-comparación no vive en un registro, no compite con los valores que reparte `getReg`, y
-como ninguna instrucción de carga ni de guardado toca las banderas, entre el `cmp` y el
+comparación no vive en un registro, no compite con los valores que reparte getReg, y
+como ninguna instrucción de carga ni de guardado toca las banderas, entre el cmp y el
 salto se puede meter trabajo que no tenga que ver con la comparación.
 
 Comparar flotantes necesita un paso más, porque la unidad de punto flotante tiene su
-propio registro de estado. La instrucción `vcmp.f64` compara y deja el resultado ahí, y
-`vmrs APSR_nzcv, fpscr` lo copia al registro de estado principal, que es el que leen los
+propio registro de estado. La instrucción vcmp.f64 compara y deja el resultado ahí, y
+vmrs APSR_nzcv, fpscr lo copia al registro de estado principal, que es el que leen los
 sufijos. Comparar textos no es una comparación del procesador en absoluto: se llama a una
-rutina del runtime que a su vez llama a `strcmp`, y lo que se compara después contra cero
+rutina del runtime que a su vez llama a strcmp, y lo que se compara después contra cero
 es el número negativo, cero o positivo que esa rutina devuelve en r0.
 
 ### 4.2 La tabla de sufijos
 
 | Relación del código intermedio | Enteros, booleanos y referencias | Flotantes |
 |---|---|---|
-| Igual | `eq` | `eq` |
-| Distinto | `ne` | `ne` |
-| Menor | `lt` | `mi` |
-| Menor o igual | `le` | `ls` |
-| Mayor | `gt` | `gt` |
-| Mayor o igual | `ge` | `ge` |
+| Igual | eq | eq |
+| Distinto | ne | ne |
+| Menor | lt | mi |
+| Menor o igual | le | ls |
+| Mayor | gt | gt |
+| Mayor o igual | ge | ge |
 
 Las dos columnas coinciden salvo en menor y en menor o igual, y el motivo es el valor no
 numérico que define el estándar de punto flotante, conocido como NaN. Cuando alguno de los
 dos operandos es NaN, la comparación no queda ordenada, y las banderas toman una
-combinación que hace que `lt` y `le` se cumplan, lo cual es incorrecto, porque un número
-no es menor que algo que no es un número. Los sufijos `mi` y `ls` miran banderas distintas
+combinación que hace que lt y le se cumplan, lo cual es incorrecto, porque un número
+no es menor que algo que no es un número. Los sufijos mi y ls miran banderas distintas
 y no se cumplen en ese caso, por lo que son los que corresponden.
 
 Las referencias usan la columna de los enteros porque una referencia es una dirección, y
-la ausencia de objeto, que en Compiscript se escribe `null`, es la dirección cero. Así,
-preguntar si una referencia es nula es compararla contra cero con `cmp`, exactamente igual
+la ausencia de objeto, que en Compiscript se escribe null, es la dirección cero. Así,
+preguntar si una referencia es nula es compararla contra cero con cmp, exactamente igual
 que un entero.
 
 ### 4.3 Una condición del lenguaje, de principio a fin
@@ -410,28 +410,28 @@ invertir nada: toma la relación tal como viene y le busca su sufijo.
 
 | Código intermedio | ARM generado |
 |---|---|
-| `L3:` | `.Lmain_3:` |
-| `goto L3` | el vaciado del bloque y después `b .Lmain_3` |
-| `if i >= 5 goto L4` | `ldr ip, =cps_estatico` y `ldr r4, [ip, #4]` y `cmp r4, #5` y el vaciado y `bge .Lmain_4` |
-| `if t goto L3` | `cmp r4, #0` y el vaciado y `bne .Lmain_3` |
-| `ifFalse t goto L1` | `cmp r4, #0` y el vaciado y `beq .Lmain_1` |
-| `if p != null goto L1` | `cmp r4, #0` y el vaciado y `bne .Lmain_1` |
-| `if x <f y goto L1` | `vcmp.f64 d1, d2` y `vmrs APSR_nzcv, fpscr` y el vaciado y `bmi .Lf_1` |
-| `if s ==s t goto L1` | `bl cps_comparar_strings` y `cmp r0, #0` y el vaciado y `beq .Lf_1` |
+| L3: | .Lmain_3: |
+| goto L3 | el vaciado del bloque y después b .Lmain_3 |
+| if i >= 5 goto L4 | ldr ip, =cps_estatico y ldr r4, [ip, #4] y cmp r4, #5 y el vaciado y bge .Lmain_4 |
+| if t goto L3 | cmp r4, #0 y el vaciado y bne .Lmain_3 |
+| ifFalse t goto L1 | cmp r4, #0 y el vaciado y beq .Lmain_1 |
+| if p != null goto L1 | cmp r4, #0 y el vaciado y bne .Lmain_1 |
+| if x <f y goto L1 | vcmp.f64 d1, d2 y vmrs APSR_nzcv, fpscr y el vaciado y bmi .Lf_1 |
+| if s ==s t goto L1 | bl cps_comparar_strings y cmp r0, #0 y el vaciado y beq .Lf_1 |
 
-Las primeras cinco filas están tomadas del ensamblador de los programas `flujo_condiciones`
-y `tipos_logicos` de la batería de pruebas. Las tres últimas salen de las pruebas del
+Las primeras cinco filas están tomadas del ensamblador de los programas flujo_condiciones
+y tipos_logicos de la batería de pruebas. Las tres últimas salen de las pruebas del
 generador, porque ningún programa de la batería llega todavía a ellas: la comparación
-contra `null` aparece al usar objetos o listas, y las de flotantes y de textos aparecen
+contra null aparece al usar objetos o listas, y las de flotantes y de textos aparecen
 dentro de condiciones que además necesitan llamadas a funciones, y las dos cosas son de
 fases posteriores.
 
 Un booleano del código intermedio vale 1 o 0, de modo que preguntar si es verdadero es
-preguntar si no es cero. Esa es la razón por la que `if` e `ifFalse` generan exactamente
+preguntar si no es cero. Esa es la razón por la que if e ifFalse generan exactamente
 la misma comparación y se distinguen solo en el sufijo del salto.
 
 Las etiquetas del archivo llevan el nombre de la función de la que salieron, de forma que
-la etiqueta `L3` de una función y la `L3` de otra no se pisan, y quien lee el ensamblador
+la etiqueta L3 de una función y la L3 de otra no se pisan, y quien lee el ensamblador
 puede saber de dónde viene cada salto. Además empiezan con punto y L, que es la marca con
 la que el ensamblador de GNU reconoce una etiqueta local, es decir, una que no aparece en
 la tabla de símbolos del ejecutable.
@@ -443,7 +443,7 @@ sorprende: entre la comparación y el salto, y no antes de la comparación ni en
 de destino.
 
 Que pueda ir ahí es consecuencia de lo que se dijo arriba. Las instrucciones de carga y de
-guardado de ARM no modifican las banderas, así que lo que dejó el `cmp` sigue intacto
+guardado de ARM no modifican las banderas, así que lo que dejó el cmp sigue intacto
 cuando se llega al salto, por más guardados que haya en el medio.
 
 Que tenga que ir ahí es un asunto distinto. La alternativa natural sería vaciar al llegar
@@ -453,20 +453,20 @@ tendría nada confiable que guardar. En el salto, en cambio, el camino es uno so
 libretas todavía dicen exactamente qué quedó pendiente. El salto es el último lugar donde
 esa información existe.
 
-La primera condición del programa `flujo_condiciones` de la batería muestra el caso
-completo. La variable `x` acaba de recibir el valor 20, que existe únicamente en r4, y se
+La primera condición del programa flujo_condiciones de la batería muestra el caso
+completo. La variable x acaba de recibir el valor 20, que existe únicamente en r4, y se
 vuelve a leer más adelante, después de las dos ramas.
 
 | Código intermedio | ARM generado |
 |---|---|
-| `x = 20` | `mov r4, #20` |
-| `if x <= 10 goto L1` | `cmp r4, #10` y después `ldr ip, =cps_estatico` y `str r4, [ip]` y después `ble .Lmain_1` |
+| x = 20 | mov r4, #20 |
+| if x <= 10 goto L1 | cmp r4, #10 y después ldr ip, =cps_estatico y str r4, [ip] y después ble .Lmain_1 |
 
-El guardado de `x` queda en medio de la comparación y el salto, y el cálculo de su
-dirección también, porque `x` es una variable global y hay que llegar a ella sumando su
+El guardado de x queda en medio de la comparación y el salto, y el cálculo de su
+dirección también, porque x es una variable global y hay que llegar a ella sumando su
 desplazamiento a la etiqueta de la zona estática. Ninguna de las dos instrucciones toca
 las banderas. Los dos caminos que salen de ahí, el que salta y el que sigue de corrido,
-encuentran a `x` en su casilla, que es exactamente lo que el bloque siguiente va a suponer
+encuentran a x en su casilla, que es exactamente lo que el bloque siguiente va a suponer
 cuando empiece con las libretas en blanco.
 
 En mi caso, considero que esta es la parte de la fase donde más se nota que el back-end
@@ -483,26 +483,26 @@ crecen desde cero: el primer parámetro está en el 0, el siguiente justo despu�
 temporales al final. La pila de ARM, en cambio, crece hacia abajo, de modo que el dato
 que se agrega más tarde queda en una dirección menor.
 
-Las dos cosas se reconcilian con un espejo. El registro `fp` apunta al **tope** del
+Las dos cosas se reconcilian con un espejo. El registro fp apunta al tope del
 registro de activación, que es su dirección más alta, y una casilla con desplazamiento
-`d` y tamaño `s` vive en `fp − d − s`. Así, el campo que la etapa anterior puso en el
-desplazamiento 0 queda pegado a `fp`, y el que puso al final queda pegado al fondo. No
+d y tamaño s vive en fp − d − s. Así, el campo que la etapa anterior puso en el
+desplazamiento 0 queda pegado a fp, y el que puso al final queda pegado al fondo. No
 hubo que cambiar un solo número de los que calculó el analizador.
 
-Con el registro de `factorial`, que mide 40 bytes:
+Con el registro de factorial, que mide 40 bytes:
 
 | Casilla | Desplazamiento | Tamaño | Dirección |
 |---|---|---|---|
-| `n` | 0 | 4 | `[fp, #-4]` |
-| valor devuelto | 4 | 4 | `[fp, #-8]` |
-| enlace de control | 8 | 4 | `[fp, #-12]` |
-| enlace de acceso | 12 | 4 | `[fp, #-16]` |
-| dirección de retorno | 16 | 4 | `[fp, #-20]` |
-| `t1` | 24 | 8 | `[fp, #-32]` |
-| `t2` | 32 | 8 | `[fp, #-40]` |
+| n | 0 | 4 | [fp, #-4] |
+| valor devuelto | 4 | 4 | [fp, #-8] |
+| enlace de control | 8 | 4 | [fp, #-12] |
+| enlace de acceso | 12 | 4 | [fp, #-16] |
+| dirección de retorno | 16 | 4 | [fp, #-20] |
+| t1 | 24 | 8 | [fp, #-32] |
+| t2 | 32 | 8 | [fp, #-40] |
 
 Conviene notar que la casilla del valor devuelto existe en el registro pero el código
-generado no la usa. El resultado viaja en `r0`, o en `d0` si es un flotante, por la misma
+generado no la usa. El resultado viaja en r0, o en d0 si es un flotante, por la misma
 razón por la que viaja ahí en cualquier otra arquitectura: cuando quien llama lee el
 resultado, el registro de activación de la función que lo produjo ya se liberó, así que
 leerlo de ahí sería leer memoria que ya no es de nadie.
@@ -510,84 +510,89 @@ leerlo de ahí sería leer memoria que ya no es de nadie.
 ### 5.2 La parte fija y quién reserva qué
 
 El trabajo de armar un registro de activación se reparte entre los dos lados de la
-llamada. Quien llama reserva la **parte fija**, que es lo que va desde la casilla 0 hasta
+llamada. Quien llama reserva la parte fija, que es lo que va desde la casilla 0 hasta
 el final de la dirección de retorno, y escribe ahí lo que solo él sabe: los argumentos y
 el enlace de acceso. La función llamada termina de armar el registro, guarda los dos
 valores que solo ella conoce, y reserva lo que le falta para sus locales y sus
 temporales.
 
-En `factorial` la parte fija llega hasta 20, y se redondea a 24. El redondeo a 8 no es un
+En factorial la parte fija llega hasta 20, y se redondea a 24. El redondeo a 8 no es un
 detalle. El tamaño del registro completo ya era múltiplo de 8 desde la etapa anterior,
-pero eso solo no alcanza: si la parte fija no lo fuera, quien llama dejaría `sp` en un
-múltiplo de 4, y el `sp` de la función llamada, que se calcula restando el tamaño del
+pero eso solo no alcanza: si la parte fija no lo fuera, quien llama dejaría sp en un
+múltiplo de 4, y el sp de la función llamada, que se calcula restando el tamaño del
 registro, heredaría ese desfase durante toda su ejecución. El estándar de llamadas de ARM
-exige que `sp` esté alineado a 8 en cada llamada, y la biblioteca de C cuenta con ello.
+exige que sp esté alineado a 8 en cada llamada, y la biblioteca de C cuenta con ello.
 
-Lo único que cambia el redondeo es cuántos bytes reserva quien llama antes del `bl`; la
+Lo único que cambia el redondeo es cuántos bytes reserva quien llama antes del bl; la
 función reserva el resto, y la suma es la misma. Ninguna casilla se mueve, porque todas se
-cuentan desde `fp`, que sigue siendo el tope del registro.
+cuentan desde fp, que sigue siendo el tope del registro.
 
 | Quién | Qué reserva | Qué escribe |
 |---|---|---|
-| Quien llama | La parte fija, 24 bytes en `factorial` | Los argumentos y el enlace de acceso |
+| Quien llama | La parte fija, 24 bytes en factorial | Los argumentos y el enlace de acceso |
 | La función llamada | El resto, 16 bytes más | El enlace de control y la dirección de retorno |
 
-`main` es la excepción, porque lo llama la biblioteca de C, que no sabe nada de esta
+main es la excepción, porque lo llama la biblioteca de C, que no sabe nada de esta
 convención y no le reservó nada. Por eso su prólogo empieza reservando su propia parte
-fija, y su epílogo la libera antes de volver.
+fija, y su epílogo la libera antes de volver. Además, el estándar de llamadas pide que una
+función devuelva intactos los registros r4 a r11, y main usa r4 a r8 y r10 para sus
+valores. Por eso, antes de todo, los guarda con push {r4, r5, r6, r7, r8, r10}, y los
+recupera con pop justo antes de volver a la biblioteca de C. Son seis registros, 24
+bytes, así que sp sigue alineado a 8. Las demás funciones no lo necesitan: quien las
+llama ya vació sus registros antes del bl.
 
 ### 5.3 El prólogo y el epílogo
 
 | Momento | ARM | Qué hace |
 |---|---|---|
-| Prólogo | `add ip, sp, #24` | El tope del registro, que la llamada dejó reservado |
-| | `str fp, [ip, #-12]` | Enlace de control: el `fp` de quien llama |
-| | `str lr, [ip, #-20]` | Dirección de retorno |
-| | `mov fp, ip` | Este es el registro actual |
-| | `sub sp, fp, #40` | Reserva locales y temporales |
-| Epílogo | `ldr lr, [fp, #-20]` | Recupera a dónde volver |
-| | `sub sp, fp, #24` | Deja la pila como la dejó quien llama |
-| | `ldr fp, [fp, #-12]` | Recupera el registro de quien llama |
-| | `bx lr` | Vuelve |
+| Prólogo | add ip, sp, #24 | El tope del registro, que la llamada dejó reservado |
+| | str fp, [ip, #-12] | Enlace de control: el fp de quien llama |
+| | str lr, [ip, #-20] | Dirección de retorno |
+| | mov fp, ip | Este es el registro actual |
+| | sub sp, fp, #40 | Reserva locales y temporales |
+| Epílogo | ldr lr, [fp, #-20] | Recupera a dónde volver |
+| | sub sp, fp, #24 | Deja la pila como la dejó quien llama |
+| | ldr fp, [fp, #-12] | Recupera el registro de quien llama |
+| | bx lr | Vuelve |
 
 El orden de las cuatro instrucciones del prólogo no es libre. El tope del registro nuevo
-se calcula en `ip` y no directamente en `fp`, porque hasta la última instrucción hace
-falta el `fp` de quien llama: es justamente lo que hay que guardar en el enlace de
-control. En el epílogo pasa lo simétrico: `lr` y `fp` se leen mientras `fp` todavía
+se calcula en ip y no directamente en fp, porque hasta la última instrucción hace
+falta el fp de quien llama: es justamente lo que hay que guardar en el enlace de
+control. En el epílogo pasa lo simétrico: lr y fp se leen mientras fp todavía
 apunta a este registro, y por eso se recuperan antes de mover nada.
 
-El epílogo se escribe **una sola vez por función**, detrás de una etiqueta de salida que
-lleva el nombre de la función y termina en `_fin`. Cada `return` deja su valor en `r0` y
+El epílogo se escribe una sola vez por función, detrás de una etiqueta de salida que
+lleva el nombre de la función y termina en _fin. Cada return deja su valor en r0 y
 salta ahí. Una función sin valor de retorno simplemente cae en esa etiqueta cuando se le
 acaba el cuerpo.
 
 | Código intermedio | ARM |
 |---|---|
-| `return 1` | `mov r0, #1` y `b .Lfactorial_fin` |
-| `return t1` | `mov r0, r4` y `b .Lfactorial_fin` |
-| `end_func factorial` | `.Lfactorial_fin:` y el epílogo |
+| return 1 | mov r0, #1 y b .Lfactorial_fin |
+| return t1 | mov r0, r4 y b .Lfactorial_fin |
+| end_func factorial | .Lfactorial_fin: y el epílogo |
 
 ### 5.4 Los argumentos y el resultado
 
 Los argumentos no viajan en registros, sino en la pila, dentro del registro de activación
-que se está armando. La razón es que ese registro **ya tiene una casilla para cada
-parámetro**, calculada por la etapa anterior. Pasarlos en `r0` a `r3` obligaría a la
+que se está armando. La razón es que ese registro ya tiene una casilla para cada
+parámetro, calculada por la etapa anterior. Pasarlos en r0 a r3 obligaría a la
 función llamada a copiarlos a esas casillas en su prólogo, y además habría que tratar
 aparte el quinto parámetro en adelante, los flotantes, que no caben en un registro
 entero, y los booleanos, que miden un byte. Las rutinas del runtime sí reciben sus
-argumentos en `r0` a `r3`, porque así lo exige la biblioteca de C.
+argumentos en r0 a r3, porque así lo exige la biblioteca de C.
 
-Como el registro nuevo todavía no tiene `fp`, las casillas se cuentan desde `sp`: el tope
-del registro va a quedar en `sp` más la parte fija, de modo que la casilla de
-desplazamiento `d` y tamaño `s` cae en `sp + F − d − s`.
+Como el registro nuevo todavía no tiene fp, las casillas se cuentan desde sp: el tope
+del registro va a quedar en sp más la parte fija, de modo que la casilla de
+desplazamiento d y tamaño s cae en sp + F − d − s.
 
 | Código intermedio | ARM |
 |---|---|
-| (primer `param` de la llamada) | `sub sp, sp, #24` |
-| `param t2` | `str r5, [sp, #20]`, que es la casilla de `n`: 24 − 0 − 4 |
-| `param true` | `strb r2, [sp, #23]`, porque la casilla de un booleano mide un byte |
-| `param 1.5` | `vldr d0, [ip]` y `vstr d0, [sp, #16]` |
-| `t2 = call factorial, 1` | `bl cps_factorial`, `add sp, sp, #24` y `mov r4, r0` |
+| (primer param de la llamada) | sub sp, sp, #24 |
+| param t2 | str r5, [sp, #20], que es la casilla de n: 24 − 0 − 4 |
+| param true | strb r2, [sp, #23], porque la casilla de un booleano mide un byte |
+| param 1.5 | vldr d0, [ip] y vstr d0, [sp, #16] |
+| t2 = call factorial, 1 | bl cps_factorial, add sp, sp, #24 y mov r4, r0 |
 
 Las tres filas del medio están tomadas de tres funciones distintas, y por eso sus
 desplazamientos no se parecen: cada uno se cuenta dentro de la parte fija de la función a
@@ -597,12 +602,12 @@ La instrucción la decide el tamaño de la casilla y no el tipo que dice el cód
 intermedio. Escribir cuatro bytes en la casilla de un booleano pisaría la casilla de al
 lado, que es la del parámetro anterior.
 
-Hay una instrucción más que no aparece en la tabla y que va justo antes del `bl`: el
+Hay una instrucción más que no aparece en la tabla y que va justo antes del bl: el
 vaciado de registros. Una función de Compiscript usa los mismos registros que reparte
-`getReg` y no los devuelve intactos, de modo que todo lo que quede en uno se pierde en la
-llamada. El generador se asegura de que al llegar al `bl` no quede nada: los valores
+getReg y no los devuelve intactos, de modo que todo lo que quede en uno se pierde en la
+llamada. El generador se asegura de que al llegar al bl no quede nada: los valores
 vivos ya están en sus casillas. Las rutinas del runtime, en cambio, sí conservan esos
-registros, y por eso un `print` no obliga a vaciar nada.
+registros, y por eso un print no obliga a vaciar nada.
 
 En mi caso, considero que esta es la decisión que más simplifica el back-end a cambio de
 un poco de velocidad. La alternativa que manda el estándar es que la función llamada
@@ -610,7 +615,7 @@ guarde al entrar los registros que vaya a usar y los restaure al salir, lo que a
 los guardados de quien llama; pero obligaría a saber de antemano cuáles usa, y a tener
 dos convenios distintos, uno para las funciones propias y otro para las rutinas del
 runtime. Como una llamada ya cierra un bloque básico, y al final de un bloque el
-generador vacía de todos modos, la regla «en un `bl` no sobrevive ningún registro» no
+generador vacía de todos modos, la regla «en un bl no sobrevive ningún registro» no
 cuesta casi nada y se explica en una línea.
 
 ### 5.5 El enlace de acceso
@@ -622,67 +627,242 @@ dirección de ese registro.
 
 Quien llama es el que sabe cuál es, porque es quien está dentro de la función exterior, o
 dentro de una que la tiene más arriba. El código intermedio escribe esa distancia como
-`^h` en la llamada: cuántos enlaces hay que subir desde el registro actual para encontrar
+^h en la llamada: cuántos enlaces hay que subir desde el registro actual para encontrar
 el registro de la función que contiene a la llamada.
 
 | Código intermedio | ARM |
 |---|---|
-| `t1 = call externa.hermana, 0, ^0` | `str fp, [sp, #4]`: el registro actual es el que hace falta |
-| `t1 = call externa.media, 0, ^1` | `ldr ip, [fp, #-12]` y `str ip, [sp, #4]`: sube un enlace |
+| t1 = call externa.hermana, 0, ^0 | str fp, [sp, #4]: el registro actual es el que hace falta |
+| t1 = call externa.media, 0, ^1 | ldr ip, [fp, #-12] y str ip, [sp, #4]: sube un enlace |
 
 Leer una variable de un nivel exterior usa el mismo mecanismo en la dirección contraria.
-`base^2` significa subir dos enlaces desde el registro actual y buscar la casilla ahí:
-`ldr ip, [fp, #-12]`, `ldr ip, [ip, #-12]` y finalmente `ldr r4, [ip, #-20]`.
+base^2 significa subir dos enlaces desde el registro actual y buscar la casilla ahí:
+ldr ip, [fp, #-12], ldr ip, [ip, #-12] y finalmente ldr r4, [ip, #-20].
 
 ### 5.6 factorial(3), paso a paso
 
-El programa calcula `factorial(3)` con tres llamadas anidadas. Si se llama `S` a la
-dirección que tenía `sp` cuando la biblioteca de C entró a `main`, la pila queda así, con
+El programa calcula factorial(3) con tres llamadas anidadas. Si se llama S a la
+dirección que tenía sp cuando main terminó de guardar sus registros, la pila queda así, con
 las direcciones más altas arriba:
 
-| Registro de activación | Tope, es decir `fp` | Fondo, es decir `sp` | `n` |
+| Registro de activación | Tope, es decir fp | Fondo, es decir sp | n |
 |---|---|---|---|
-| `main`, 24 bytes | `S` | `S − 24` | — |
-| `factorial(3)`, 40 bytes | `S − 24` | `S − 64` | 3 |
-| `factorial(2)`, 40 bytes | `S − 64` | `S − 104` | 2 |
-| `factorial(1)`, 40 bytes | `S − 104` | `S − 144` | 1 |
+| main, 24 bytes | S | S − 24 | Sin parámetro |
+| factorial(3), 40 bytes | S − 24 | S − 64 | 3 |
+| factorial(2), 40 bytes | S − 64 | S − 104 | 2 |
+| factorial(1), 40 bytes | S − 104 | S − 144 | 1 |
 
-La regularidad que se ve en la tabla es la que explica toda la mecánica: **el tope de cada
-registro nuevo es exactamente el fondo del registro de quien llama**. Cada llamada empuja
+La regularidad que se ve en la tabla es la que explica toda la mecánica: el tope de cada
+registro nuevo es exactamente el fondo del registro de quien llama. Cada llamada empuja
 la pila 40 bytes más abajo, repartidos entre los 24 que reserva quien llama y los 16 que
 reserva la función; cada retorno los devuelve en el orden inverso.
 
-La llamada de `main` se arma así:
+La llamada de main se arma así:
 
 | Código intermedio | ARM |
 |---|---|
-| `param 5` | `sub sp, sp, #24` y `mov r2, #5` y `str r2, [sp, #20]` |
-| `t1 = call factorial, 1` | `bl cps_factorial` y `add sp, sp, #24` y `mov r4, r0` |
+| param 5 | sub sp, sp, #24 y mov r2, #5 y str r2, [sp, #20] |
+| t1 = call factorial, 1 | bl cps_factorial y add sp, sp, #24 y mov r4, r0 |
 
 Y la llamada recursiva, que es la misma secuencia con una diferencia importante:
 
 | Código intermedio | ARM |
 |---|---|
-| `param t2` | `sub sp, sp, #24` y `str r5, [sp, #20]` |
-| `t2 = call factorial, 1` | `str r4, [fp, #-32]` y `str r5, [fp, #-40]` y `bl cps_factorial` y `add sp, sp, #24` y `mov r4, r0` y `str r4, [fp, #-40]` |
+| param t2 | sub sp, sp, #24 y str r5, [sp, #20] |
+| t2 = call factorial, 1 | str r4, [fp, #-32] y bl cps_factorial y add sp, sp, #24 y mov r4, r0 y str r4, [fp, #-40] |
 
-Los dos guardados que aparecen antes del `bl` son el vaciado: `t1`, que guarda el valor
-de `n` para multiplicarlo después, y `t2`, estaban solo en registros, y la llamada los
-habría perdido. El guardado que aparece después del `bl` es el resultado, que pasa de
-`r0` a su casilla porque la llamada cierra el bloque básico y el bloque siguiente va a
+El guardado que aparece antes del bl es el vaciado: t1, que guarda el valor de n para
+multiplicarlo después, estaba solo en un registro, y la llamada lo habría perdido. t2
+también estaba solo en un registro, pero no se guarda, porque la llamada misma lo va a
+sobrescribir con su resultado, y la función llamada no tiene forma de leerlo. El guardado que aparece después del bl es el resultado, que pasa de
+r0 a su casilla porque la llamada cierra el bloque básico y el bloque siguiente va a
 buscarlo en memoria.
 
-Cuando `factorial(1)` llega a su caso base, deja `1` en `r0` y salta a `.Lfactorial_fin`.
-El epílogo recupera `lr` y `fp` de las casillas de **su** registro, devuelve `sp` a
-`S − 128`, que es donde lo había dejado `factorial(2)` después de reservar la parte fija,
-y vuelve. `factorial(2)` libera esos 24 bytes con `add sp, sp, #24`, toma el `1` de `r0`,
-lo multiplica por su `n` y repite la operación un nivel más arriba. Las tres llamadas
+Cuando factorial(1) llega a su caso base, deja 1 en r0 y salta a .Lfactorial_fin.
+El epílogo recupera lr y fp de las casillas de su registro, devuelve sp a
+S − 128, que es donde lo había dejado factorial(2) después de reservar la parte fija,
+y vuelve. factorial(2) libera esos 24 bytes con add sp, sp, #24, toma el 1 de r0,
+lo multiplica por su n y repite la operación un nivel más arriba. Las tres llamadas
 usan el mismo código y las mismas casillas; lo único que las distingue es dónde está
-`fp`.
+fp.
 
 En mi caso, considero que la recursión es la prueba más honesta de que el espejo entre el
 registro de activación y la pila está bien hecho. Un programa sin recursión puede
 funcionar aunque los desplazamientos estén mal, porque cada función tiene su lugar fijo;
-en cambio, `factorial(12)` crea doce registros con la misma forma, uno encima de otro, y
+en cambio, factorial(12) crea doce registros con la misma forma, uno encima de otro, y
 cada retorno tiene que encontrar exactamente el suyo. Si un solo desplazamiento estuviera
 corrido, el programa devolvería un número cualquiera.
+
+## 6. Los objetos, las listas y el montículo
+
+### 6.1 El montículo y qué pasa cuando no hay memoria
+
+Hasta aquí todo lo que usaba el programa vivía en dos lugares que se conocen desde que
+se compila: la zona estática, para las globales, y la pila, para los registros de
+activación. Los objetos, las listas y los textos que se arman al ejecutar no caben en
+ninguno de los dos. Su tamaño puede no conocerse de antemano, y tienen que sobrevivir a
+la función que los creó, de modo que viven en una tercera zona, el montículo.
+
+El montículo lo administra la biblioteca de C. La función calloc recibe una cantidad de
+bytes y devuelve la dirección de un bloque libre, alineado a 8 y con todos sus bytes en
+cero; cuando ya no queda espacio devuelve 0. El código generado nunca la llama
+directamente: llama a cps_reservar, una rutina del runtime que revisa esa respuesta.
+
+| Rutina | Recibe | Devuelve | Si falla |
+|---|---|---|---|
+| cps_reservar | r0: cuántos bytes | r0: la dirección del bloque, en ceros | Imprime "Error: sin memoria" y termina con código 1 |
+
+Cada alloc del código intermedio se traduce a tres instrucciones:
+
+| Código intermedio | ARM |
+|---|---|
+| t1 = alloc 12 | mov r0, #12 y bl cps_reservar y mov r4, r0 |
+
+Que el bloque llegue en ceros no es un detalle. Un campo de referencia que el
+constructor no inicializa debe valer null, y null es la dirección 0; con malloc ese
+campo tendría lo que hubiera quedado en esa memoria.
+
+Quedarse sin memoria termina el programa en lugar de lanzar un error que un catch pueda
+atrapar. En mi caso, considero que es lo correcto, porque no es un error del programa que
+el programador pueda arreglar en tiempo de ejecución, y el mismo manejador del catch
+podría necesitar memoria para hacer su trabajo. Antes de terminar, la rutina vacía lo que
+printf tenía pendiente de imprimir, para que el mensaje de error no aparezca antes que
+los print que lo precedieron.
+
+El programa nunca libera memoria. Un proceso de un compilador de curso termina en
+segundos y el sistema operativo recupera todo su montículo al terminar, así que liberar
+cada objeto agregaría la pregunta difícil, cuándo deja de usarse, sin ningún beneficio
+visible.
+
+### 6.2 Los objetos y la tabla de métodos
+
+Un objeto es un bloque del montículo con una casilla por campo, en los desplazamientos
+que calculó la etapa anterior. La casilla 0 guarda la dirección de la tabla de métodos de
+su clase, que es la que permite que una variable declarada como Animal llame al método de
+Perro cuando el objeto es un Perro.
+
+Las tablas viven en la sección de datos, una palabra de 4 bytes por método, y cada
+entrada es la dirección de una función. El ensamblador las llena al enlazar.
+
+| Etiqueta | Contenido |
+|---|---|
+| cps_vtable_Animal | .word cps_Animal.hablar |
+| cps_vtable_Perro | .word cps_Perro.hablar |
+
+Leer o escribir un campo es un acceso a memoria con desplazamiento, la misma forma que
+usa MIPS con lw y sw. Si el desplazamiento se conoce al compilar, va dentro de la
+instrucción; si depende de un índice, va en un registro.
+
+| Código intermedio | ARM |
+|---|---|
+| t1[0] = vtable.Perro | ldr r1, =cps_vtable_Perro y str r1, [r4] |
+| t1 = caja[4] | ldr r4, [r4, #4] |
+| foco[4] = true | mov r1, #1 y strb r1, [r4, #4] |
+| t1 = t1[t2] | ldr r4, [r4, r5] |
+| t1 = t1[t2], un flotante | add ip, r4, r5 y vldr d0, [ip] y vstr d0, [fp, #-24] |
+
+Igual que en la pila, el tamaño decide la instrucción. Un booleano mide un byte dentro del
+objeto y se escribe con strb, porque cuatro bytes pisarían el campo siguiente. Un
+flotante con índice variable necesita una suma previa, porque vldr no acepta un registro
+como desplazamiento.
+
+La llamada a un método es la secuencia de la sección 5 con una sola diferencia: la
+dirección de la función no se conoce al compilar, sino que se lee de la tabla del objeto.
+Por eso el salto no es bl a una etiqueta, sino blx a un registro. Este es el fragmento
+real de a.hablar():
+
+| Código intermedio | ARM | Qué hace |
+|---|---|---|
+| t1 = a[0] | ldr r4, [ip] y ldr r5, [r4] | Carga a, y de a, la dirección de su tabla |
+| t1 = t1[0] | ldr r5, [r5] | Lee la entrada de hablar, que está en la posición 0 de la tabla |
+| param a | sub sp, sp, #24 y str r4, [sp, #20] | Reserva la parte fija y pasa el objeto como this |
+| t1 = call t1, 1 | blx r5 y add sp, sp, #24 y mov r4, r0 | Salta a la dirección leída y toma el resultado |
+
+La parte fija que reserva quien llama sale del método que encontró el verificador de
+tipos, Animal.hablar, aunque al ejecutar corra Perro.hablar. Funciona porque todas las
+versiones de un método tienen la misma firma, así que sus registros de activación
+empiezan exactamente igual: this, los mismos parámetros, los dos enlaces y la dirección
+de retorno, en los mismos desplazamientos.
+
+### 6.3 La lista como ArrayList
+
+Una lista de Compiscript puede crecer con push, así que no basta con un bloque del tamaño
+de sus elementos. Se representa en dos partes: una ficha fija de 12 bytes, que es a lo
+que apuntan las variables, y un contenido aparte, donde están los elementos uno detrás
+de otro.
+
+| Desplazamiento en la ficha | Campo |
+|---|---|
+| 0 | La longitud: cuántos elementos tiene |
+| 4 | La capacidad: cuántos caben en el contenido actual |
+| 8 | La dirección del contenido |
+
+Mientras haya capacidad, agregar es escribir en la casilla que sigue al último elemento.
+Cuando el contenido se llena, se pide uno del doble de tamaño con realloc, que copia los
+elementos y libera el bloque viejo, y la ficha pasa a apuntar al nuevo. Una lista vacía
+empieza con capacidad 0 y sin contenido, y su primer push le da capacidad 4.
+
+Todo eso lo hace una sola rutina, que no recibe el valor sino que devuelve dónde
+escribirlo:
+
+| Rutina | Recibe | Devuelve |
+|---|---|---|
+| cps_lista_agregar | r0: la ficha; r1: cuánto mide un elemento | r0: la dirección de la casilla nueva, con la longitud ya aumentada |
+
+| Código intermedio | ARM |
+|---|---|
+| push_i xs, 7 | mov r0, r4 y mov r1, #4 y bl cps_lista_agregar y mov r1, #7 y str r1, [r0] |
+| push_f precios, 2.0 | mov r0, r4 y mov r1, #8 y bl cps_lista_agregar y vldr d0, [ip] y vstr d0, [r0] |
+
+Que la rutina devuelva la casilla tiene una ventaja clara: una sola rutina sirve para
+enteros, booleanos, flotantes y referencias. El generador ya sabe guardar cualquiera de
+ellos en una dirección, que es lo mismo que hace al escribir un campo.
+
+La siguiente tabla sigue una lista de enteros a la que se le agregan cinco elementos.
+Las direcciones son de ejemplo, porque las decide calloc en cada ejecución.
+
+| Momento | Ficha | Longitud | Capacidad | Contenido |
+|---|---|---|---|---|
+| let xs: integer[] = [] | 0x21008 | 0 | 0 | 0, sin contenido |
+| Primer push | 0x21008 | 1 | 4 | 0x21018 |
+| Cuarto push | 0x21008 | 4 | 4 | 0x21018 |
+| Quinto push, la mudanza | 0x21008 | 5 | 8 | 0x21030 |
+
+La columna de la ficha no cambia nunca, y esa es la razón por la que no quedan punteros
+colgantes. Una variable copiada antes de la mudanza, como let copia = xs, guarda la
+dirección de la ficha, no la del contenido; después de la mudanza sigue encontrando la
+longitud correcta y el contenido nuevo, porque los lee siempre a través de la ficha. Si
+las variables apuntaran directamente al contenido, la copia se quedaría con la dirección
+de un bloque que realloc ya liberó.
+
+La razón para duplicar en vez de crecer de a uno es el costo total. Con capacidad 4, la
+lista se muda al agregar el elemento 5, el 9, el 17 y así sucesivamente, y en cada
+mudanza copia todo lo que tenía. Sumando todas las copias, agregar n elementos copia
+menos de 2n en total, de modo que en promedio cada push cuesta lo mismo sin importar qué
+tan grande sea la lista. Si creciera de a uno, cada push copiaría la lista entera, y
+agregar n elementos costaría del orden de n al cuadrado. Una prueba del compilador agrega
+mil elementos a una lista vacía, que pasa por ocho mudanzas, y verifica que la suma sea
+la misma que en el intérprete.
+
+### 6.4 Los textos y la concatenación
+
+Los literales de texto viven en la sección de solo lectura y nunca se modifican. Unir dos
+textos produce uno nuevo en el montículo, del tamaño de los dos más el byte cero que
+marca el final.
+
+| Rutina | Recibe | Devuelve |
+|---|---|---|
+| cps_concatenar | r0 y r1: los dos textos | r0: un texto nuevo con el primero seguido del segundo |
+
+Por dentro mide los dos con strlen, pide la suma más uno con cps_reservar y copia los dos
+con memcpy, uno detrás del otro. No hace falta escribir el byte cero del final, porque
+cps_reservar entrega el bloque en ceros.
+
+| Código intermedio | ARM |
+|---|---|
+| t1 = "Hola " concat nombre | ldr r0, =.Lstr_2 y ldr r4, [fp, #-4] y mov r1, r4 y bl cps_concatenar y mov r4, r0 |
+
+Como las demás rutinas del runtime, cps_reservar, cps_lista_agregar y cps_concatenar
+conservan los registros r4 a r11 y dejan la pila alineada a 8 cuando llaman a la
+biblioteca de C. Por eso ninguna de ellas obliga a vaciar los registros de getReg: los
+valores que estaban en un registro antes de la llamada siguen ahí después.
